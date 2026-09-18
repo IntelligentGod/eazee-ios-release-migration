@@ -6582,6 +6582,31 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     }
   };
 
+  // Deleting a goal cascades: deleteGoalGuidanceForGoal walks the plan tree and
+  // removes the linked action todos too, and goal deletes are excluded from the
+  // undo snackbar. Confirm before throwing that away.
+  const handleRequestDeleteGoal = () => {
+    const goal = selectedTodoForDetails;
+    if (!goal) {
+      return;
+    }
+
+    Alert.alert(
+      'Delete goal?',
+      `"${goal.text}" will be removed along with its guidance plan and any steps it created. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void handleDeleteTodo();
+          },
+        },
+      ]
+    );
+  };
+
   const handleToggleStarred = async () => {
     const todoToToggle = selectedTodoForDetails;
     if (todoToToggle) {
@@ -14149,6 +14174,29 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                             <View style={styles.detailsModalMetaLead}>
                               <Ionicons name="trash" size={20} color="#165C53" />
                               <Text style={styles.detailsModalMetaLabel}>Delete</Text>
+                            </View>
+                          </TouchableOpacity>
+                        </LinearGradient>
+                      )}
+
+                      {isGoalDetailsSheet && (
+                        <LinearGradient
+                          colors={TODO_DETAILS_CARD_GRADIENT}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.detailsModalGradientCard}
+                        >
+                          <TouchableOpacity
+                            style={styles.detailsModalMetaRow}
+                            onPress={() => {
+                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                              handleRequestDeleteGoal();
+                            }}
+                            activeOpacity={0.82}
+                          >
+                            <View style={styles.detailsModalMetaLead}>
+                              <Ionicons name="trash" size={20} color="#165C53" />
+                              <Text style={styles.detailsModalMetaLabel}>Delete goal</Text>
                             </View>
                           </TouchableOpacity>
                         </LinearGradient>
