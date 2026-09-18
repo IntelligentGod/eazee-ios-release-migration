@@ -1,3 +1,11 @@
+// These suites cover feature behaviour, not billing: run them as an entitled
+// user so the Pro gate in lib/aiRequest does not short-circuit the requests.
+jest.mock('@/lib/subscriptionUsage', () => ({
+  ...jest.requireActual('@/lib/subscriptionUsage'),
+  checkAiFeatureAccess: jest.fn(async () => ({ allowed: true })),
+  recordAiAction: jest.fn(async () => {}),
+  recordVoiceUsage: jest.fn(async () => {}),
+}));
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestSkillVideos } from '@/lib/skillGuidance';
 

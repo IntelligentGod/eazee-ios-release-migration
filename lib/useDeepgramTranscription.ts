@@ -4,6 +4,8 @@ import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import { PRIVACY_POLICY_URL } from './legalLinks';
+import { auth } from '@/firebaseConfig';
+import { recordVoiceUsage } from './subscriptionUsage';
 import {
   createDeepgramStreamingSession,
   DeepgramSession,
@@ -110,6 +112,7 @@ export function useDeepgramTranscription(
   const hasDeliveredFinalTranscriptRef = useRef(false);
   const hasCompletedUtteranceRef = useRef(false);
   const listeningRunRef = useRef(0);
+  const listeningStartedAtRef = useRef<number | null>(null);
 
   const requestMicrophonePermission = async (): Promise<boolean> => {
     if (Platform.OS === 'android') {
@@ -276,6 +279,7 @@ export function useDeepgramTranscription(
 
       setIsStreaming(true);
       isStreamingRef.current = true;
+      listeningStartedAtRef.current = Date.now();
       setLastError(null);
       setPartialTranscript('');
       setFinalTranscript('');
@@ -425,6 +429,16 @@ export function useDeepgramTranscription(
         setIsStreaming(false);
         isStreamingRef.current = false;
       }
+
+      // Voice is metered by how long the stream was actually open, charged here
+      // on the single exit path shared by stop and cancel.
+      const startedAt = listeningStartedAtRef.current;
+      listeningStartedAtRef.current = null;
+      const voiceUid = auth.currentUser?.uid;
+      if (startedAt && voiceUid) {
+        void recordVoiceUsage(voiceUid, (Date.now() - startedAt) / 1000);
+      }
+
       if (deliverFinalTranscript) {
         await stopAudioStreamAfterDrain();
       } else {

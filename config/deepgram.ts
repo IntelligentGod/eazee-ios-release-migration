@@ -2,6 +2,8 @@ import type { DeepgramModel } from '../lib/deepgramStreaming';
 import { SERVER_URL } from './backend';
 import { auth } from '../firebaseConfig';
 import { getFirebaseAppCheckHeaders } from '../lib/firebaseAppCheck';
+import { checkAiFeatureAccess } from '../lib/subscriptionUsage';
+import { createSubscriptionRequiredError } from '../lib/subscriptionAccess';
 
 export interface DeepgramConfig {
   getAccessToken: (signal?: AbortSignal) => Promise<string>;
@@ -10,7 +12,17 @@ export interface DeepgramConfig {
 }
 
 export async function fetchDeepgramAccessToken(signal?: AbortSignal): Promise<string> {
-  const firebaseIdToken = await auth.currentUser?.getIdToken().catch(() => null);
+  const user = auth.currentUser;
+  if (!user?.uid) {
+    throw new Error('Sign in to use voice transcription');
+  }
+
+  const decision = await checkAiFeatureAccess(user.uid, 'voiceInput');
+  if (!decision.allowed) {
+    throw createSubscriptionRequiredError(decision, 'voiceInput');
+  }
+
+  const firebaseIdToken = await user.getIdToken().catch(() => null);
   if (!firebaseIdToken) {
     throw new Error('Sign in to use voice transcription');
   }

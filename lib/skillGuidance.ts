@@ -232,7 +232,7 @@ export const requestSkillVideos = async (input: {
 }) => {
   const response = await fetch(`${SERVER_URL}/ai/skill/videos`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('recipeAndSkill'),
     body: JSON.stringify({
       title: normalizeVideoSearchText(input.context.title),
       details: normalizeVideoSearchText(input.context.details || ''),
@@ -275,7 +275,7 @@ export const requestSkillGuide = async (input: {
 }) => {
   const response = await fetch(`${SERVER_URL}/ai/skill/generate`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('recipeAndSkill'),
     body: JSON.stringify({
       title: input.context.title,
       details: input.context.details || '',
@@ -312,7 +312,7 @@ export const requestSkillAnswer = async (input: {
   const aiPersonalization = await readAiPersonalizationSettings(auth.currentUser?.uid);
   const response = await fetch(`${SERVER_URL}/ai/skill/answer`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('recipeAndSkill'),
     body: JSON.stringify({
       title: input.context.title,
       details: input.context.details || '',

@@ -24,7 +24,7 @@ export async function playGuidanceVoice(
   try {
     const response = await fetch(`${SERVER_URL}/ai/tts/guidance`, {
       method: 'POST',
-      headers: await getAiRequestHeaders(),
+      headers: await getAiRequestHeaders('guidance'),
       body: JSON.stringify({ text: prompt }),
     });
     if (!response.ok) return null;

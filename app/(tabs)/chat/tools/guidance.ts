@@ -684,7 +684,7 @@ const requestSavedGuidanceAnswer = async (source: Extract<GuidanceSource, { guid
   const aiPersonalization = await readAiPersonalizationSettings(auth.currentUser?.uid);
   const response = await fetch(`${SERVER_URL}/ai/guidance/answer`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('guidance'),
     body: JSON.stringify({
       guideType: source.guideType,
       title: source.title,

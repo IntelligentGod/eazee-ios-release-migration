@@ -10,6 +10,10 @@ import {
   type UseDeepgramTranscriptionResult,
 } from '../useDeepgramTranscription';
 
+jest.mock('@/firebaseConfig', () => ({
+  auth: { currentUser: { uid: 'test-user' } },
+}));
+
 jest.mock('expo-av', () => ({
   Audio: {
     requestPermissionsAsync: jest.fn(),

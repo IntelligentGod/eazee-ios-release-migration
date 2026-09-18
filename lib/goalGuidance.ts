@@ -526,7 +526,7 @@ export const requestGoalGuidance = async (input: RequestGoalGuidanceInput): Prom
   const requestBody = normalizeGoalGuidanceRequest(input);
   const response = await fetch(`${SERVER_URL}/ai/goal-guidance`, {
     method: 'POST',
-    headers: await getAiRequestHeaders(),
+    headers: await getAiRequestHeaders('guidance'),
     body: JSON.stringify(requestBody),
   });
 

@@ -719,7 +719,7 @@ async function inferExistingTodoDurations(
   try {
     const response: any = await fetchWithTimeout(`${SERVER_URL}/ai/day-plan/todo-durations`, {
       method: 'POST',
-      headers: await getAiRequestHeaders(),
+      headers: await getAiRequestHeaders('dayPlanning'),
       body: JSON.stringify({
         todos,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',

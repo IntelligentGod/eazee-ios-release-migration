@@ -254,7 +254,7 @@ export const requestHomeSuggestions = async (input: {
   }));
   const response = await fetch(`${SERVER_URL}/ai/home-suggestions`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('homeSuggestions'),
     body: JSON.stringify({
       candidates,
       freeWindow: {

@@ -86,7 +86,7 @@ export const requestTodoClassification = async (input: {
 
   const response = await fetch(`${SERVER_URL}/ai/todo/classify`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('todoClassification'),
     body: JSON.stringify({
       title: input.title,
       details: input.details || '',
@@ -134,7 +134,7 @@ export const requestGoalQuotaDateResolution = async (input: {
 }): Promise<GoalQuotaDateResolution> => {
   const response = await fetch(`${SERVER_URL}/ai/goal-quota/resolve-date`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('guidance'),
     body: JSON.stringify({
       text: input.text,
       goalTitle: input.goalTitle || '',

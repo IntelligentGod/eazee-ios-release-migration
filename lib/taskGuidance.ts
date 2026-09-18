@@ -196,7 +196,7 @@ export const requestTaskGuidance = async (input: {
 }) => {
   const response = await fetch(`${SERVER_URL}/ai/task-guidance`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('guidance'),
     body: JSON.stringify({
       title: input.context.title,
       details: input.context.details || '',
@@ -231,7 +231,7 @@ export const requestTaskGuidanceAnswer = async (input: {
   const aiPersonalization = await readAiPersonalizationSettings(auth.currentUser?.uid);
   const response = await fetch(`${SERVER_URL}/ai/guidance/answer`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('guidance'),
     body: JSON.stringify({
       guideType: 'task',
       title: input.context.title,

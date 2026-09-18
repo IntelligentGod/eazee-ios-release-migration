@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import { getTabGuidanceTargetId, type GuidanceTab } from '@/lib/navigationHelp';
+import { useTabContext } from '@/app/context/TabContext';
 import Animated, {
   Easing,
   interpolate,
@@ -33,6 +34,11 @@ const TAB_TINTS = {
   chat: '#6CE1DD',
   calendar: '#2F9FB0',
 } as const;
+const PRO_TAB_TINT = '#AEFFE8';
+const PRO_TAB_BAR_BACKGROUND_COLORS: [string, string] = [
+  'rgba(255, 255, 255, 0.16)',
+  'rgba(255, 255, 255, 0.10)',
+];
 const IOS_TAB_ICONS = {
   chat: MaterialCommunityIcons.getImageSource('chat-outline', IOS_TAB_ICON_SIZE, IOS_TEMPLATE_ICON_COLOR),
   home: Ionicons.getImageSource('home-outline', IOS_TAB_ICON_SIZE, IOS_TEMPLATE_ICON_COLOR),
@@ -221,6 +227,7 @@ function IosTabLayout() {
 }
 
 function FloatingTabLayout() {
+  const { tabBarTheme } = useTabContext();
   const tabBarBottomOffset = Platform.OS === 'android' ? 10 : 8;
   const tabBarHeight = 56;
 
@@ -233,6 +240,9 @@ function FloatingTabLayout() {
         const state = navigation.getState();
         const activeRoute = state.routes[state.index]?.name;
         const tabIconTint =
+          tabBarTheme === 'pro'
+            ? PRO_TAB_TINT
+            :
           activeRoute === 'home'
             ? TAB_TINTS.home
             : activeRoute === 'todo'
@@ -243,6 +253,9 @@ function FloatingTabLayout() {
                   ? TAB_TINTS.calendar
                 : 'rgba(247, 255, 254, 0.72)';
         const tabBarBackgroundColors: [string, string] =
+          tabBarTheme === 'pro'
+            ? PRO_TAB_BAR_BACKGROUND_COLORS
+            :
           activeRoute === 'calendar'
             ? ['rgba(71, 69, 69, 0.2)', 'rgba(71, 69, 69, 0.2)']
             : ['rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0.08)'];

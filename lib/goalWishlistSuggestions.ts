@@ -103,7 +103,7 @@ export const requestGoalWishlistSuggestions = async (input: {
 
   const response = await fetch(`${SERVER_URL}/ai/goal-wishlist-suggestions`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('wishlistIntent'),
     body: JSON.stringify(buildGoalWishlistSuggestionsRequestBody({
       ...input,
       goalTitle,

@@ -2298,7 +2298,7 @@ export default function ChatScreen() {
 
       const resp = await fetch(`${SERVER_URL}/ai/route`, {
         method: 'POST',
-        headers: await getAiRequestHeaders(),
+        headers: await getAiRequestHeaders('aiChatTitle'),
         body: JSON.stringify({
           clientId: clientIdRef.current || undefined,
           messages: [
@@ -3871,7 +3871,7 @@ export default function ChatScreen() {
       const cid = clientIdRef.current || '';
       await fetch(`${SERVER_URL}/ai/tools/result`, {
         method: 'POST',
-        headers: await getAiRequestHeaders(),
+        headers: await getAiRequestHeaders('aiChatToolResult'),
         body: JSON.stringify({ clientId: cid, callId, name, clientRequestId: requestId || undefined, success: !!res?.success, result: res?.result ?? null, error: res?.error })
       });
     } catch { }

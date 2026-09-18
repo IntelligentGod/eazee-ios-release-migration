@@ -336,7 +336,7 @@ export const requestRecipeVideos = async (input: {
 }) => {
   const response = await fetch(`${SERVER_URL}/ai/recipe/videos`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('recipeAndSkill'),
     body: JSON.stringify({
       title: normalizeVideoSearchText(getRecipeRequestTitle(input.context, normalizeAnswers(input.answers))),
       details: normalizeVideoSearchText(input.context.details || ''),
@@ -381,7 +381,7 @@ export const requestRecipeGuide = async (input: {
 }) => {
   const response = await fetch(`${SERVER_URL}/ai/recipe/generate`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('recipeAndSkill'),
     body: JSON.stringify({
       title: getRecipeRequestTitle(input.context, normalizeAnswers(input.answers)),
       details: input.context.details || '',
@@ -425,7 +425,7 @@ export const requestRecipeAnswer = async (input: {
   const aiPersonalization = await readAiPersonalizationSettings(auth.currentUser?.uid);
   const response = await fetch(`${SERVER_URL}/ai/recipe/answer`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('recipeAndSkill'),
     body: JSON.stringify({
       title: getRecipeRequestTitle(input.context, normalizeAnswers(input.guide.answers)),
       details: input.context.details || '',

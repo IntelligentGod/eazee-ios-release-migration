@@ -83,7 +83,7 @@ export const requestWishlistPurchaseIntent = async (input: {
 
   const response = await fetch(`${SERVER_URL}/ai/wishlist/purchase-intent`, {
     method: 'POST',
-    headers: await getFirebaseHeaders(),
+    headers: await getFirebaseHeaders('wishlistIntent'),
     body: JSON.stringify({
       message: input.message,
       surface,

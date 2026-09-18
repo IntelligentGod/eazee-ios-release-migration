@@ -24,6 +24,8 @@ import ScreenHeader from '@/components/ScreenHeader';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import LowerSwipeGesture from '@/components/navigation/LowerSwipeGesture';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
+import PaywallPanel from './PaywallPanel';
+import { useSubscriptionStatus } from '@/lib/useSubscriptionStatus';
 import {
   getHomeAccountGuidanceTargetId,
   getHomeBackGuidanceTargetId,
@@ -63,14 +65,19 @@ type HomeSettingsSheetProps = {
   onOpenManageAccount: () => void;
 };
 
-type HomeSettingsPanel = 'settings' | 'aiPersonalization' | 'homePersonalization' | 'legalSupport';
+type HomeSettingsPanel = 'settings' | 'paywall' | 'aiPersonalization' | 'homePersonalization' | 'legalSupport';
 
 const HOME_BACKGROUND_COLORS: [string, string] = ['#F1ECCE', '#8C8268'];
 const SETTINGS_ACCENT_ICON_COLOR = '#AEFFE8';
 const SETTINGS_ACCENT_ICON_SIZE = 38;
 
 function normalizeHomeSettingsPanel(value?: string): HomeSettingsPanel {
-  if (value === 'aiPersonalization' || value === 'homePersonalization' || value === 'legalSupport') {
+  if (
+    value === 'paywall'
+    || value === 'aiPersonalization'
+    || value === 'homePersonalization'
+    || value === 'legalSupport'
+  ) {
     return value;
   }
   return 'settings';
@@ -657,6 +664,16 @@ export default function HomeSettingsSheet({
     void toggleLeftHanded();
   }, [toggleLeftHanded]);
 
+  const { tier: subscriptionTier } = useSubscriptionStatus(userId);
+
+  const handleOpenPaywall = useCallback(() => {
+    setActivePanel('paywall');
+  }, []);
+
+  const handleClosePaywall = useCallback(() => {
+    setActivePanel('settings');
+  }, []);
+
   const handleOpenAiPersonalization = useCallback(() => {
     setActivePanel('aiPersonalization');
   }, []);
@@ -702,6 +719,10 @@ export default function HomeSettingsSheet({
   }, []);
 
   const handleHardwareBackPress = useCallback(() => {
+    if (activePanel === 'paywall') {
+      handleClosePaywall();
+      return true;
+    }
     if (activePanel === 'aiPersonalization') {
       handleCloseAiPersonalization();
       return true;
@@ -717,7 +738,7 @@ export default function HomeSettingsSheet({
 
     handleClose();
     return true;
-  }, [activePanel, handleClose, handleCloseAiPersonalization, handleCloseHomePersonalization, handleCloseLegalSupport]);
+  }, [activePanel, handleClose, handleCloseAiPersonalization, handleCloseHomePersonalization, handleCloseLegalSupport, handleClosePaywall]);
 
   useEffect(() => {
     if (!visible) {
@@ -785,6 +806,22 @@ export default function HomeSettingsSheet({
 
       <View style={styles.list}>
         <SettingsRow
+          icon={<MaterialCommunityIcons name="crown-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          label="Eazee Pro"
+          targetId={getHomeSettingsControlGuidanceTargetId('eazeePro')}
+          onPress={handleOpenPaywall}
+          right={(
+            <View style={styles.rowRightGroup}>
+              <View style={[styles.tierBadge, subscriptionTier === 'pro' && styles.tierBadgePro]}>
+                <Text style={[styles.tierBadgeText, subscriptionTier === 'pro' && styles.tierBadgeTextPro]}>
+                  {subscriptionTier === 'pro' ? 'Pro' : 'Free'}
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.78)" />
+            </View>
+          )}
+        />
+        <SettingsRow
           icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🫆</Text>}
           label="Manage Account"
           targetId={getHomeAccountGuidanceTargetId('settings')}
@@ -845,7 +882,15 @@ export default function HomeSettingsSheet({
     </View>
   );
 
-  const activeContent = activePanel === 'aiPersonalization'
+  const activeContent = activePanel === 'paywall'
+    ? (
+        <PaywallPanel
+          bottomInset={bottomInset}
+          userId={userId}
+          onBack={handleClosePaywall}
+        />
+      )
+    : activePanel === 'aiPersonalization'
     ? (
         <AiPersonalizationPanel
           bottomInset={bottomInset}
@@ -1018,6 +1063,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rowRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tierBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.34)',
+  },
+  tierBadgePro: { backgroundColor: '#AEFFE8', borderColor: '#AEFFE8' },
+  tierBadgeText: {
+    color: 'rgba(255, 255, 255, 0.86)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tierBadgeTextPro: { color: '#0C4342' },
   rowEmoji: {
     fontSize: 40,
     lineHeight: 44,
