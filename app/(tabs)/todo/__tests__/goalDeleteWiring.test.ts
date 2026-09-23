@@ -21,8 +21,19 @@ describe('goal delete wiring', () => {
   });
 
   it('confirms before deleting, because goal deletes cannot be undone', () => {
-    expect(source).toMatch(/handleRequestDeleteGoal = \(\) => \{[\s\S]{0,400}Alert\.alert\(/);
-    expect(source).toMatch(/style: 'destructive'[\s\S]{0,120}handleDeleteTodo\(\)/);
+    expect(source).toMatch(
+      /handleRequestDeleteGoal = \(\) => \{[\s\S]{0,200}setIsDeleteGoalConfirmVisible\(true\)/
+    );
+    expect(source).toMatch(
+      /handleConfirmDeleteGoal = \(\) => \{[\s\S]{0,200}handleDeleteTodo\(\)/
+    );
+  });
+
+  it('uses the in-app ConfirmDialog rather than a system Alert', () => {
+    expect(source).toMatch(
+      /<ConfirmDialog[\s\S]{0,400}visible=\{isDeleteGoalConfirmVisible\}[\s\S]{0,400}onConfirm=\{handleConfirmDeleteGoal\}/
+    );
+    expect(source).toMatch(/import ConfirmDialog from '@\/components\/ConfirmDialog'/);
   });
 
   it('still routes goal deletes through the guidance cleanup', () => {

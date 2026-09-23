@@ -4661,7 +4661,6 @@ const CalendarScreen: React.FC = () => {
       <View style={styles.calendarHeader}>
         <ScreenHeader
           title="Calendar"
-          subtitle="Powered by Google"
           titleColor="#B3E7F0"
           horizontalPadding={16}
         />

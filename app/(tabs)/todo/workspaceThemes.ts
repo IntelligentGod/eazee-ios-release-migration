@@ -15,6 +15,14 @@ export interface TodoWorkspaceAppearance {
   aiInputStrokeColor: string;
   aiMicBgColor: string;
   aiMicStrokeColor: string;
+  /** Floating tab bar icon colour, per workspace ground. */
+  tabBarTint: string;
+  /**
+   * Workspace name and Create label colour. Only set where the shared theme's
+   * workspaceNameColor is illegible against this workspace's ground - Wishlist
+   * stays bright to the bottom, where #3BCAB1 measures 1.45:1.
+   */
+  workspaceLabelColor?: string;
 }
 
 const PERSONAL_APPEARANCE: TodoWorkspaceAppearance = {
@@ -34,6 +42,7 @@ const PERSONAL_APPEARANCE: TodoWorkspaceAppearance = {
   aiInputStrokeColor: '#F8F8F8',
   aiMicBgColor: '#3BCAB1',
   aiMicStrokeColor: '#F8F8F8',
+  tabBarTint: '#AEFFE8',
 };
 
 const GOALS_APPEARANCE: TodoWorkspaceAppearance = {
@@ -53,6 +62,7 @@ const GOALS_APPEARANCE: TodoWorkspaceAppearance = {
   aiInputStrokeColor: '#F8F8F8',
   aiMicBgColor: '#3BCAB1',
   aiMicStrokeColor: '#F8F8F8',
+  tabBarTint: '#AEFFE8',
 };
 
 const WISHLIST_APPEARANCE: TodoWorkspaceAppearance = {
@@ -72,6 +82,8 @@ const WISHLIST_APPEARANCE: TodoWorkspaceAppearance = {
   aiInputStrokeColor: '#F8F8F8',
   aiMicBgColor: '#3BCAB1',
   aiMicStrokeColor: '#F8F8F8',
+  tabBarTint: '#FFFFFF',
+  workspaceLabelColor: '#FFFFFF',
 };
 
 export const TODO_WORKSPACE_APPEARANCES: Record<string, TodoWorkspaceAppearance> = {

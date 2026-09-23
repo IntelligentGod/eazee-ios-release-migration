@@ -55,6 +55,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AIInputBox from '@/components/AIInputBox';
 import CompactAiBanner from '@/components/CompactAiBanner';
 import GoalWishlistSuggestionToast from '@/components/GoalWishlistSuggestionToast';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useAuthSession } from '@/app/context/AuthSessionContext';
@@ -1383,6 +1384,22 @@ const TodoCardSurface = ({
       {children}
     </LinearGradient>
   </View>
+);
+
+const EmptySectionAddButton = ({ label, onPress }: { label: string; onPress: () => void }) => (
+  <Pressable
+    accessibilityRole="button"
+    onPress={() => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      onPress();
+    }}
+    style={({ pressed }) => [styles.emptyStateButton, pressed && styles.emptyStateButtonPressed]}
+  >
+    <View style={styles.emptyStateButtonIcon}>
+      <Ionicons name="add" size={16} color="#FFFFFF" />
+    </View>
+    <Text style={styles.emptyStateButtonText}>{label}</Text>
+  </Pressable>
 );
 
 const DragStateHandle = () => (
@@ -3608,6 +3625,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
 
   const [showUndo, setShowUndo] = useState(false);
   const [lastDeletedTodo, setLastDeletedTodo] = useState<TodoSnapshot | null>(null);
+  const [isDeleteGoalConfirmVisible, setIsDeleteGoalConfirmVisible] = useState(false);
   const undoTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoAnim = useRef(new Animated.Value(0)).current;
 
@@ -6415,7 +6433,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
 
     const parent = navigation.getParent();
     if (!parent) return;
-    const todoTabTint = workspaces[currentWorkspace]?.key === 'Wishlist' ? '#31C5CC' : '#258876';
+    const todoTabTint = getTodoWorkspaceAppearance(workspaces[currentWorkspace]?.key)?.tabBarTint || '#AEFFE8';
 
     parent.setOptions({
       tabBarActiveTintColor: todoTabTint,
@@ -6586,25 +6604,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   // removes the linked action todos too, and goal deletes are excluded from the
   // undo snackbar. Confirm before throwing that away.
   const handleRequestDeleteGoal = () => {
-    const goal = selectedTodoForDetails;
-    if (!goal) {
-      return;
+    if (selectedTodoForDetails) {
+      setIsDeleteGoalConfirmVisible(true);
     }
+  };
 
-    Alert.alert(
-      'Delete goal?',
-      `"${goal.text}" will be removed along with its guidance plan and any steps it created. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void handleDeleteTodo();
-          },
-        },
-      ]
-    );
+  const handleConfirmDeleteGoal = () => {
+    setIsDeleteGoalConfirmVisible(false);
+    void handleDeleteTodo();
   };
 
   const handleToggleStarred = async () => {
@@ -9908,14 +9915,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     );
     const isReorderableSection = !hasTodoSearchQuery && isTodoSectionReorderable(workspace, sectionKey);
     const emptyStateText = isGoalWorkspace
-      ? (sectionKey === 'completed' ? 'No completed goals' : 'Tap to add a new goal')
+      ? (sectionKey === 'completed' ? 'No completed goals' : 'Add a goal')
       : (sectionKey === 'completed'
           ? workspace === 'Wishlist'
             ? 'No completed items'
             : 'No completed tasks'
           : sectionKey === 'wishlist'
-            ? 'Tap to add a new wishlist item'
-            : 'Tap to add a new to-do item');
+            ? 'Add a wishlist item'
+            : 'Add a to-do');
 
     return (
       <View
@@ -9970,11 +9977,10 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 )
               ) : (
                 canCreateFromEmptyState ? (
-                  <TouchableOpacity onPress={() => addTodo(workspace, goalSectionKey)}>
-                    <Text style={styles.emptyStateText}>
-                      {emptyStateText}
-                    </Text>
-                  </TouchableOpacity>
+                  <EmptySectionAddButton
+                    label={emptyStateText}
+                    onPress={() => addTodo(workspace, goalSectionKey)}
+                  />
                 ) : (
                   <Text style={styles.emptyStateText}>
                     {emptyStateText}
@@ -10135,6 +10141,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     const workspaceAppearance = getTodoWorkspaceAppearance(workspace);
     const themeColor = workspaceAppearance?.themeColor || workspaces[index]?.color;
     const theme = getTheme(themeColor);
+    const workspaceLabelColor = workspaceAppearance?.workspaceLabelColor || theme.workspaceNameColor;
     const currentYearTitle = String(new Date().getFullYear());
     const sections = [
       ...(workspace === 'Goals'
@@ -10174,8 +10181,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           addTodo(workspace);
         }}
       >
-        <Ionicons name="add" size={18} color={theme.workspaceNameColor} />
-        <Text style={[styles.createButtonText, { color: theme.workspaceNameColor }]}>Create</Text>
+        <Ionicons name="add" size={18} color={workspaceLabelColor} />
+        <Text style={[styles.createButtonText, { color: workspaceLabelColor }]}>Create</Text>
       </TouchableOpacity>
     );
     const isCurrentWorkspaceCreateTarget = workspace === workspaces[currentWorkspace]?.key;
@@ -13516,7 +13523,6 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         {showUndo && <UndoNotification />}
         <ScreenHeader
           title={screenTitle}
-          subtitle="Powered by OpenAI"
           titleColor={currentWorkspaceAppearance?.headerTitleColor || currentTheme.headerTitleColor}
           horizontalPadding={0}
           left={isLeftHanded ? todoSearchHeaderButton : undefined}
@@ -13620,7 +13626,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             <Animated.Text
               className="text-lg font-bold mb-1"
               style={{
-                color: currentTheme.workspaceNameColor,
+                color: currentWorkspaceAppearance?.workspaceLabelColor || currentTheme.workspaceNameColor,
                 opacity: workspaceNameAnim.interpolate({
                   inputRange: [0, 0.3, 0.7, 1],
                   outputRange: [1, 0, 0, 1],
@@ -13783,6 +13789,15 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           </Animated.View>
         </LowerSwipeGesture>
       )}
+      <ConfirmDialog
+        visible={isDeleteGoalConfirmVisible}
+        icon="trash-outline"
+        title="Delete goal?"
+        message={`"${selectedTodoForDetails?.text || ''}" will be removed along with its guidance plan and any steps it created. This cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={handleConfirmDeleteGoal}
+        onCancel={() => setIsDeleteGoalConfirmVisible(false)}
+      />
       {!isDetailsModalVisible && goalWishlistSuggestionToast ? (
         <GoalWishlistSuggestionToast
           goalTitle={goalWishlistSuggestionToast.goalTitle}
@@ -15620,6 +15635,38 @@ const styles = StyleSheet.create({
   rightContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  emptyStateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 8,
+    marginVertical: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  emptyStateButtonPressed: {
+    opacity: 0.82,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    transform: [{ scale: 0.98 }],
+  },
+  emptyStateButtonIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  emptyStateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyStateText: {
     textAlign: 'center',

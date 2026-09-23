@@ -107,6 +107,16 @@ import type {
 } from '@/core/blob/BehaviorMetrics';
 import { computeBehaviorMetrics } from '@/core/blob/BehaviorMetrics';
 import { computeBlobVisualMeaning } from '@/src/blob/blobMeaning';
+import {
+  EMPTY_LIFE_AREA_COUNTS,
+  LIFE_GRAPH_ENABLED,
+  getLifeGraphWeekKey,
+  getLifeGraphWeekStart,
+  lifeGraphMeaningState,
+  lifeGraphVisualMeaning,
+  type LifeAreaCounts,
+} from '@/src/blob/lifeGraph';
+import { classifyLifeArea } from '@/lib/lifeAreaClassifier';
 import { blobMeaningFromBehaviorMetrics } from '@/src/blob/blobMeaningFromSignals';
 import { BLOB_SCENARIOS } from '@/src/blob/blobScenarioPresets';
 
@@ -549,15 +559,52 @@ export default function HomePage() {
       averageDailyTaskCompletions: HEART_TASK_THRESHOLD,
     },
   }), [blobCalendarEvents, blobTasksForMetrics, homeBlobActivityEvents]);
+  const [lifeAreaCounts, setLifeAreaCounts] = useState<LifeAreaCounts>(EMPTY_LIFE_AREA_COUNTS);
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const weekKey = getLifeGraphWeekKey();
+      const completed = await database
+        .get<TodoModel>('todos')
+        .query(
+          Q.where('completed', true),
+          Q.where('updated_at', Q.gte(getLifeGraphWeekStart().getTime()))
+        )
+        .fetch();
+
+      if (cancelled) return;
+
+      const counts: LifeAreaCounts = { ...EMPTY_LIFE_AREA_COUNTS };
+      completed.forEach((todo) => {
+        if (!todo.updatedAt || getLifeGraphWeekKey(todo.updatedAt) !== weekKey) return;
+        counts[classifyLifeArea(todo.text, todo.workspace)] += 1;
+      });
+      setLifeAreaCounts(counts);
+    })().catch((error) => console.warn('Failed to read life graph counts', error));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isFocused, homeSnapshot]);
+  const lifeGraphState = useMemo(() => lifeGraphMeaningState(lifeAreaCounts), [lifeAreaCounts]);
   const liveMeaningState = useMemo(
     () => blobMeaningFromBehaviorMetrics(behaviorMetrics),
     [behaviorMetrics]
   );
   const effectiveBlobMeaningState =
-    blobMeaningSource === 'live' ? liveMeaningState : scenarioMeaningState;
+    blobMeaningSource === 'live'
+      ? (LIFE_GRAPH_ENABLED ? lifeGraphState : liveMeaningState)
+      : scenarioMeaningState;
   const blobVisualMeaning = useMemo(
-    () => computeBlobVisualMeaning(effectiveBlobMeaningState),
-    [effectiveBlobMeaningState]
+    () =>
+      LIFE_GRAPH_ENABLED && blobMeaningSource === 'live'
+        ? lifeGraphVisualMeaning(lifeAreaCounts)
+        : computeBlobVisualMeaning(effectiveBlobMeaningState),
+    [blobMeaningSource, effectiveBlobMeaningState, lifeAreaCounts]
   );
   const blobPressureSummary = useMemo(() => {
     if (blobMeaningSource === 'live') {
@@ -2593,7 +2640,6 @@ export default function HomePage() {
         >
             <ScreenHeader
               title="Home"
-              subtitle="Powered by OpenAI"
               titleColor="#FFFFFF"
               horizontalPadding={0}
               left={isLeftHanded ? settingsHeaderButton : undefined}

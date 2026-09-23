@@ -5038,7 +5038,6 @@ export default function ChatScreen() {
       <View className="flex-1">
         <ScreenHeader
           title="AI Chat"
-          subtitle="Powered by OpenAI"
           titleColor="#C8FFFB"
           left={isLeftHanded ? newChatHeaderButton : chatHistoryHeaderButton}
           right={isLeftHanded ? chatHistoryHeaderButton : newChatHeaderButton}

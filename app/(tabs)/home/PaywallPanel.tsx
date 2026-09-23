@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { LinearGradient } from 'expo-linear-gradient';
 import ScreenHeader from '@/components/ScreenHeader';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
@@ -31,12 +32,17 @@ import {
   type SubscriptionPlanId,
 } from '@/lib/subscription';
 
-const ACCENT = '#1FF5EF';
-const HEADLINE_ACCENT = '#74FEFE';
-const CTA_FILL = '#9AFCFD';
-const CTA_TEXT = '#00312F';
-const CHECK_FILL = '#32C8C2';
-const TABLE_BORDER = 'rgba(126, 244, 240, 0.22)';
+// Tuned to the palette the rest of the app actually runs: the chat turquoise
+// (#11D8C6) at the top easing into the To Do green-teal (#175A4D) at the
+// bottom, with the brand mint (#AEFFE8, also the splash and settings accent)
+// carrying every highlight.
+const PAYWALL_GRADIENT: [string, string, string] = ['#1ED2C0', '#13A08D', '#0B6153'];
+const ACCENT = '#AEFFE8';
+const HEADLINE_ACCENT = '#CFFFF1';
+const CTA_FILL = '#AEFFE8';
+const CTA_TEXT = '#05382F';
+const CHECK_FILL = '#AEFFE8';
+const TABLE_BORDER = 'rgba(174, 255, 232, 0.26)';
 
 function ComparisonCell({ value }: { value: ComparisonValue }) {
   if (value.kind === 'check') {
@@ -222,9 +228,15 @@ export default function PaywallPanel({
 
   return (
     <View style={styles.root}>
+      <LinearGradient
+        colors={PAYWALL_GRADIENT}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <Image
         source={require('../../../assets/images/paywall-bg.png')}
-        style={styles.background}
+        style={styles.backgroundTexture}
         resizeMode="cover"
       />
 
@@ -351,10 +363,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  background: {
+  backgroundTexture: {
     ...StyleSheet.absoluteFillObject,
     width: undefined,
     height: undefined,
+    opacity: 0.22,
   },
   safeArea: {
     flex: 1,
@@ -403,14 +416,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: TABLE_BORDER,
-    backgroundColor: 'rgba(2, 66, 68, 0.62)',
+    backgroundColor: 'rgba(5, 74, 64, 0.52)',
     overflow: 'hidden',
   },
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    backgroundColor: 'rgba(14, 95, 97, 0.85)',
+    backgroundColor: 'rgba(4, 60, 52, 0.62)',
   },
   headerLabel: {
     color: '#FFFFFF',
@@ -442,7 +455,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#18827A',
+    backgroundColor: '#128A74',
   },
   featureText: {
     flex: 1,
@@ -503,11 +516,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.24)',
-    backgroundColor: 'rgba(1, 47, 51, 0.72)',
+    backgroundColor: 'rgba(4, 58, 50, 0.58)',
   },
   planCardSelected: {
     borderColor: ACCENT,
-    backgroundColor: 'rgba(2, 63, 68, 0.9)',
+    backgroundColor: 'rgba(6, 76, 65, 0.82)',
   },
   planTopRow: {
     flexDirection: 'row',
@@ -523,7 +536,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     paddingHorizontal: 7,
     borderRadius: 999,
-    backgroundColor: '#93FAFB',
+    backgroundColor: '#AEFFE8',
   },
   planBadgeText: {
     color: CTA_TEXT,
