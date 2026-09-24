@@ -2,7 +2,7 @@
   "expo": {
     "name": "Eazee",
     "slug": "wave",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.eazee.ai",
@@ -21,7 +21,7 @@
       "entitlements": {
         "com.apple.developer.devicecheck.appattest-environment": "production"
       },
-      "buildNumber": "16",
+      "buildNumber": "17",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Eazee uses microphone access only when you record optional voice input or voice notes for transcription.",

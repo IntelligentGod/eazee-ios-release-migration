@@ -5,7 +5,7 @@ export const BACKEND_URLS = {
 
 export type BackendEnvironment = keyof typeof BACKEND_URLS;
 
-const BACKEND_ENVIRONMENT_OVERRIDE: BackendEnvironment | null = null;
+const BACKEND_ENVIRONMENT_OVERRIDE: BackendEnvironment | null = 'production';
 
 export const BACKEND_ENVIRONMENT: BackendEnvironment =
   BACKEND_ENVIRONMENT_OVERRIDE ?? (__DEV__ ? 'development' : 'production');

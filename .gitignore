@@ -34,3 +34,5 @@ expo-env.d.ts
 # @end expo-cli
 
 .env.local
+
+.env.sentry-build-plugin
