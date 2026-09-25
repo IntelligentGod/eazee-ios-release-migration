@@ -42,6 +42,7 @@ import TaskGuideModel from '../../../database/models/TaskGuideModel';
 import SkillGuideModel from '../../../database/models/SkillGuideModel';
 import PulsatingRGB from './PulsatingRGB';
 import { getTodoWorkspaceAppearance } from './workspaceThemes';
+import { isRefreshSuperseded, preservePendingToggles } from '@/lib/todoRefreshMerge';
 import debounce from 'lodash/debounce';
 import { StyleSheet } from 'react-native';
 import { Q } from '@nozbe/watermelondb';
@@ -2835,6 +2836,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   const [composerKey, setComposerKey] = useState(0);
   const [localTodos, setLocalTodos] = useState<TodoItem[]>([]);
   const localTodosRef = useRef<TodoItem[]>([]);
+  /** Guards against an older refreshLocalTodos run overwriting a newer one. */
+  const refreshTodosTokenRef = useRef(0);
   const todoSectionOrderOverridesRef = useRef<Record<string, string[]>>({});
   const classificationRetryTodoIdsRef = useRef<Set<string>>(new Set());
   const [classifyingTodoIds, setClassifyingTodoIds] = useState<Record<string, boolean>>({});
@@ -3146,6 +3149,9 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   }, [taskGuides, taskProgressOverridesByTodoId]);
 
   const refreshLocalTodos = useCallback(async () => {
+    const token = refreshTodosTokenRef.current + 1;
+    refreshTodosTokenRef.current = token;
+
     await syncRecurringTodos();
     const fresh = await database.collections.get<TodoModel>('todos').query().fetch();
     const freshRecurrenceSeries = await database.collections.get<TodoRecurrenceSeriesModel>('todo_recurrence_series').query().fetch();
@@ -3155,8 +3161,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       ? await database.collections.get<TodoModel>('todos').query().fetch()
       : fresh;
     const items = rows.map((row) => toTodoItem(row, freshRecurrenceSeriesById));
-    setLocalTodos(items);
-    localTodosRef.current = items;
+
+    if (isRefreshSuperseded(token, refreshTodosTokenRef.current)) {
+      return;
+    }
+
+    const merged = preservePendingToggles(items, togglingTodoIdsRef.current, localTodosRef.current);
+    setLocalTodos(merged);
+    localTodosRef.current = merged;
   }, []);
 
   useEffect(() => {
