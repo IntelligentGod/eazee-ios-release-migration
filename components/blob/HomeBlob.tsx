@@ -700,6 +700,9 @@ const FACE_OVERLAY_TOP_EXTRA_PCT_WHEN_MAX = 10;
 
 /** Pointer drag: radians of tilt per logical pixel (yaw about Y, pitch about X). */
 const BLOB_DRAG_RAD_PER_PX = 0.008;
+const BLOB_LONG_PRESS_MS = 500;
+/** A hold that drifts further than this is a drag, not a long press. */
+const BLOB_LONG_PRESS_MAX_MOVE_PX = 10;
 const BLOB_MAX_PITCH_RAD = Math.PI / 2 - 0.15;
 
 /** Tap hit → gelatin-like settle: translation + squash only (no extra rotation). */
@@ -758,6 +761,7 @@ export function BlobMesh({
   smoothness = DEFAULT_VISUAL.smoothness,
   suppressLobes = false,
   lobes = DEFAULT_VISUAL.lobes,
+  lobeStrengths,
   breathingEnabled = true,
   completedTasksToday,
   heartTaskThreshold = 3,
@@ -779,6 +783,11 @@ export function BlobMesh({
 }: {
   mood: BlobMood;
   areas: AreaIntensities;
+  /**
+   * Direct metaball strength per lobe, replacing the mood-based strength and its calm cap
+   * (0 = hidden, about 0.13 matches the calm look). Used by the life graph.
+   */
+  lobeStrengths?: Record<LifeAreaLobeKey, number>;
   /** When false, uniform scale only (no sinusoidal body breathing). Default true. */
   breathingEnabled?: boolean;
   completedTasksToday?: number;
@@ -830,6 +839,9 @@ export function BlobMesh({
   const smoothedVisualRef = useRef({
     smoothness: DEFAULT_VISUAL.smoothness,
     lobes: { ...DEFAULT_VISUAL.lobes },
+    lobeStrengths: Object.fromEntries(
+      LIFE_AREA_LOBE_KEYS.map(key => [key, MAX_EFFECTIVE_LOBE_CALM_BALANCED])
+    ) as Record<LifeAreaLobeKey, number>,
     rippleAmp: DEFAULT_VISUAL.rippleAmp,
     rippleSpeed: DEFAULT_VISUAL.rippleSpeed,
     suppressLobes: 0,
@@ -1307,6 +1319,8 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
     sm.rippleSpeed += (rippleSpeed - sm.rippleSpeed) * visualAlpha;
     LIFE_AREA_LOBE_KEYS.forEach(key => {
       sm.lobes[key] += (lobes[key] - sm.lobes[key]) * visualAlpha;
+      const targetLobeStrength = lobeStrengths?.[key] ?? MAX_EFFECTIVE_LOBE_CALM_BALANCED;
+      sm.lobeStrengths[key] += (targetLobeStrength - sm.lobeStrengths[key]) * visualAlpha;
     });
     const suppressTarget = suppressLobes ? 1 : 0;
     sm.suppressLobes += (suppressTarget - sm.suppressLobes) * visualAlpha;
@@ -1333,7 +1347,9 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
     const totalLobePressure =
       (sm.lobes.health + sm.lobes.relationships + sm.lobes.work + sm.lobes.home + sm.lobes.growth + sm.lobes.sleep) / 6;
     const strengthForVolume = 0.6;
-    const effectiveLobeAvg = 0.4 + 0.6 * totalLobePressure;
+    const effectiveLobeAvg = lobeStrengths
+      ? LIFE_AREA_LOBE_KEYS.reduce((sum, key) => sum + sm.lobeStrengths[key], 0) / 6
+      : 0.4 + 0.6 * totalLobePressure;
     const coreScaleForVolume = 1 - 0.1 * totalLobePressure;
     const coreScaleBoost = totalLobePressure < 0.2 ? 0.28 : 0;
     const coreStrengthCur =
@@ -1449,6 +1465,7 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
       if (sm.smoothness > 0.92) effectiveLobe *= 0.28;
       else if (sm.smoothness > 0.9) effectiveLobe *= 0.6;
       effectiveLobe = Math.min(effectiveLobe, MAX_EFFECTIVE_LOBE_CALM_BALANCED);
+      if (lobeStrengths) effectiveLobe = sm.lobeStrengths[key];
 
       const lobeMassMul = 1;
 
@@ -1694,6 +1711,11 @@ type HomeBlobProps = {
   showDebugControls?: boolean;
   /** Gold / rose / silver / etc. — see `@/src/blob/blobAppearancePresets`. */
   blobAppearancePresetId?: BlobAppearancePresetId;
+  /** Direct metaball strength per lobe (0 = hidden); see `BlobMesh`. */
+  lobeStrengths?: Record<LifeAreaLobeKey, number>;
+  faceVisible?: boolean;
+  /** Fires when the Droplet is held without dragging. */
+  onLongPress?: () => void;
 };
 
 export default function HomeBlob({
@@ -1710,6 +1732,9 @@ export default function HomeBlob({
   showFpsCounter = false,
   showDebugControls = false,
   blobAppearancePresetId = DEFAULT_BLOB_APPEARANCE_ID,
+  lobeStrengths,
+  faceVisible: faceVisibleProp = true,
+  onLongPress,
 }: HomeBlobProps = {}) {
   const faceMoods = faceMoodsProp ?? ['happy', 'mouth_1'];
 
@@ -1723,7 +1748,8 @@ export default function HomeBlob({
     return initial as AreaIntensities;
   });
 
-  const [faceVisible, setFaceVisible] = useState(true);
+  const [debugFaceVisible, setDebugFaceVisible] = useState(true);
+  const faceVisible = faceVisibleProp && debugFaceVisible;
   const [blobVisualReady, setBlobVisualReady] = useState(false);
   const [blobMaxSize, setBlobMaxSize] = useState(false);
   const [bakeRoomPmremNonce, setBakeRoomPmremNonce] = useState(0);
@@ -1748,6 +1774,17 @@ export default function HomeBlob({
   const pendingBlobTapRef = useRef<PendingBlobTap | null>(null);
   const gestureLayoutRef = useRef({ w: 220, h: 200 });
   const tapDownRef = useRef({ t: 0, x: 0, y: 0 });
+  const onLongPressRef = useRef(onLongPress);
+  onLongPressRef.current = onLongPress;
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPressRef = useRef(false);
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearLongPressTimer, [clearLongPressTimer]);
 
   const [fpsDisplay, setFpsDisplay] = useState<number | null>(null);
   const reportFps = useCallback((fps: number) => {
@@ -1768,8 +1805,19 @@ export default function HomeBlob({
           };
           lastGestureDx.current = 0;
           lastGestureDy.current = 0;
+          didLongPressRef.current = false;
+          clearLongPressTimer();
+          longPressTimerRef.current = setTimeout(() => {
+            longPressTimerRef.current = null;
+            if (!onLongPressRef.current) return;
+            didLongPressRef.current = true;
+            onLongPressRef.current();
+          }, BLOB_LONG_PRESS_MS);
         },
         onPanResponderMove: (_, gestureState) => {
+          if (Math.hypot(gestureState.dx, gestureState.dy) > BLOB_LONG_PRESS_MAX_MOVE_PX) {
+            clearLongPressTimer();
+          }
           const dx = gestureState.dx - lastGestureDx.current;
           const dy = gestureState.dy - lastGestureDy.current;
           lastGestureDx.current = gestureState.dx;
@@ -1780,6 +1828,8 @@ export default function HomeBlob({
           r.x = Math.min(BLOB_MAX_PITCH_RAD, Math.max(-BLOB_MAX_PITCH_RAD, r.x));
         },
         onPanResponderRelease: evt => {
+          clearLongPressTimer();
+          if (didLongPressRef.current) return;
           const { w, h } = gestureLayoutRef.current;
           if (w < 8 || h < 8) return;
           const lx = evt.nativeEvent.locationX;
@@ -1790,8 +1840,9 @@ export default function HomeBlob({
             pendingBlobTapRef.current = { x: lx, y: ly, w, h };
           }
         },
+        onPanResponderTerminate: clearLongPressTimer,
       }),
-    []
+    [clearLongPressTimer]
   );
 
   const blobViewHeight = blobMaxSize ? BLOB_VIEW_HEIGHT_MAX : BLOB_VIEW_HEIGHT;
@@ -1830,6 +1881,7 @@ export default function HomeBlob({
               key={blobAppearancePresetId}
               mood={mood}
               areas={areaIntensities}
+              lobeStrengths={lobeStrengths}
               breathingEnabled={breathingEnabled}
               breathScaleOut={breathScaleSV}
               dragRotationRef={dragRotationRef}
@@ -1931,7 +1983,7 @@ export default function HomeBlob({
     {showDebugControls && (
       <View className="mt-0.5 items-center gap-0.5">
         <TouchableOpacity
-          onPress={() => setFaceVisible(v => !v)}
+          onPress={() => setDebugFaceVisible(v => !v)}
           className="self-center px-2.5 py-1.5 rounded-full bg-[#2E2D22]/70 border border-white/25"
           accessibilityRole="button"
           accessibilityLabel={faceVisible ? 'Hide blob face' : 'Show blob face'}

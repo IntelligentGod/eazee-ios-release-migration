@@ -22,6 +22,8 @@ import TaskGuideModel from '../../../database/models/TaskGuideModel';
 import AIInputBox from '@/components/AIInputBox';
 import HomeBlob, { BLOB_APPEARANCE_PRESETS, type BlobAppearancePresetId } from '@/components/blob/HomeBlob';
 import type { MoodState } from '@/components/blob/BlobFace';
+import LifeGraphSettingsModal from '@/components/blob/LifeGraphSettingsModal';
+import { useLifeGraph } from '@/lib/useLifeGraph';
 import CompactAiBanner from '@/components/CompactAiBanner';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import ScreenHeader from '@/components/ScreenHeader';
@@ -524,6 +526,8 @@ export default function HomePage() {
   const [showThrone, setShowThrone] = useState(false);
   const [showBlobDebugPanel, setShowBlobDebugPanel] = useState(false);
   const [blobAppearancePresetId, setBlobAppearancePresetId] = useState<BlobAppearancePresetId>('liquidGold');
+  const lifeGraph = useLifeGraph(user?.uid);
+  const [isLifeGraphSettingsOpen, setIsLifeGraphSettingsOpen] = useState(false);
   const scenarioMeaningState = BLOB_SCENARIOS[selectedBlobScenario] ?? BLOB_SCENARIOS.calmBalanced;
   const blobTasksForMetrics = useMemo((): BlobTask[] => (
     upcomingTodos.map(todo => ({
@@ -2610,8 +2614,18 @@ export default function HomePage() {
                   completedTasksToday={completedTasksToday}
                   heartTaskThreshold={HEART_TASK_THRESHOLD}
                   showDebugControls={__DEV__ && showBlobDebugPanel}
+                  lobeStrengths={lifeGraph.lobeStrengths}
+                  faceVisible={lifeGraph.settings.faceVisible}
+                  onLongPress={() => setIsLifeGraphSettingsOpen(true)}
                 />
               ) : null}
+              <LifeGraphSettingsModal
+                visible={isLifeGraphSettingsOpen}
+                settings={lifeGraph.settings}
+                progress={lifeGraph.progress}
+                onSave={lifeGraph.saveSettings}
+                onClose={() => setIsLifeGraphSettingsOpen(false)}
+              />
               {__DEV__ && showBlobDebugPanel && (
                   <View className="mt-1 gap-2">
                     <View className="flex-row flex-wrap justify-center gap-1.5">
