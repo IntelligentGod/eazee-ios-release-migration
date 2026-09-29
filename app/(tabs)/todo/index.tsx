@@ -13491,7 +13491,6 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         {showUndo && <UndoNotification />}
         <ScreenHeader
           title={screenTitle}
-          subtitle="Powered by OpenAI"
           titleColor={currentWorkspaceAppearance?.headerTitleColor || currentTheme.headerTitleColor}
           horizontalPadding={0}
           left={isLeftHanded ? todoSearchHeaderButton : undefined}

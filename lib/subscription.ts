@@ -92,6 +92,12 @@ export const FREE_HOME_SUGGESTION_DAYS_PER_WEEK = 3;
 export const PRO_FAIR_USE_DAILY_AI_ACTIONS = 200;
 export const PRO_FAIR_USE_DAILY_VOICE_SECONDS = 60 * 60;
 
+/** Internal testing account that always gets Pro, with no purchase needed. */
+export const UNLIMITED_ACCESS_EMAIL = 'developer_sandbox@eazee.ai';
+
+export const hasUnlimitedAccess = (email?: string | null) =>
+  String(email || '').trim().toLowerCase() === UNLIMITED_ACCESS_EMAIL;
+
 export type ComparisonValue = { kind: 'check' } | { kind: 'none' } | { kind: 'text'; label: string };
 
 export type ComparisonRow = {

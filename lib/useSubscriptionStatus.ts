@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { auth } from '@/firebaseConfig';
 import {
   FREE_DAILY_AI_ACTIONS,
   FREE_DAILY_VOICE_SECONDS,
   FREE_SUBSCRIPTION_STATUS,
+  hasUnlimitedAccess,
   readCachedSubscriptionStatus,
   type SubscriptionStatus,
   type SubscriptionTier,
@@ -59,7 +61,7 @@ export function useSubscriptionStatus(userId?: string | null): SubscriptionSnaps
   }, [nonce, userId]);
 
   return {
-    tier: status.isPro ? 'pro' : 'free',
+    tier: status.isPro || hasUnlimitedAccess(auth.currentUser?.email) ? 'pro' : 'free',
     status,
     usage,
     remainingAiActions: Math.max(0, FREE_DAILY_AI_ACTIONS - usage.aiActions),

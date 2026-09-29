@@ -1292,6 +1292,10 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   const isCardOnlyAssistantMessage = message.role === 'assistant' && !message.content && !!message.card;
   const isUserVoiceMessage = message.role === 'user' && message.card?.type === 'voiceMessage';
   const isUserDeliveryFailed = message.role === 'user' && message.deliveryStatus === 'failed';
+  const deliveryFailureReason = (message.deliveryError || '')
+    .replace(/^Failed to send to AI\.\s*/, '')
+    .replace(/^\((.*)\)$/, '$1')
+    .trim();
   const bubbleBackgroundColor = isCardOnlyAssistantMessage
     ? 'transparent'
     : message.role === 'user'
@@ -1518,6 +1522,24 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
             </Text>
           </TouchableOpacity>
         </View>
+      ) : null}
+      {isUserDeliveryFailed && !!deliveryFailureReason ? (
+        <Text
+          selectable
+          numberOfLines={3}
+          style={{
+            alignSelf: 'flex-end',
+            maxWidth: '85%',
+            marginTop: 3,
+            paddingHorizontal: 2,
+            color: 'rgba(255, 214, 214, 0.85)',
+            fontSize: 11,
+            lineHeight: 15,
+            textAlign: 'right',
+          }}
+        >
+          {deliveryFailureReason}
+        </Text>
       ) : null}
     </View>
   );
@@ -4510,8 +4532,11 @@ export default function ChatScreen() {
         restoreChatDayPlanTutorialAfterFailedRequest(clientRequestId);
         restoreWishlistTutorialAfterFailedRequest(clientRequestId);
       }
-    } catch {
-      const didMarkUserMessageFailed = await markVisibleUserDeliveryFailed();
+    } catch (error: any) {
+      console.warn(`Chat request to ${SERVER_URL} failed:`, error);
+      const didMarkUserMessageFailed = await markVisibleUserDeliveryFailed(
+        `Failed to send to AI. (${String(error?.message || error)})`,
+      );
       for (const [requestId, sessionId] of requestSessionMapRef.current.entries()) {
         if (sessionId === requestSessionId) {
           clearPendingStreamChunks(requestId);
@@ -5038,7 +5063,6 @@ export default function ChatScreen() {
       <View className="flex-1">
         <ScreenHeader
           title="AI Chat"
-          subtitle="Powered by OpenAI"
           titleColor="#C8FFFB"
           left={isLeftHanded ? newChatHeaderButton : chatHistoryHeaderButton}
           right={isLeftHanded ? chatHistoryHeaderButton : newChatHeaderButton}

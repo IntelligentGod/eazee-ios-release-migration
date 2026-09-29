@@ -3,6 +3,7 @@ import {
   FREE_DAILY_AI_ACTIONS,
   FREE_DAILY_VOICE_SECONDS,
   FREE_HOME_SUGGESTION_DAYS_PER_WEEK,
+  hasUnlimitedAccess,
   isProOnlyFeature,
   isUnchargedChatFeature,
   readCachedSubscriptionStatus,
@@ -147,12 +148,13 @@ export function decideAiFeatureAccess(
 
 export async function checkAiFeatureAccess(
   userId: string,
-  feature: AiFeatureKey
+  feature: AiFeatureKey,
+  email?: string | null
 ): Promise<AccessDecision> {
   const [status, usage] = await Promise.all([
     readCachedSubscriptionStatus(userId),
     readDailyUsage(userId),
   ]);
 
-  return decideAiFeatureAccess(status.isPro ? 'pro' : 'free', feature, usage);
+  return decideAiFeatureAccess(status.isPro || hasUnlimitedAccess(email) ? 'pro' : 'free', feature, usage);
 }

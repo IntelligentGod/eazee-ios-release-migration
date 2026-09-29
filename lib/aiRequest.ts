@@ -23,7 +23,7 @@ export const getAiRequestHeaders = async (feature: AiFeatureKey = 'aiChat') => {
 
   await requireAiDataSharingConsent(user.uid);
 
-  const decision = await checkAiFeatureAccess(user.uid, feature);
+  const decision = await checkAiFeatureAccess(user.uid, feature, user.email);
   if (!decision.allowed) {
     throw createSubscriptionRequiredError(decision, feature);
   }

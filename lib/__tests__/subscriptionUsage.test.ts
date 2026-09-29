@@ -202,4 +202,21 @@ describe('usage accounting', () => {
     await expect(checkAiFeatureAccess('user-1', 'aiChat')).resolves.toEqual({ allowed: true });
     await expect(checkAiFeatureAccess('user-1', 'guidance')).resolves.toEqual({ allowed: true });
   });
+
+  it('treats only the developer sandbox account as pro without a purchase', async () => {
+    for (let i = 0; i < FREE_DAILY_AI_ACTIONS; i += 1) {
+      await recordAiAction('user-1');
+    }
+
+    await expect(
+      checkAiFeatureAccess('user-1', 'aiChat', ' Developer_Sandbox@eazee.ai ')
+    ).resolves.toEqual({ allowed: true });
+    await expect(
+      checkAiFeatureAccess('user-1', 'guidance', 'developer_sandbox@eazee.ai')
+    ).resolves.toEqual({ allowed: true });
+    await expect(checkAiFeatureAccess('user-1', 'aiChat', 'someone@eazee.ai')).resolves.toEqual({
+      allowed: false,
+      reason: 'aiActionsExhausted',
+    });
+  });
 });

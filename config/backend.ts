@@ -1,5 +1,5 @@
 export const BACKEND_URLS = {
-  development: 'http://192.168.0.2:8787',
+  development: 'http://10.0.2.2:8787',
   production: 'https://king-prawn-app-clone-r7mhu.ondigitalocean.app',
 } as const;
 

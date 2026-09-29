@@ -2593,7 +2593,6 @@ export default function HomePage() {
         >
             <ScreenHeader
               title="Home"
-              subtitle="Powered by OpenAI"
               titleColor="#FFFFFF"
               horizontalPadding={0}
               left={isLeftHanded ? settingsHeaderButton : undefined}
