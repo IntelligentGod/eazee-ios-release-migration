@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Audio } from 'expo-av';
@@ -1741,6 +1741,9 @@ export default function ChatScreen() {
   /** Fix my life week context; stays attached to every request in the chat it started. */
   const weekPlanContextRef = useRef<{ sessionId: string | null; content: string } | null>(null);
   const [fixMyLifeRequestKey, setFixMyLifeRequestKey] = useState('');
+  /** Bumped by pull-to-refresh to tear down and reopen the live reply stream. */
+  const [streamConnectionKey, setStreamConnectionKey] = useState(0);
+  const [isRefreshingChat, setIsRefreshingChat] = useState(false);
   const hasPendingCompactHandoff = !!compactHandoffValue && !!compactHandoffKey;
   const floatingTabBarInset = getFloatingTabBarInset(insets.bottom);
   const aiInputBottom = floatingTabBarInset - 6;
@@ -3852,7 +3855,7 @@ export default function ChatScreen() {
       try { eventSourceRef.current?.close?.(); } catch { }
       eventSourceRef.current = null;
     };
-  }, [appendMessagesToSession, clearAllPendingStreamChunks, clearPendingStreamChunks, clearTrackedRequest, finalizeStreamingMessage, markRequestMessageDeliveryFailed, restoreChatDayPlanTutorialAfterFailedRequest, restoreWishlistTutorialAfterFailedRequest, startAssistantTyping, stopAssistantTyping]);
+  }, [appendMessagesToSession, clearAllPendingStreamChunks, clearPendingStreamChunks, clearTrackedRequest, finalizeStreamingMessage, markRequestMessageDeliveryFailed, restoreChatDayPlanTutorialAfterFailedRequest, restoreWishlistTutorialAfterFailedRequest, startAssistantTyping, stopAssistantTyping, streamConnectionKey]);
 
   const handleToolCall = useCallback(async (payload: any, sessionIdOverride?: string | null) => {
     const { callId, name } = payload || {};
@@ -4635,6 +4638,31 @@ export default function ChatScreen() {
     void run();
   }, [compactHandoffKey, compactHandoffValue, handleNewChat, router, sendTextMessage]);
 
+  // Recovers a chat that is out of date or stuck: drops any reply still waiting,
+  // reopens the live stream, and reloads the messages saved on the device.
+  // Unlike loadSessionIntoChat, it keeps the tool memory (e.g. the last day plan).
+  const handleRefreshChat = useCallback(async () => {
+    setIsRefreshingChat(true);
+    try {
+      stopActiveChatResponse();
+      setClientId(null);
+      clientIdRef.current = null;
+      setStreamConnectionKey((key) => key + 1);
+      const sessionId = activeSessionIdRef.current;
+      if (sessionId) {
+        const { session, messages } = await loadChatSession(sessionId);
+        if (activeSessionIdRef.current === sessionId) {
+          replaceVisibleChat(session.id, messages, session.summary || '');
+        }
+      }
+      await refreshChatSessions();
+    } catch (error) {
+      console.warn('Could not refresh chat:', error);
+    } finally {
+      setIsRefreshingChat(false);
+    }
+  }, [refreshChatSessions, replaceVisibleChat, stopActiveChatResponse]);
+
   useEffect(() => {
     if (!fixMyLifeRequestKey) return;
     setFixMyLifeRequestKey('');
@@ -5230,6 +5258,15 @@ export default function ChatScreen() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode="on-drag"
+                  refreshControl={(
+                    <RefreshControl
+                      refreshing={isRefreshingChat}
+                      onRefresh={() => void handleRefreshChat()}
+                      tintColor="#C8FFFB"
+                      colors={['#137D78']}
+                      progressBackgroundColor="#C8FFFB"
+                    />
+                  )}
                 />
               ) : (
                 <TouchableOpacity
