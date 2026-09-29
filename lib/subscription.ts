@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 export type SubscriptionPlanId = 'monthly' | 'yearly';
 
@@ -97,6 +98,27 @@ export const UNLIMITED_ACCESS_EMAIL = 'developer_sandbox@eazee.ai';
 
 export const hasUnlimitedAccess = (email?: string | null) =>
   String(email || '').trim().toLowerCase() === UNLIMITED_ACCESS_EMAIL;
+
+const ANDROID_PACKAGE_NAME = 'com.eazee.ai';
+
+/**
+ * Apps cannot cancel store subscriptions themselves; Apple and Google require
+ * users to do it in their store account, so the app links there.
+ */
+export function getManageSubscriptionUrl(planId: SubscriptionPlanId | null) {
+  if (Platform.OS === 'ios') {
+    return 'https://apps.apple.com/account/subscriptions';
+  }
+  const productId = SUBSCRIPTION_PLANS.find((plan) => plan.id === planId)?.productId;
+  return productId
+    ? `https://play.google.com/store/account/subscriptions?sku=${productId}&package=${ANDROID_PACKAGE_NAME}`
+    : 'https://play.google.com/store/account/subscriptions';
+}
+
+export const SUBSCRIPTION_STORE_NAME = Platform.OS === 'ios' ? 'the App Store' : 'Google Play';
+
+/** The plan the sandbox account appears to have, so plan-specific screens can be tested. */
+export const UNLIMITED_ACCESS_PLAN_ID: SubscriptionPlanId = 'yearly';
 
 export type ComparisonValue = { kind: 'check' } | { kind: 'none' } | { kind: 'text'; label: string };
 

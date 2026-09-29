@@ -21,7 +21,9 @@ import {
   DEFAULT_SUBSCRIPTION_PLAN_ID,
   PLAN_COMPARISON_ROWS,
   SUBSCRIPTION_PLANS,
+  SUBSCRIPTION_STORE_NAME,
   TRIAL_DAYS,
+  getManageSubscriptionUrl,
   purchaseSubscription,
   restorePurchases,
   writeCachedSubscriptionStatus,
@@ -152,8 +154,10 @@ export default function PaywallPanel({
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const { setTabBarTheme } = useTabContext();
-  const { tier, refresh } = useSubscriptionStatus(userId);
+  const { tier, status, isSandboxAccount, refresh } = useSubscriptionStatus(userId);
   const isPro = tier === 'pro';
+  // No plan id means Pro without a purchase, e.g. the developer sandbox account.
+  const currentPlan = SUBSCRIPTION_PLANS.find((plan) => plan.id === status.planId);
 
   // Tied to mount rather than the back handler so the tab bar always reverts,
   // including when the panel unmounts by switching tabs.
@@ -219,6 +223,30 @@ export default function PaywallPanel({
       console.warn('Failed to open legal link', error);
     });
   }, []);
+
+  const handleCancelSubscription = useCallback(() => {
+    if (isSandboxAccount) {
+      Alert.alert(
+        'Test account',
+        `This sandbox account has Pro without a purchase, so there is no ${SUBSCRIPTION_STORE_NAME} subscription to cancel.`
+      );
+      return;
+    }
+
+    const period = currentPlan?.id === 'monthly' ? 'month' : currentPlan?.id === 'yearly' ? 'year' : 'billing period';
+    Alert.alert(
+      'Cancel subscription',
+      `Your subscription is managed by ${SUBSCRIPTION_STORE_NAME}. You can cancel it there, and you keep Eazee Pro until the end of your current ${period}.`,
+      [
+        { text: 'Keep Pro', style: 'cancel' },
+        {
+          text: `Open ${SUBSCRIPTION_STORE_NAME}`,
+          style: 'destructive',
+          onPress: () => openLink(getManageSubscriptionUrl(status.planId)),
+        },
+      ]
+    );
+  }, [currentPlan?.id, isSandboxAccount, openLink, status.planId]);
 
   return (
     <View style={styles.root}>
@@ -316,8 +344,26 @@ export default function PaywallPanel({
           {isPro && (
             <View style={styles.proBanner}>
               <MaterialCommunityIcons name="crown-outline" size={22} color={CTA_TEXT} />
-              <Text style={styles.proBannerText}>You are on Eazee Pro</Text>
+              <View>
+                <Text style={styles.proBannerText}>You are on Eazee Pro</Text>
+                <Text style={styles.proBannerPlanText}>
+                  {currentPlan
+                    ? `${currentPlan.title} plan · ${currentPlan.price} ${currentPlan.period}`
+                    : 'Complimentary access'}
+                </Text>
+              </View>
             </View>
+          )}
+
+          {isPro && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.7}
+              onPress={handleCancelSubscription}
+              style={styles.cancelSubscriptionButton}
+            >
+              <Text style={styles.cancelSubscriptionText}>Cancel subscription</Text>
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity
@@ -603,16 +649,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    height: 52,
+    gap: 10,
+    minHeight: 60,
+    paddingVertical: 10,
     marginTop: 18,
-    borderRadius: 26,
+    borderRadius: 30,
     backgroundColor: CTA_FILL,
   },
   proBannerText: {
     color: CTA_TEXT,
     fontSize: 16,
     fontWeight: '800',
+  },
+  proBannerPlanText: {
+    color: CTA_TEXT,
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.8,
+    marginTop: 1,
+  },
+  cancelSubscriptionButton: {
+    marginTop: 14,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  cancelSubscriptionText: {
+    color: '#FFD6D6',
+    fontSize: 14,
+    fontWeight: '600',
   },
   restoreButton: {
     marginTop: 14,

@@ -5,6 +5,7 @@ import {
   FREE_DAILY_VOICE_SECONDS,
   FREE_SUBSCRIPTION_STATUS,
   hasUnlimitedAccess,
+  UNLIMITED_ACCESS_PLAN_ID,
   readCachedSubscriptionStatus,
   type SubscriptionStatus,
   type SubscriptionTier,
@@ -14,6 +15,7 @@ import { EMPTY_DAILY_USAGE, readDailyUsage, type DailyUsage } from '@/lib/subscr
 export type SubscriptionSnapshot = {
   tier: SubscriptionTier;
   status: SubscriptionStatus;
+  isSandboxAccount: boolean;
   usage: DailyUsage;
   remainingAiActions: number;
   remainingVoiceSeconds: number;
@@ -60,9 +62,15 @@ export function useSubscriptionStatus(userId?: string | null): SubscriptionSnaps
     };
   }, [nonce, userId]);
 
+  const isSandboxAccount = hasUnlimitedAccess(auth.currentUser?.email);
   return {
-    tier: status.isPro || hasUnlimitedAccess(auth.currentUser?.email) ? 'pro' : 'free',
-    status,
+    tier: status.isPro || isSandboxAccount ? 'pro' : 'free',
+    // A plan actually recorded for the account still wins over the sandbox default.
+    status: isSandboxAccount
+      ? { ...status, isPro: true, planId: status.planId ?? UNLIMITED_ACCESS_PLAN_ID }
+      : status,
+    /** Pro through the sandbox email, with no store purchase behind it. */
+    isSandboxAccount,
     usage,
     remainingAiActions: Math.max(0, FREE_DAILY_AI_ACTIONS - usage.aiActions),
     remainingVoiceSeconds: Math.max(0, FREE_DAILY_VOICE_SECONDS - usage.voiceSeconds),
