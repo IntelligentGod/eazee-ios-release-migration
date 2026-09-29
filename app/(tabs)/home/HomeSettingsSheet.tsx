@@ -806,7 +806,13 @@ export default function HomeSettingsSheet({
 
       <View style={styles.list}>
         <SettingsRow
-          icon={<MaterialCommunityIcons name="crown-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🫆</Text>}
+          label="Manage Account"
+          targetId={getHomeAccountGuidanceTargetId('settings')}
+          onPress={handleOpenManageAccount}
+        />
+        <SettingsRow
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>👑</Text>}
           label="Eazee Pro"
           targetId={getHomeSettingsControlGuidanceTargetId('eazeePro')}
           onPress={handleOpenPaywall}
@@ -820,12 +826,6 @@ export default function HomeSettingsSheet({
               <MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.78)" />
             </View>
           )}
-        />
-        <SettingsRow
-          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🫆</Text>}
-          label="Manage Account"
-          targetId={getHomeAccountGuidanceTargetId('settings')}
-          onPress={handleOpenManageAccount}
         />
         <SettingsRow
           icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🙈</Text>}

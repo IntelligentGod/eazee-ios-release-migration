@@ -188,8 +188,8 @@ function ChatHistoryRow({
           borderRadius: 18,
           borderWidth: 1,
           borderColor: 'rgba(173, 255, 240, 0.55)',
-          paddingLeft: 38,
-          paddingRight: 38,
+          paddingLeft: 44,
+          paddingRight: 44,
           paddingVertical: 14,
           justifyContent: 'center',
           shadowColor: '#001A17',
@@ -200,17 +200,17 @@ function ChatHistoryRow({
       >
         <TouchableOpacity
           onPress={() => onTogglePin(session.id, session.pinned)}
-          style={{ position: 'absolute', top: 8, left: 10, zIndex: 2 }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{ position: 'absolute', top: 13, left: 12, zIndex: 2 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <MIcon name={session.pinned ? 'pin' : 'pin-outline'} size={13} color={session.pinned ? '#FFFFFF' : '#21A19B'} />
+          <MIcon name={session.pinned ? 'pin' : 'pin-outline'} size={20} color={session.pinned ? '#FFFFFF' : '#21A19B'} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => onDeleteSession(session.id)}
-          style={{ position: 'absolute', top: 8, right: 10, zIndex: 2 }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{ position: 'absolute', top: 13, right: 12, zIndex: 2 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <MIcon name="trash-can-outline" size={13} color="#137D78" />
+          <MIcon name="trash-can-outline" size={20} color="#137D78" />
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <Text numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1, color: '#F4FFFD', fontSize: 13, fontWeight: '700' }}>
@@ -241,6 +241,100 @@ function ChatHistoryRow({
   );
 }
 
+function DeleteChatConfirm({
+  chatTitle,
+  onCancel,
+  onConfirm,
+}: {
+  chatTitle: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+        backgroundColor: 'rgba(0, 20, 18, 0.55)',
+      }}
+    >
+      <TouchableOpacity
+        onPress={onCancel}
+        activeOpacity={1}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+      <LinearGradient
+        colors={['#067369', '#004643']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          width: '100%',
+          maxWidth: 340,
+          borderRadius: 24,
+          borderWidth: 1,
+          borderColor: 'rgba(173, 255, 240, 0.55)',
+          padding: 20,
+          shadowColor: '#001A17',
+          shadowOpacity: 0.35,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 12,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <MIcon name="trash-can-outline" size={22} color="#3DC5B5" />
+          <Text style={{ color: '#3DC5B5', fontSize: 20, fontWeight: '700' }}>Delete chat</Text>
+        </View>
+        <Text style={{ color: '#D8FFFA', fontSize: 14, lineHeight: 20 }}>
+          {`"${chatTitle}" will be permanently deleted.`}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+          <TouchableOpacity
+            onPress={onCancel}
+            style={{
+              flex: 1,
+              height: 44,
+              borderRadius: 22,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(173, 255, 240, 0.55)',
+              backgroundColor: 'rgba(1, 48, 45, 0.6)',
+            }}
+          >
+            <Text style={{ color: '#BEE7E1', fontSize: 15, fontWeight: '700' }}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onConfirm} style={{ flex: 1 }}>
+            <LinearGradient
+              colors={['#3DC5B5', '#1DAFB2']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={{
+                height: 44,
+                borderRadius: 22,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+              }}
+            >
+              <MIcon name="trash-can-outline" size={17} color="#003C37" />
+              <Text style={{ color: '#003C37', fontSize: 15, fontWeight: '800' }}>Delete</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </View>
+  );
+}
+
 export function ChatHistoryModal({
   visible,
   sessions,
@@ -254,11 +348,13 @@ export function ChatHistoryModal({
 }: ChatHistoryModalProps) {
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<ChatSessionListItem | null>(null);
 
   useEffect(() => {
     if (visible) return;
     setIsSearchVisible(false);
     setSearchQuery('');
+    setPendingDeleteSession(null);
   }, [visible]);
 
   const matchingSessions = sessions.filter((session) => searchMatchesSession(session, searchQuery));
@@ -407,13 +503,23 @@ export function ChatHistoryModal({
                 session={session}
                 searchQuery={searchQuery}
                 showSummaries={showSummaries}
-                onDeleteSession={onDeleteSession}
+                onDeleteSession={(sessionId) => setPendingDeleteSession(sessions.find((item) => item.id === sessionId) ?? null)}
                 onSelectSession={onSelectSession}
                 onTogglePin={onTogglePin}
               />
             ))}
           </ScrollView>
         </View>
+        {pendingDeleteSession && (
+          <DeleteChatConfirm
+            chatTitle={pendingDeleteSession.title || 'New Chat'}
+            onCancel={() => setPendingDeleteSession(null)}
+            onConfirm={() => {
+              onDeleteSession(pendingDeleteSession.id);
+              setPendingDeleteSession(null);
+            }}
+          />
+        )}
       </View>
     </Modal>
   );

@@ -4095,25 +4095,17 @@ export default function ChatScreen() {
     } catch { }
   }, [refreshChatSessions]);
 
-  const deleteSession = useCallback((sessionId: string) => {
-    Alert.alert('Delete chat', 'This will permanently delete this chat session.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteChatSessionById(sessionId);
-            stopAssistantTyping(sessionId);
-            if (activeSessionId === sessionId) {
-              replaceVisibleChat(null, [], '');
-              resetToolMemory();
-            }
-            await refreshChatSessions();
-          } catch { }
-        }
-      },
-    ]);
+  // ChatHistoryModal asks for confirmation before calling this.
+  const deleteSession = useCallback(async (sessionId: string) => {
+    try {
+      await deleteChatSessionById(sessionId);
+      stopAssistantTyping(sessionId);
+      if (activeSessionId === sessionId) {
+        replaceVisibleChat(null, [], '');
+        resetToolMemory();
+      }
+      await refreshChatSessions();
+    } catch { }
   }, [activeSessionId, refreshChatSessions, replaceVisibleChat, stopAssistantTyping]);
 
   const closeHistoryModal = useCallback(() => {
