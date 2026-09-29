@@ -10,7 +10,7 @@ export type SubscriptionPlan = {
   period: string;
   caption: string;
   highlight: boolean;
-  /** Store product id. Create these in App Store Connect and Play Console. */
+  /** Store product id; must match App Store Connect (group "Eazee Pro", 22404127) and Play Console exactly. */
   productId: string;
 };
 
@@ -22,7 +22,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     period: '/ month',
     caption: 'Cancel anytime',
     highlight: false,
-    productId: 'com.eazee.ai.pro.monthly',
+    productId: 'com.eazee.subscription.pro.monthly',
   },
   {
     id: 'yearly',
@@ -31,7 +31,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     period: '/ year',
     caption: 'Save 33% (only $6.67/month)',
     highlight: true,
-    productId: 'com.eazee.ai.pro.yearly',
+    productId: 'com.eazee.subscription.pro.yearly',
   },
 ];
 
@@ -268,32 +268,4 @@ export async function clearCachedSubscriptionStatus(userId: string) {
   } catch (error) {
     console.warn('Failed to clear subscription status', error);
   }
-}
-
-const BILLING_NOT_CONFIGURED_MESSAGE =
-  'In-app purchases are not set up yet. Connect a billing SDK and create the store products to enable Eazee Pro.';
-
-/**
- * No store billing SDK is installed yet, so purchases cannot complete. Replace
- * these two bodies with the billing SDK calls once the products exist in App
- * Store Connect and Play Console - the paywall already speaks this contract.
- */
-export function isBillingConfigured() {
-  return false;
-}
-
-export async function purchaseSubscription(planId: SubscriptionPlanId): Promise<BillingOutcome> {
-  if (!isBillingConfigured()) {
-    return { status: 'unavailable', message: BILLING_NOT_CONFIGURED_MESSAGE };
-  }
-
-  return { status: 'unavailable', message: `No purchase handler for ${planId}` };
-}
-
-export async function restorePurchases(): Promise<BillingOutcome> {
-  if (!isBillingConfigured()) {
-    return { status: 'unavailable', message: BILLING_NOT_CONFIGURED_MESSAGE };
-  }
-
-  return { status: 'unavailable', message: 'No restore handler' };
 }

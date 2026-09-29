@@ -13,6 +13,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import { ActivityIndicator, Appearance, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { configureTodoNotifications, syncAllTodoReminders } from '@/lib/todoNotifications';
 import { useNotificationSchedules } from '@/lib/useNotificationSchedules';
+import { useStoreSubscriptionSync } from '@/lib/useStoreSubscriptionSync';
 import * as WebBrowser from 'expo-web-browser';
 import { auth } from '@/firebaseConfig';
 import { AuthSessionProvider, useAuthSession } from './context/AuthSessionContext';
@@ -174,6 +175,7 @@ function AccountDeletionRecoveryGate({ children }: { children: React.ReactNode }
   const [isChecking, setIsChecking] = React.useState(true);
   const [areRemindersReady, setAreRemindersReady] = React.useState(false);
   useNotificationSchedules(areRemindersReady && !!user);
+  useStoreSubscriptionSync(areRemindersReady ? user?.uid : null);
   const [isRecoveringDeletion, setIsRecoveringDeletion] = React.useState(false);
   const [recoveryFailed, setRecoveryFailed] = React.useState(false);
   const [shouldRouteToAccountEntry, setShouldRouteToAccountEntry] = React.useState(false);

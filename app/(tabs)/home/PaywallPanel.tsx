@@ -18,14 +18,19 @@ import { getHomeSettingsBackGuidanceTargetId } from '@/lib/navigationHelp';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '@/lib/legalLinks';
 import { useSubscriptionStatus } from '@/lib/useSubscriptionStatus';
 import {
+  isBillingConfigured,
+  openStoreSubscriptionManagement,
+  purchaseSubscription,
+  restorePurchases,
+  syncStoreSubscriptionStatus,
+} from '@/lib/storeBilling';
+import {
   DEFAULT_SUBSCRIPTION_PLAN_ID,
   PLAN_COMPARISON_ROWS,
   SUBSCRIPTION_PLANS,
   SUBSCRIPTION_STORE_NAME,
   TRIAL_DAYS,
   getManageSubscriptionUrl,
-  purchaseSubscription,
-  restorePurchases,
   writeCachedSubscriptionStatus,
   type ComparisonRow,
   type ComparisonValue,
@@ -166,6 +171,12 @@ export default function PaywallPanel({
     return () => setTabBarTheme('default');
   }, [setTabBarTheme]);
 
+  // Show the App Store's current answer, e.g. after a cancellation made in Settings.
+  useEffect(() => {
+    if (!userId) return;
+    void syncStoreSubscriptionStatus(userId).then(refresh);
+  }, [refresh, userId]);
+
   const handleContinue = useCallback(async () => {
     setIsProcessing(true);
     try {
@@ -242,7 +253,13 @@ export default function PaywallPanel({
         {
           text: `Open ${SUBSCRIPTION_STORE_NAME}`,
           style: 'destructive',
-          onPress: () => openLink(getManageSubscriptionUrl(status.planId)),
+          onPress: () => {
+            if (!isBillingConfigured()) {
+              openLink(getManageSubscriptionUrl(status.planId));
+              return;
+            }
+            void openStoreSubscriptionManagement().catch(() => openLink(getManageSubscriptionUrl(status.planId)));
+          },
         },
       ]
     );
