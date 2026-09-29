@@ -5306,6 +5306,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     dismissNotice,
     confirmPendingAction,
     cancelPending,
+    stopRequest: stopAiRequest,
     getHandoffChatParams,
   } = useCompactTabAI('todo', {
     onMutationSuccess: async ({ name, result }) => {
@@ -13737,6 +13738,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               glowAnim={glowAnim}
               placeholder={aiNotice?.kind === 'clarify' || aiNotice?.kind === 'confirm' ? 'Reply here' : ''}
               isProcessing={isAiRunning}
+              onStopPress={stopAiRequest}
               editable={!isAiRunning}
               showSendButton
               multiline
@@ -14233,6 +14235,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                     glowAnim={glowAnim}
                     placeholder={activeAiPlaceholder}
                     isProcessing={activeIsAiRunning}
+                    onStopPress={isCheckingWishlistPurchaseIntent || isRecipeGuidanceInputActive || isSkillGuidanceInputActive || isGoalGuidanceInputActive || isTaskGuidanceInputActive ? undefined : stopAiRequest}
                     editable={!activeIsAiRunning}
                     showSendButton
                     multiline

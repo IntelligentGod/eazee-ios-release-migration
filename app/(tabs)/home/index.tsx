@@ -607,6 +607,7 @@ export default function HomePage() {
     dismissNotice,
     confirmPendingAction,
     cancelPending,
+    stopRequest: stopAiRequest,
     getHandoffChatParams,
   } = useCompactTabAI('home', {
     onMutationSuccess: async (info) => {
@@ -3094,6 +3095,7 @@ export default function HomePage() {
           glowAnim={glowAnim}
           placeholder={notice?.kind === 'clarify' || notice?.kind === 'confirm' ? 'Reply here' : ''}
           isProcessing={isAiRunning}
+          onStopPress={stopAiRequest}
           editable={!isAiRunning}
           showSendButton
           multiline

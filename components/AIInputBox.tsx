@@ -4,6 +4,7 @@ import {
     Animated,
     Image,
     ImageSourcePropType,
+    Keyboard,
     Text,
     TextInput,
     TextInputProps,
@@ -34,6 +35,10 @@ interface AIInputBoxProps {
     onChangeText?: (text: string) => void;
     onSubmitEditing?: () => void;
     onSendPress?: () => void;
+    /** Stops the in-flight AI request. Without it, the cancel button only shows while typing. */
+    onStopPress?: () => void;
+    /** The AI is replying while the field stays usable, so the cancel button offers stop. */
+    isResponding?: boolean;
     voicePreviewContent?: ReactNode;
     onFocus?: () => void;
     onBlur?: () => void;
@@ -394,6 +399,55 @@ function SendButton({
     );
 }
 
+function CancelButton({
+    isStopMode,
+    isExpandedMultiline,
+    bottomOffset,
+    rightOffset,
+    onPress,
+}: {
+    isStopMode: boolean;
+    isExpandedMultiline: boolean;
+    bottomOffset: number;
+    rightOffset: number;
+    onPress: () => void;
+}) {
+    const size = 22;
+    const radius = size / 2;
+
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={isStopMode ? 'Stop AI request' : 'Cancel'}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 3 }}
+            style={{
+                position: 'absolute',
+                right: rightOffset,
+                top: isExpandedMultiline ? undefined : '50%',
+                bottom: isExpandedMultiline ? bottomOffset : undefined,
+                marginTop: isExpandedMultiline ? 0 : -radius,
+                width: size,
+                height: size,
+                borderRadius: radius,
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 31,
+                backgroundColor: '#FF5A5F',
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.9)',
+                shadowColor: '#FF5A5F',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.6,
+                shadowRadius: 6,
+                elevation: 6,
+            }}
+        >
+            <MIcon name={isStopMode ? 'stop' : 'close'} size={isStopMode ? 13 : 14} color="#FFFFFF" />
+        </TouchableOpacity>
+    );
+}
+
 function MicrophoneButton({
     assetConfig,
     glowAnim,
@@ -656,6 +710,8 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
     onChangeText,
     onSubmitEditing,
     onSendPress,
+    onStopPress,
+    isResponding = false,
     voicePreviewContent,
     onFocus,
     onBlur,
@@ -693,6 +749,11 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
 }) => {
     const [inputHeight, setInputHeight] = useState(minInputHeight);
     const [localTextInput, setLocalTextInput] = useState(textInput);
+    const [isInputFocused, setIsInputFocused] = useState(false);
+    // The text field unmounts while processing, so its blur event never arrives.
+    if (isProcessing && isInputFocused) {
+        setIsInputFocused(false);
+    }
     const reportedHeightRef = useRef(0);
     const contentHeightRef = useRef(minInputHeight);
     const assetConfig = surfaceVariant === 'default' ? undefined : assetSurfaceConfigs[surfaceVariant];
@@ -721,7 +782,18 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
         );
     const showsAssetSendButton = showsSendButton && !!assetConfig?.sendSource && !!assetConfig.sendArrowSource;
     const showsInlineSendButton = showsSendButton && !showsAssetSendButton;
-    const inputPaddingRight = showsInlineSendButton ? (usesAssetSurface ? 18 : 44) : (usesAssetSurface ? 2 : 10);
+    const isStopMode = !!onStopPress && (isProcessing || isResponding);
+    const showsCancelButton = isStopMode || (
+        !isProcessing &&
+        editable &&
+        !isListening &&
+        !hasVoicePreviewContent &&
+        (isInputFocused || localTextInput.trim().length > 0)
+    );
+    const cancelButtonSpace = showsCancelButton ? 28 : 0;
+    const inputPaddingRight =
+        (showsInlineSendButton ? (usesAssetSurface ? 18 : 44) : (usesAssetSurface ? 2 : 10)) +
+        (usesAssetSurface ? 0 : cancelButtonSpace);
     const inputPaddingVertical = multiline ? (usesAssetSurface ? 2 : 9) : 0;
     const inputTextColor = assetConfig?.textColor ?? '#FFFFFF';
     const placeholderTextColor = assetConfig?.placeholderTextColor ?? '#FFFFFF';
@@ -760,6 +832,16 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
         onHeightChange(outerInputHeight);
     }, [onHeightChange, outerInputHeight]);
 
+    const handleCancelPress = () => {
+        if (isStopMode) {
+            onStopPress?.();
+            return;
+        }
+        setLocalTextInput('');
+        onChangeText?.('');
+        Keyboard.dismiss();
+    };
+
     const sendButton = showsInlineSendButton ? (
         <SendButton
             assetConfig={assetConfig}
@@ -768,6 +850,16 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             defaultBorderWidth={defaultSendBorderWidth}
             isExpandedMultiline={isExpandedMultiline}
             onPress={onSendPress}
+        />
+    ) : null;
+
+    const cancelButton = showsCancelButton ? (
+        <CancelButton
+            isStopMode={isStopMode}
+            isExpandedMultiline={isExpandedMultiline}
+            bottomOffset={usesAssetSurface ? 10 : 8}
+            rightOffset={showsInlineSendButton ? 34 : (usesAssetSurface ? 10 : 6)}
+            onPress={handleCancelPress}
         />
     ) : null;
 
@@ -841,8 +933,14 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
                 contentHeightRef.current = nextHeight;
                 setInputHeight(nextHeight);
             }}
-            onFocus={onFocus}
-            onBlur={onBlur}
+            onFocus={() => {
+                setIsInputFocused(true);
+                onFocus?.();
+            }}
+            onBlur={() => {
+                setIsInputFocused(false);
+                onBlur?.();
+            }}
             returnKeyType={returnKeyType}
             autoCapitalize={autoCapitalize}
             autoCorrect={!isListening}
@@ -877,6 +975,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             >
                 {inputContent}
                 {sendButton}
+                {cancelButton}
             </LinearGradient>
         </View>
     ) : (
@@ -904,6 +1003,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             >
                 {inputContent}
                 {sendButton}
+                {cancelButton}
             </LinearGradient>
         </LinearGradient>
     );
@@ -923,11 +1023,12 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
                 style={{ flex: 1 }}
                 contentStyle={{
                     justifyContent: multiline ? 'flex-start' : 'center',
-                    marginRight: showsInlineSendButton ? 26 : 0,
+                    marginRight: (showsInlineSendButton ? 26 : 0) + cancelButtonSpace,
                 }}
             >
                 {inputContent}
             </AssetSurface>
+            {cancelButton}
             {showsInlineSendButton ? (
                 <SendButton
                     assetConfig={assetConfig}

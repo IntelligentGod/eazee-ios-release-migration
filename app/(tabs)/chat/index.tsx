@@ -2071,6 +2071,7 @@ export default function ChatScreen() {
   const callSessionMapRef = useRef(new Map<string, string>());
   const callRequestMapRef = useRef(new Map<string, string>());
   const requestSessionMapRef = useRef(new Map<string, string>());
+  const requestAbortControllersRef = useRef(new Map<string, AbortController>());
   const requestTextMapRef = useRef(new Map<string, string>());
   const requestUserMessageMapRef = useRef(new Map<string, string>());
   const pendingRetryMessageIdsRef = useRef(new Set<string>());
@@ -4150,6 +4151,7 @@ export default function ChatScreen() {
     const retryMessageId = String(options?.retryMessageId || '').trim();
     let visibleUserMessageId = retryMessageId;
     let clientRequestId = '';
+    let requestController: AbortController | null = null;
     const showUserMessage = options?.showUserMessage !== false;
     const hiddenMessages = (options?.hiddenMessages || []).filter((message) => message.content.trim().length > 0);
     const clearVisibleUserDeliveryStatus = () => {
@@ -4402,10 +4404,13 @@ export default function ChatScreen() {
           ...requestMessages,
         ]
       };
+      requestController = new AbortController();
+      requestAbortControllersRef.current.set(clientRequestId, requestController);
       const resp = await fetch(`${SERVER_URL}/ai/route`, {
         method: 'POST',
         headers: await getAiRequestHeaders(),
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: requestController.signal,
       });
       options?.onRequestStarted?.();
       if (!resp.ok) {
@@ -4436,6 +4441,7 @@ export default function ChatScreen() {
         return;
       }
       const json = await resp.json().catch(() => null);
+      if (requestController.signal.aborted) return;
       logChatStream('route-response', {
         requestSessionId,
         clientRequestId,
@@ -4479,6 +4485,7 @@ export default function ChatScreen() {
         }
         if (!expectsStream) {
           for (const call of calls) {
+            if (requestController.signal.aborted) break;
             if (call && call.name) {
               await handleToolCall({ ...call, clientRequestId }, requestSessionId);
             }
@@ -4533,6 +4540,7 @@ export default function ChatScreen() {
         restoreWishlistTutorialAfterFailedRequest(clientRequestId);
       }
     } catch (error: any) {
+      if (requestController?.signal.aborted) return;
       console.warn(`Chat request to ${SERVER_URL} failed:`, error);
       const didMarkUserMessageFailed = await markVisibleUserDeliveryFailed(
         `Failed to send to AI. (${String(error?.message || error)})`,
@@ -4549,12 +4557,36 @@ export default function ChatScreen() {
       stopAssistantTyping(requestSessionId);
       restoreChatDayPlanTutorialAfterFailedRequest(clientRequestId);
       restoreWishlistTutorialAfterFailedRequest(clientRequestId);
+    } finally {
+      requestAbortControllersRef.current.delete(clientRequestId);
     }
   }, [activeSessionSummary, activeTarget, appendMessagesToSession, appendRecipeTodoOfferIfNeeded, authUser?.uid, cancelGuidance, clearAssistantReadAnchor, clearPendingGoalQuotaDate, clearPendingStreamChunks, clearTrackedRequest, finalizeStreamingMessage, handleDecideGoalQuotaLater, handlePickGoalQuotaDate, handleScheduleGoalQuotaForDate, handleToolCall, ignoredGoalQuotaTypedPlanIds, isChatDayPlanTutorialPending, markGoalQuotaTypedPlanIgnored, maybeRestoreChatDayPlanTutorialAfterResponse, queueScrollToBottom, replaceVisibleChat, resolvedGoalQuotaPlanIds, restoreChatDayPlanTutorialAfterFailedRequest, restoreWishlistTutorialAfterFailedRequest, router, saveDayPlanCard, serializeMessageForModel, startAssistantTyping, startGuidance, stopAssistantTyping, updateVisibleMessageDelivery, waitForStreamingClientId]);
 
   useEffect(() => {
     sendTextMessageRef.current = sendTextMessage;
   }, [sendTextMessage]);
+
+  // Untracking the request makes the stream listeners drop its remaining events.
+  // Tool calls that already ran are not rolled back.
+  const stopActiveChatResponse = useCallback(() => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) return;
+    for (const [requestId, requestSessionId] of requestSessionMapRef.current.entries()) {
+      if (requestSessionId !== sessionId) continue;
+      requestAbortControllersRef.current.get(requestId)?.abort();
+      requestAbortControllersRef.current.delete(requestId);
+      clearPendingStreamChunks(requestId);
+      clearTrackedRequest(requestId);
+      restoreChatDayPlanTutorialAfterFailedRequest(requestId);
+      restoreWishlistTutorialAfterFailedRequest(requestId);
+    }
+    for (const [callId, callSessionId] of callSessionMapRef.current.entries()) {
+      if (callSessionId !== sessionId) continue;
+      callSessionMapRef.current.delete(callId);
+      callRequestMapRef.current.delete(callId);
+    }
+    stopAssistantTyping(sessionId);
+  }, [clearPendingStreamChunks, clearTrackedRequest, restoreChatDayPlanTutorialAfterFailedRequest, restoreWishlistTutorialAfterFailedRequest, stopAssistantTyping]);
 
   useEffect(() => {
     if (!compactHandoffValue || !compactHandoffKey) return;
@@ -5219,6 +5251,8 @@ export default function ChatScreen() {
                   onChangeText={isStreaming || isVoiceInputActive ? undefined : handleInputChange}
                   onSubmitEditing={isVoiceInputActive ? undefined : handleSend}
                   onSendPress={isVoiceInputActive ? undefined : handleSendPress}
+                  onStopPress={stopActiveChatResponse}
+                  isResponding={isCurrentSessionTyping}
                   voicePreviewContent={voicePreviewContent}
                   returnKeyType="default"
                   autoCapitalize="sentences"

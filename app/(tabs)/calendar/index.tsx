@@ -525,6 +525,7 @@ const CalendarScreen: React.FC = () => {
     dismissNotice,
     confirmPendingAction,
     cancelPending,
+    stopRequest: stopAiRequest,
     getHandoffChatParams,
   } = useCompactTabAI('calendar', {
     onMutationSuccess: async (info) => {
@@ -5108,6 +5109,7 @@ const CalendarScreen: React.FC = () => {
                   : ''
             }
             isProcessing={isAiRunning}
+            onStopPress={stopAiRequest}
             editable={!isAiRunning}
             showSendButton
             multiline

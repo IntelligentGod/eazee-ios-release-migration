@@ -565,6 +565,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
   const pendingConfirmationRef = useRef<PendingConfirmation | null>(null);
   const inputValueRef = useRef('');
   const handledToolCallKeysRef = useRef(new Set<string>());
+  const activeRequestRef = useRef<AbortController | null>(null);
 
   const setInputValue = useCallback((value: string) => {
     inputValueRef.current = value;
@@ -681,7 +682,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     setHistory([]);
   }, [executeCompactToolCalls, showNotice]);
 
-  const requestRoute = useCallback(async (hiddenHistory: HiddenMessage[], continuedRequest: boolean) => {
+  const requestRoute = useCallback(async (hiddenHistory: HiddenMessage[], continuedRequest: boolean, signal: AbortSignal) => {
     const messages = buildRouteMessages(hiddenHistory, continuedRequest);
     const aiPersonalization = await readAiPersonalizationSettings(auth.currentUser?.uid);
     const requestBodies = [
@@ -701,6 +702,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        signal,
       });
 
       if (response.ok) {
@@ -717,11 +719,12 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     throw new Error(lastError);
   }, [buildRouteMessages, surface]);
 
-  const runRequest = useCallback(async (hiddenHistory: HiddenMessage[]) => {
+  const runRequest = useCallback(async (hiddenHistory: HiddenMessage[], signal: AbortSignal) => {
     let currentHistory = hiddenHistory;
 
     for (let round = 0; round < MAX_ROUTE_ROUNDS; round += 1) {
-      const routeResponse = await requestRoute(currentHistory, round > 0);
+      const routeResponse = await requestRoute(currentHistory, round > 0, signal);
+      if (signal.aborted) return;
 
       if (routeResponse?.status === 'no_tool_calls') {
         const metaKind = routeResponse?.meta?.assistantKind;
@@ -790,6 +793,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
         const calendarItems = (
           await Promise.all(calendarDeleteToolCalls.map((toolCall) => resolveCalendarDeleteNoticeItem(toolCall.arguments)))
         ).filter(Boolean) as CompactAiNoticeCalendarItem[];
+        if (signal.aborted) return;
         const confirmationMessage = buildCalendarDeleteConfirmationMessage(calendarDeleteToolCalls.length);
         const nextHistory = [...currentHistory, { role: 'assistant' as const, content: confirmationMessage }];
         pendingConfirmationRef.current = {
@@ -809,6 +813,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
       }
 
       const { shouldContinue, toastNotices, handledUiActions } = await executeCompactToolCalls(toolCalls, currentHistory);
+      if (signal.aborted) return;
       if (shouldContinue) {
         continue;
       }
@@ -858,6 +863,13 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
       return;
     }
     handledToolCallKeysRef.current.clear();
+    const request = new AbortController();
+    activeRequestRef.current = request;
+    const finishRequest = () => {
+      if (activeRequestRef.current !== request) return;
+      activeRequestRef.current = null;
+      setIsRunning(false);
+    };
 
     const pendingConfirmation = pendingConfirmationRef.current;
     if (pendingConfirmation) {
@@ -881,9 +893,10 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
         const nextHistory = [...pendingConfirmation.history, { role: 'user' as const, content: trimmed }];
         setHistory(nextHistory);
         showNotice(null);
-        await runRequest(nextHistory);
+        await runRequest(nextHistory, request.signal);
         return;
       } catch (error: any) {
+        if (request.signal.aborted) return;
         showNotice({
           kind: 'error',
           message: String(error?.message || error || 'Something went wrong.'),
@@ -891,7 +904,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
         setHistory([]);
         return;
       } finally {
-        setIsRunning(false);
+        finishRequest();
       }
     }
 
@@ -904,15 +917,16 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     }
 
     try {
-      await runRequest(nextHistory);
+      await runRequest(nextHistory, request.signal);
     } catch (error: any) {
+      if (request.signal.aborted) return;
       showNotice({
         kind: 'error',
         message: String(error?.message || error || 'Something went wrong.'),
       });
       setHistory([]);
     } finally {
-      setIsRunning(false);
+      finishRequest();
     }
   }, [executePendingConfirmation, history, isRunning, notice?.kind, runRequest, setInputValue, showNotice]);
 
@@ -932,6 +946,16 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     pendingConfirmationRef.current = null;
     showNotice(null);
     setHistory([]);
+  }, [showNotice]);
+
+  /** Tool calls that already ran are not rolled back; only what is still in flight stops. */
+  const stopRequest = useCallback(() => {
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = null;
+    pendingConfirmationRef.current = null;
+    setIsRunning(false);
+    setHistory([]);
+    showNotice(null);
   }, [showNotice]);
 
   const getHandoffChatParams = useCallback(() => {
@@ -957,6 +981,7 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     dismissNotice,
     confirmPendingAction,
     cancelPending,
+    stopRequest,
     getHandoffChatParams,
     clearConversation: () => {
       pendingConfirmationRef.current = null;
