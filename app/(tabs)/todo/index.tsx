@@ -9883,14 +9883,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     );
     const isReorderableSection = !hasTodoSearchQuery && isTodoSectionReorderable(workspace, sectionKey);
     const emptyStateText = isGoalWorkspace
-      ? (sectionKey === 'completed' ? 'No completed goals' : 'Tap to add a new goal')
+      ? (sectionKey === 'completed' ? 'No completed goals' : 'Add a new goal')
       : (sectionKey === 'completed'
           ? workspace === 'Wishlist'
             ? 'No completed items'
             : 'No completed tasks'
           : sectionKey === 'wishlist'
-            ? 'Tap to add a new wishlist item'
-            : 'Tap to add a new to-do item');
+            ? 'Add a new wishlist item'
+            : 'Add a new to-do item');
 
     return (
       <View
@@ -9945,8 +9945,13 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 )
               ) : (
                 canCreateFromEmptyState ? (
-                  <TouchableOpacity onPress={() => addTodo(workspace, goalSectionKey)}>
-                    <Text style={styles.emptyStateText}>
+                  <TouchableOpacity
+                    onPress={() => addTodo(workspace, goalSectionKey)}
+                    activeOpacity={0.7}
+                    style={styles.emptyStateAddButton}
+                  >
+                    <Ionicons name="add" size={18} color="#FFFFFF" />
+                    <Text style={styles.emptyStateAddButtonText}>
                       {emptyStateText}
                     </Text>
                   </TouchableOpacity>
@@ -15577,6 +15582,24 @@ const styles = StyleSheet.create({
     color: '#e0e0e0',
     fontStyle: 'italic',
     padding: 10,
+  },
+  emptyStateAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    marginVertical: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  emptyStateAddButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   // action sheet
   actionSheetContent: {
