@@ -12,6 +12,7 @@ import { TabProvider } from './context/TabContext';
 import * as NavigationBar from 'expo-navigation-bar';
 import { ActivityIndicator, Appearance, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { configureTodoNotifications, syncAllTodoReminders } from '@/lib/todoNotifications';
+import { useNotificationSchedules } from '@/lib/useNotificationSchedules';
 import * as WebBrowser from 'expo-web-browser';
 import { auth } from '@/firebaseConfig';
 import { AuthSessionProvider, useAuthSession } from './context/AuthSessionContext';
@@ -169,8 +170,10 @@ function DemoAccountSetupGate({ children }: { children: React.ReactNode }) {
 }
 
 function AccountDeletionRecoveryGate({ children }: { children: React.ReactNode }) {
-  const { isLoading: isAuthLoading } = useAuthSession();
+  const { user, isLoading: isAuthLoading } = useAuthSession();
   const [isChecking, setIsChecking] = React.useState(true);
+  const [areRemindersReady, setAreRemindersReady] = React.useState(false);
+  useNotificationSchedules(areRemindersReady && !!user);
   const [isRecoveringDeletion, setIsRecoveringDeletion] = React.useState(false);
   const [recoveryFailed, setRecoveryFailed] = React.useState(false);
   const [shouldRouteToAccountEntry, setShouldRouteToAccountEntry] = React.useState(false);
@@ -209,6 +212,9 @@ function AccountDeletionRecoveryGate({ children }: { children: React.ReactNode }
         syncAllTodoReminders().catch((error) => {
           console.error('Error syncing todo reminders:', error);
         });
+        if (isActive) {
+          setAreRemindersReady(true);
+        }
       })
       .catch((error) => {
         console.error('Failed to finish pending account deletion:', error);

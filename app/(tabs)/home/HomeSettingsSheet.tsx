@@ -2,6 +2,7 @@ import React, { useCallback, useEffect } from 'react';
 import {
   type AccessibilityRole,
   type AccessibilityState,
+  Alert,
   Animated,
   BackHandler,
   Easing,
@@ -53,6 +54,15 @@ import {
 } from '@/modules/expo-liquid-glass-menu';
 import { startTutorial } from '@/lib/tutorial';
 import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_URL } from '@/lib/legalLinks';
+import {
+  DEFAULT_EVENT_REMINDER_SETTINGS,
+  EVENT_REMINDER_MINUTE_OPTIONS,
+  readEventReminderSettings,
+  syncEventReminders,
+  writeEventReminderSettings,
+  type EventReminderMinutes,
+} from '@/lib/eventNotifications';
+import { ensureNotificationPermission } from '@/lib/todoNotifications';
 
 type HomeSettingsSheetProps = {
   bottomInset: number;
@@ -163,6 +173,64 @@ function NavigationModeToggle() {
               }
             }}
             style={[styles.modeOption, selected && styles.modeOptionSelected]}
+          >
+            <Text style={[styles.modeOptionText, selected && styles.modeOptionTextSelected]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const EVENT_REMINDER_OPTIONS: { value: EventReminderMinutes | null; label: string }[] = [
+  { value: null, label: 'Off' },
+  ...EVENT_REMINDER_MINUTE_OPTIONS.map((minutes) => ({ value: minutes, label: `${minutes}m` })),
+];
+
+function EventReminderPicker() {
+  const [minutesBefore, setMinutesBefore] = React.useState<EventReminderMinutes | null>(
+    DEFAULT_EVENT_REMINDER_SETTINGS.minutesBefore
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void readEventReminderSettings().then((settings) => {
+      if (!cancelled) setMinutesBefore(settings.minutesBefore);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSelect = async (value: EventReminderMinutes | null) => {
+    if (value !== null) {
+      const permission = await ensureNotificationPermission();
+      if (!permission.granted) {
+        Alert.alert('Notifications are off', 'Allow notifications for Eazee in your phone settings to get event reminders.');
+        return;
+      }
+    }
+    setMinutesBefore(value);
+    await writeEventReminderSettings({ minutesBefore: value });
+    void syncEventReminders();
+  };
+
+  return (
+    <View style={styles.modeToggle}>
+      {EVENT_REMINDER_OPTIONS.map((option) => {
+        const selected = minutesBefore === option.value;
+        return (
+          <Pressable
+            key={option.label}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selected }}
+            accessibilityLabel={option.value === null ? 'Event reminders off' : `Remind ${option.value} minutes before events`}
+            onPress={() => {
+              if (!selected) void handleSelect(option.value);
+            }}
+            style={[styles.modeOption, styles.eventReminderOption, selected && styles.modeOptionSelected]}
           >
             <Text style={[styles.modeOptionText, selected && styles.modeOptionTextSelected]}>
               {option.label}
@@ -828,6 +896,11 @@ export default function HomeSettingsSheet({
           )}
         />
         <SettingsRow
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🔔</Text>}
+          label="Event Reminders"
+          right={<EventReminderPicker />}
+        />
+        <SettingsRow
           icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🙈</Text>}
           label="Guided Access Mode"
           targetId={getHomeSettingsControlGuidanceTargetId('navigationMode')}
@@ -1123,6 +1196,10 @@ const styles = StyleSheet.create({
   },
   modeOptionSelected: {
     backgroundColor: 'rgba(246, 242, 227, 0.94)',
+  },
+  eventReminderOption: {
+    minWidth: 36,
+    paddingHorizontal: 5,
   },
   modeOptionText: {
     color: '#FFFFFF',
