@@ -3129,6 +3129,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   }, [taskGuides, taskProgressOverridesByTodoId]);
 
   const refreshLocalTodos = useCallback(async () => {
+    // Refreshes overlap (effects, focus, toggles); only the newest one may replace the list.
+    const refreshSeq = ++refreshLocalTodosSeqRef.current;
     await syncRecurringTodos();
     const fresh = await database.collections.get<TodoModel>('todos').query().fetch();
     const freshRecurrenceSeries = await database.collections.get<TodoRecurrenceSeriesModel>('todo_recurrence_series').query().fetch();
@@ -3137,7 +3139,12 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     const rows = normalized
       ? await database.collections.get<TodoModel>('todos').query().fetch()
       : fresh;
-    const items = rows.map((row) => toTodoItem(row, freshRecurrenceSeriesById));
+    if (refreshSeq !== refreshLocalTodosSeqRef.current) return;
+    const items = rows.map((row) => {
+      const item = toTodoItem(row, freshRecurrenceSeriesById);
+      const pendingCompleted = pendingCompletionByTodoIdRef.current.get(item.id);
+      return pendingCompleted === undefined ? item : { ...item, completed: pendingCompleted };
+    });
     setLocalTodos(items);
     localTodosRef.current = items;
   }, []);
@@ -3351,6 +3358,9 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   const [isGoalGuidanceActionTransitioning, setIsGoalGuidanceActionTransitioning] = useState(false);
   const [isTodoDragActive, setIsTodoDragActive] = useState(false);
   const togglingTodoIdsRef = useRef(new Set<string>());
+  /** Completed value a tick has shown but not yet confirmed in the DB, so a refresh that read earlier cannot undo it. */
+  const pendingCompletionByTodoIdRef = useRef(new Map<string, boolean>());
+  const refreshLocalTodosSeqRef = useRef(0);
   const isTodoDetailsSwipeDisabled =
     isTodoGuidanceTutorialPending ||
     isTodoDragActive ||
@@ -6598,12 +6608,13 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   };
 
 
-  const toggleSection = useCallback((section: TodoSectionKey, workspaceKey: string, currentlyExpanded: boolean) => {
+  const toggleSection = useCallback((section: TodoSectionKey, workspaceKey: string, renderedExpanded: boolean) => {
+    // Read the latest state: a second quick tap can arrive before the first one re-renders the header.
     setExpandedSections(prev => ({
       ...prev,
       [workspaceKey]: {
         ...(prev[workspaceKey] || {}),
-        [section]: !currentlyExpanded,
+        [section]: !(prev[workspaceKey]?.[section] ?? renderedExpanded),
       }
     }));
   }, []);
@@ -7726,55 +7737,78 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     const workspace = todoToToggle.workspace || workspaces[currentWorkspace]?.key;
     const currentWorkspaceType = workspaceTodoTypes[workspace] || 'basic';
 
-    try {
-      setLocalTodos(prevTodos => {
-        const nextTodos = prevTodos.map(todo => {
-          if (todo.id === id) {
-            const updatedTodo = { ...todo, completed: !todo.completed };
-            if (isBeingUncompleted) {
-              updatedTodo.progress = 0;
-              updatedTodo.startedAt = undefined;
-              updatedTodo.type = currentWorkspaceType;
-            }
-            return updatedTodo;
+    const nextCompleted = !todoToToggle.completed;
+    pendingCompletionByTodoIdRef.current.set(id, nextCompleted);
+    setLocalTodos(prevTodos => {
+      const nextTodos = prevTodos.map(todo => {
+        if (todo.id === id) {
+          const updatedTodo = { ...todo, completed: nextCompleted };
+          if (isBeingUncompleted) {
+            updatedTodo.progress = 0;
+            updatedTodo.startedAt = undefined;
+            updatedTodo.type = currentWorkspaceType;
           }
-          return todo;
-        });
-        localTodosRef.current = nextTodos;
-        return nextTodos;
+          return updatedTodo;
+        }
+        return todo;
       });
+      localTodosRef.current = nextTodos;
+      return nextTodos;
+    });
 
+    try {
       if (isCompleting) {
-        if (todoToToggle.workspace === 'Personal') {
-          await completeGoalGuidanceStepsForTodo(id);
+        // Guide progress is a side effect; a failure here must not stop the todo from completing.
+        try {
+          if (todoToToggle.workspace === 'Personal') {
+            await completeGoalGuidanceStepsForTodo(id);
+          }
+          await completeRecipeGuideStepsForTodo(id);
+          await completeSkillGuideStepsForTodo(id);
+          await completeTaskGuideStepsForTodo(id);
+        } catch (error) {
+          console.error('Error completing guide steps for todo:', error);
         }
-        await completeRecipeGuideStepsForTodo(id);
-        await completeSkillGuideStepsForTodo(id);
-        await completeTaskGuideStepsForTodo(id);
       }
 
-      const result = await updateTodo(
-        id,
-        {
-          completed: !todoToToggle.completed,
-          progress: isBeingUncompleted ? 0 : undefined,
-          startedAt: isBeingUncompleted ? null : undefined,
-          type: isBeingUncompleted ? currentWorkspaceType : undefined,
-        },
-        {
-          syncReminder: true,
+      let result: Awaited<ReturnType<typeof updateTodo>> | null = null;
+      try {
+        result = await updateTodo(
+          id,
+          {
+            completed: nextCompleted,
+            progress: isBeingUncompleted ? 0 : undefined,
+            startedAt: isBeingUncompleted ? null : undefined,
+            type: isBeingUncompleted ? currentWorkspaceType : undefined,
+          },
+          {
+            syncReminder: true,
+          }
+        );
+      } catch (error) {
+        console.error('Error toggling todo:', error);
+        // updateTodo saves before syncing the reminder, so a thrown error can still mean the tick was saved.
+        const savedTodo = await database.collections.get<TodoModel>('todos').find(id).catch(() => null);
+        if (savedTodo?.completed === nextCompleted) {
+          result = { todo: savedTodo, reminderStatus: 'skipped' as const };
         }
-      );
-      handleReminderResult(result.reminderStatus);
-      updateTodoStateEverywhere(id, getTodoOrderingStatePatch(result.todo));
-      if (isCompleting) {
-        await handleGoalActionCompleted(id);
       }
 
-      if (todoToToggle.recurrenceSeriesId) {
-        await syncRecurringTodos();
-        await refreshLocalTodos();
+      if (!result) {
+        pendingCompletionByTodoIdRef.current.delete(id);
+        setLocalTodos(prevTodos => {
+          const nextTodos = prevTodos.map(todo =>
+            todo.id === id ? todoToToggle : todo
+          );
+          localTodosRef.current = nextTodos;
+          return nextTodos;
+        });
+        Alert.alert('Could not update task', 'Please try again.');
+        return;
       }
+
+      pendingCompletionByTodoIdRef.current.delete(id);
+      updateTodoStateEverywhere(id, { ...getTodoOrderingStatePatch(result.todo), completed: result.todo.completed });
 
       if (isCompleting) {
         const wsKey = todoToToggle.workspace || workspaces[currentWorkspace]?.key || 'Personal';
@@ -7787,16 +7821,18 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         }));
       }
 
-    } catch (error) {
-      console.error('Error toggling todo:', error);
-      // Revert local state if database update fails
-      setLocalTodos(prevTodos => {
-        const nextTodos = prevTodos.map(todo =>
-          todo.id === id ? todoToToggle : todo
-        );
-        localTodosRef.current = nextTodos;
-        return nextTodos;
-      });
+      // The completion is saved; failures below are logged and never revert it.
+      try {
+        handleReminderResult(result.reminderStatus);
+        if (isCompleting) {
+          await handleGoalActionCompleted(id);
+        }
+        if (todoToToggle.recurrenceSeriesId) {
+          await refreshLocalTodos();
+        }
+      } catch (error) {
+        console.error('Error after toggling todo:', error);
+      }
     } finally {
       togglingTodoIdsRef.current.delete(id);
       setCompletingTodoId((currentId) => currentId === id ? null : currentId);
@@ -9907,6 +9943,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           <TouchableOpacity
             onPress={() => {
               if (!hasTodoSearchQuery) {
+                // A pending reveal re-opens its section until it scrolls to the todo; the tap wins over it.
+                clearPendingTodoReveal();
                 toggleSection(sectionKey, workspace, isExpanded);
               }
             }}
@@ -9967,7 +10005,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         </LinearGradient>
       </View>
     );
-  }, [activeRevealTodoId, addTodo, currentWorkspace, expandedSections, goalSubtaskTodoIds, handleTodoSectionDragBegin, handleTodoSectionDragEnd, handleTodoSectionDragRelease, hasTodoSearchQuery, isLeftHanded, renderTodoItem, sortTodosForSection, todoSearchQuery, toggleSection, workspaceColors]);
+  }, [activeRevealTodoId, addTodo, clearPendingTodoReveal, currentWorkspace, expandedSections, goalSubtaskTodoIds, handleTodoSectionDragBegin, handleTodoSectionDragEnd, handleTodoSectionDragRelease, hasTodoSearchQuery, isLeftHanded, renderTodoItem, sortTodosForSection, todoSearchQuery, toggleSection, workspaceColors]);
 
   function animateWorkspaceChange(newIndex: number) {
     currentWorkspaceRef.current = newIndex;
