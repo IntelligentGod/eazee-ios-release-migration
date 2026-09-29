@@ -23,9 +23,9 @@ import {
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import {
   NestableDraggableFlatList,
-  NestableScrollContainer,
   type RenderItemParams,
 } from 'react-native-draggable-flatlist';
+import WorkspaceScrollArea from '@/components/WorkspaceScrollArea';
 import { useRouter, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import PagerView from 'react-native-pager-view';
@@ -10207,14 +10207,11 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             workspaceAppearance ? { backgroundColor: workspaceAppearance.workspaceShellColor } : null,
           ]}
         >
-          <NestableScrollContainer
-            ref={getWorkspaceScrollRef(workspace)}
+          <WorkspaceScrollArea
+            scrollRef={getWorkspaceScrollRef(workspace)}
             style={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            bounces={true}
-            overScrollMode="always"
             contentContainerStyle={styles.workspaceShellContent}
+            arrowColor={theme.workspaceNameColor}
           >
             {sections}
             {hasTodoSearchQuery && sections.length === 0 && (
@@ -10222,7 +10219,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 No todos match &quot;{todoSearchQuery.trim()}&quot;
               </Text>
             )}
-          </NestableScrollContainer>
+          </WorkspaceScrollArea>
           {isCurrentWorkspaceCreateTarget ? (
             <GuidedTarget targetId={getTodoControlGuidanceTargetId('create')} label="Create todo" localHighlightRadius={18}>
               {createButton}
@@ -13657,6 +13654,18 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             </Animated.Text>
           </View>
 
+          <View className="flex-row items-center gap-1.5">
+          <TouchableOpacity
+            onPress={() => handleDotPress(currentWorkspace - 1)}
+            disabled={currentWorkspace === 0}
+            hitSlop={{ top: 10, bottom: 10, left: 12, right: 6 }}
+            accessibilityRole="button"
+            accessibilityLabel={`Swipe to ${workspaces[currentWorkspace - 1]?.displayName ?? 'previous list'}`}
+            // Hidden rather than removed at the ends so the dots stay centered.
+            style={{ opacity: currentWorkspace === 0 ? 0 : 0.85 }}
+          >
+            <Ionicons name="chevron-back" size={20} color={currentTheme.workspaceNameColor} />
+          </TouchableOpacity>
           <View className="flex-row justify-center items-center h-6 relative">
             {workspaces.map((_, index) => (
               <GuidedTarget
@@ -13698,6 +13707,17 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 style={{ backgroundColor: currentWorkspaceAppearance?.workspaceDotColor || currentTheme.workspaceDotColor, borderWidth: 0 }}
               />
             </Animated.View>
+          </View>
+          <TouchableOpacity
+            onPress={() => handleDotPress(currentWorkspace + 1)}
+            disabled={currentWorkspace >= workspaces.length - 1}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={`Swipe to ${workspaces[currentWorkspace + 1]?.displayName ?? 'next list'}`}
+            style={{ opacity: currentWorkspace >= workspaces.length - 1 ? 0 : 0.85 }}
+          >
+            <Ionicons name="chevron-forward" size={20} color={currentTheme.workspaceNameColor} />
+          </TouchableOpacity>
           </View>
         </View>
         <ActionSheet
