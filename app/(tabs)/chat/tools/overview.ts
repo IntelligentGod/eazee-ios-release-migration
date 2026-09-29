@@ -8,6 +8,7 @@ import { classifyCreatedTodoItemsInBackground, createTodoItems } from './todo';
 import { createCalendarEvent } from './calendar';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { getTodoHasDueTime, parseTodoInput } from '@/utils/todoDates';
+import { updateTodo } from '@/lib/todoMutations';
 import { isSupportedTodoWorkspaceKey } from '@/lib/todoWorkspaces';
 import { SERVER_URL } from '@/config/backend';
 import { getAiRequestHeaders } from '@/lib/aiRequest';
@@ -316,6 +317,22 @@ const resolvePlanCalendarItem = ({
   };
 };
 
+const normalizeTodoTitleKey = (title: string) => title.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Open tasks by title, so a plan item that names an existing task reschedules it on save. */
+async function fetchOpenTodoIdsByTitle() {
+  try {
+    const todos = await database.collections
+      .get<TodoModel>('todos')
+      .query(Q.where('completed', false), Q.where('workspace', Q.notEq('Wishlist')))
+      .fetch();
+    return new Map(todos.map((todo) => [normalizeTodoTitleKey(String(todo.text || '')), String(todo.id)]));
+  } catch {
+    // Planning still works without matching; saving then creates new tasks as before.
+    return new Map<string, string>();
+  }
+}
+
 const plan_my_day: ToolHandler = async (args: any) => {
   const date = normalizePlanDate(args?.date);
   const rawItems: any[] = (Array.isArray(args?.items) ? args.items : [])
@@ -329,7 +346,10 @@ const plan_my_day: ToolHandler = async (args: any) => {
       return a.index - b.index;
     })
     .map(({ item }: { item: any }) => item);
-  const previousPlan = getLastDayPlan();
+  const lastDayPlan = getLastDayPlan();
+  // A week plan drafts several days in a row; only a replan of the same day should reuse the last draft.
+  const previousPlan = lastDayPlan?.date === date ? lastDayPlan : null;
+  const openTodoIdsByTitle = await fetchOpenTodoIdsByTitle();
   const previousCalendarItems = Array.isArray(previousPlan?.calendarItems) ? previousPlan.calendarItems : [];
   const previousTodoItems = Array.isArray(previousPlan?.todoItems) ? previousPlan.todoItems : [];
   const calendarItems: {
@@ -446,6 +466,7 @@ const plan_my_day: ToolHandler = async (args: any) => {
       timeSource,
       priority,
       starred: priority === 'high',
+      existingTodoId: openTodoIdsByTitle.get(normalizeTodoTitleKey(todo.text)),
     });
   });
 
@@ -510,7 +531,12 @@ const plan_my_day: ToolHandler = async (args: any) => {
   });
 
   const draftId = previousPlan?.draftId || `day-plan-${date}-${Date.now().toString(36)}`;
-  const plannedTimeline = replanTimelineItems([...timelineItems, ...blockerItems], date, { assignUntimedTasks: true });
+  // A rescheduled task that was already timed on this day would otherwise also block its own slot.
+  const plannedExistingBlockerIds = new Set(
+    timelineItems.flatMap((item) => (item.existingTodoId ? [`existing-todo-${item.existingTodoId}`] : []))
+  );
+  const remainingBlockers = blockerItems.filter((item) => !plannedExistingBlockerIds.has(item.id));
+  const plannedTimeline = replanTimelineItems([...timelineItems, ...remainingBlockers], date, { assignUntimedTasks: true });
   return buildDayPlanCardValue(date, plannedTimeline, draftId);
 };
 
@@ -524,7 +550,9 @@ const save_day_plan: ToolHandler = async () => {
     ? buildDayPlanCardValue(plan.date, plan.timelineItems, plan.draftId)
     : plan;
   const rawCalendarItems = Array.isArray(normalizedPlan.calendarItems) ? normalizedPlan.calendarItems : [];
-  const rawTodoItems = Array.isArray(normalizedPlan.todoItems) ? normalizedPlan.todoItems : [];
+  const planTodoItems = Array.isArray(normalizedPlan.todoItems) ? normalizedPlan.todoItems : [];
+  const existingTodoItems = planTodoItems.filter((item) => !!item.existingTodoId);
+  const rawTodoItems = planTodoItems.filter((item) => !item.existingTodoId);
 
   for (const item of rawCalendarItems) {
     if (!item?.start || !item?.end) {
@@ -558,7 +586,24 @@ const save_day_plan: ToolHandler = async () => {
     taskKindFallback: 'normal',
   });
 
-  const [calendarSaveResults, todoResult] = await Promise.all([calendarSavePromise, todoSavePromise]);
+  const rescheduleSavePromise = Promise.all(existingTodoItems.map(async (item) => {
+    const dueDate = parseCalendarDateValue(item.dueDate);
+    if (!dueDate) return null;
+    try {
+      await updateTodo(item.existingTodoId!, { dueDate, hasDueTime: item.hasDueTime }, { syncReminder: true });
+      return { text: item.text, dueDate: item.dueDate, hasDueTime: item.hasDueTime };
+    } catch {
+      // The task may have been deleted since the plan was drafted.
+      return null;
+    }
+  }));
+
+  const [calendarSaveResults, todoResult, rescheduleResults] = await Promise.all([
+    calendarSavePromise,
+    todoSavePromise,
+    rescheduleSavePromise,
+  ]);
+  const rescheduledTodoItems = rescheduleResults.filter(Boolean) as { text: string; dueDate: string; hasDueTime: boolean }[];
   const createdCalendarItems = calendarSaveResults.filter(Boolean) as {
     id: string;
     title: string;
@@ -609,6 +654,7 @@ const save_day_plan: ToolHandler = async () => {
         : 'medium',
       durationMinutes: normalizeDurationMinutes(item.plannedDurationMinutes) || normalizeDurationMinutes(rawTodoItems[index]?.durationMinutes) || undefined,
     })),
+    rescheduledTodoItems,
   };
 };
 

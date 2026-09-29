@@ -73,6 +73,7 @@ export type ToolMemory = {
       starred: boolean;
       priority: 'low' | 'medium' | 'high';
       durationMinutes?: number;
+      existingTodoId?: string;
     }>;
     timelineItems?: Array<{
       id: string;
@@ -91,6 +92,7 @@ export type ToolMemory = {
       details?: string;
       priority?: 'low' | 'medium' | 'high';
       starred?: boolean;
+      existingTodoId?: string;
     }>;
     saveBlockedReason?: string;
   } | null;

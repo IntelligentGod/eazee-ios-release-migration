@@ -22,6 +22,8 @@ export type DayPlanTimelineItem = {
   details?: string;
   priority?: 'low' | 'medium' | 'high';
   starred?: boolean;
+  /** Set when a planned task is one the user already has; saving reschedules it instead of creating a copy. */
+  existingTodoId?: string;
 };
 
 export type DayPlanCardValue = {
@@ -43,6 +45,7 @@ export type DayPlanCardValue = {
     starred: boolean;
     priority: 'low' | 'medium' | 'high';
     durationMinutes?: number;
+    existingTodoId?: string;
   }>;
   timelineItems?: DayPlanTimelineItem[];
   saveBlockedReason?: string;
@@ -304,6 +307,7 @@ export const buildDayPlanCardValue = (date: string, timelineItems: DayPlanTimeli
       starred: !!item.starred,
       priority: item.priority || 'medium',
       durationMinutes: item.durationMinutes,
+      existingTodoId: item.existingTodoId,
     }));
   const missingEventTime = calendarItems.some((item) => !item.start || !item.end);
 

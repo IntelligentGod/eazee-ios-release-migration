@@ -1,14 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Q } from '@nozbe/watermelondb';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { getAccessTokenStatic } from '@/app/context/TokenContext';
-import { database } from '@/database/database';
-import EventModel from '@/database/models/EventModel';
+import { fetchCalendarEventsInRange } from '@/lib/calendarRange';
 import { configureTodoNotifications } from '@/lib/todoNotifications';
-import { parseCalendarDateValue } from '@/utils/calendarDates';
-import { WAVE_EVENT_DESCRIPTION_SENTINEL } from '@/utils/calendarDetails';
 
 export const EVENT_REMINDER_MINUTE_OPTIONS = [5, 10, 15] as const;
 export type EventReminderMinutes = (typeof EVENT_REMINDER_MINUTE_OPTIONS)[number];
@@ -84,51 +79,6 @@ export async function writeEventReminderSettings(settings: EventReminderSettings
   }
 }
 
-async function fetchLocalEvents(start: Date, end: Date): Promise<ReminderEventInput[]> {
-  const rows = await database.collections
-    .get<EventModel>('events')
-    .query(Q.where('start_date', Q.gte(start.getTime())), Q.where('start_date', Q.lt(end.getTime())))
-    .fetch();
-
-  return rows
-    // Events mirrored from a todo already get that todo's own reminder.
-    .filter((row) => !row.isTodo && !row.sourceTodoId)
-    .map((row) => ({
-      id: row.googleEventId || row.id,
-      title: row.title,
-      startDate: row.startDate,
-      isAllDay: false,
-      location: row.location,
-    }));
-}
-
-async function fetchGoogleEvents(start: Date, end: Date): Promise<ReminderEventInput[]> {
-  const token = await getAccessTokenStatic();
-  if (!token) return [];
-
-  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(
-    start.toISOString()
-  )}&timeMax=${encodeURIComponent(end.toISOString())}&singleEvents=true&orderBy=startTime`;
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-  if (!response.ok) return [];
-
-  const data = await response.json().catch(() => ({}));
-  const items: any[] = Array.isArray(data?.items) ? data.items : [];
-  return items
-    .filter((item) => item?.status !== 'cancelled' && item?.description !== WAVE_EVENT_DESCRIPTION_SENTINEL)
-    .flatMap((item) => {
-      const startDate = parseCalendarDateValue(item.start?.dateTime || item.start?.date);
-      if (!startDate) return [];
-      return [{
-        id: String(item.id),
-        title: String(item.summary || ''),
-        startDate,
-        isAllDay: !!(item.start?.date && !item.start?.dateTime),
-        location: typeof item.location === 'string' ? item.location : undefined,
-      }];
-    });
-}
-
 export async function cancelScheduledEventReminders() {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
@@ -172,14 +122,10 @@ export function syncEventReminders(): Promise<void> {
 
     const now = new Date();
     const end = new Date(now.getTime() + EVENT_REMINDER_LOOKAHEAD_DAYS * 24 * 60 * 60_000);
-    const [localEvents, googleEvents] = await Promise.all([
-      fetchLocalEvents(now, end),
-      fetchGoogleEvents(now, end).catch(() => []),
-    ]);
-    // A local copy of a Google event shares its id, so Google's version wins.
-    const eventsById = new Map([...localEvents, ...googleEvents].map((event) => [event.id, event]));
+    // Events mirrored from a todo are excluded there; that todo has its own reminder.
+    const events = await fetchCalendarEventsInRange(now, end);
 
-    for (const reminder of planEventReminders([...eventsById.values()], minutesBefore, now)) {
+    for (const reminder of planEventReminders(events, minutesBefore, now)) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: reminder.title,

@@ -34,6 +34,8 @@ import type { CompactAiChatHandoff } from '@/lib/useCompactTabAI';
 import { CHAT_SURFACE_RADIUS } from './constants';
 import LowerSwipeGesture from '@/components/navigation/LowerSwipeGesture';
 import { auth } from '@/firebaseConfig';
+import { checkAiFeatureAccess } from '@/lib/subscriptionUsage';
+import { loadWeekPlanContext } from '@/lib/weekPlanContext';
 import { SERVER_URL } from '@/config/backend';
 import { dedupeToolCallsByBatchKey, getToolCallExecutionKey } from '@/lib/toolCallKeys';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1736,6 +1738,9 @@ export default function ChatScreen() {
   const chatActionValue = readRouteParam(chatAction);
   const chatActionKey = readRouteParam(chatActionNonce);
   const handledChatActionRef = useRef('');
+  /** Fix my life week context; stays attached to every request in the chat it started. */
+  const weekPlanContextRef = useRef<{ sessionId: string | null; content: string } | null>(null);
+  const [fixMyLifeRequestKey, setFixMyLifeRequestKey] = useState('');
   const hasPendingCompactHandoff = !!compactHandoffValue && !!compactHandoffKey;
   const floatingTabBarInset = getFloatingTabBarInset(insets.bottom);
   const aiInputBottom = floatingTabBarInset - 6;
@@ -3966,6 +3971,7 @@ export default function ChatScreen() {
     pendingGoalQuotaDateRequestRef.current = null;
     setGoalQuotaDatePickerInput(null);
     resetToolMemory();
+    weekPlanContextRef.current = null;
     try {
       if (previousSessionId && previousMessages.some((message) => isMeaningfulChatMessage(message))) {
         await summarizeSession(previousSessionId, previousMessages);
@@ -4071,6 +4077,12 @@ export default function ChatScreen() {
     if (chatActionValue === 'new') {
       void handleNewChat();
       completeChatGuidanceAction('new');
+      return;
+    }
+
+    if (chatActionValue === 'fix-my-life') {
+      // Started by the effect after sendTextMessage, which this effect runs before.
+      setFixMyLifeRequestKey(chatActionKey);
     }
   }, [chatActionKey, chatActionValue, completeChatGuidanceAction, handleNewChat, router]);
 
@@ -4378,6 +4390,13 @@ export default function ChatScreen() {
             { role: 'user' as const, content: text },
           ];
       const aiPersonalization = await readAiPersonalizationSettings(auth.currentUser?.uid);
+      const weekPlanContext = weekPlanContextRef.current;
+      if (weekPlanContext && weekPlanContext.sessionId === null) {
+        weekPlanContext.sessionId = requestSessionId;
+      }
+      const weekPlanMessages = weekPlanContext && weekPlanContext.sessionId === requestSessionId
+        ? [{ role: 'system' as const, content: weekPlanContext.content }]
+        : [];
       const body = {
         clientId: cid || undefined,
         clientRequestId,
@@ -4393,6 +4412,7 @@ export default function ChatScreen() {
             createdCalendarItems: getCreatedCalendarItems() || [],
             lastDayPlan: getLastDayPlan(),
           }),
+          ...weekPlanMessages,
           ...requestMessages,
         ]
       };
@@ -4614,6 +4634,37 @@ export default function ChatScreen() {
 
     void run();
   }, [compactHandoffKey, compactHandoffValue, handleNewChat, router, sendTextMessage]);
+
+  useEffect(() => {
+    if (!fixMyLifeRequestKey) return;
+    setFixMyLifeRequestKey('');
+
+    const run = async () => {
+      const user = auth.currentUser;
+      const access = user ? await checkAiFeatureAccess(user.uid, 'dayPlanning', user.email) : null;
+      if (!access?.allowed) {
+        Alert.alert('Eazee Pro feature', 'Fix my life plans your whole week. Upgrade to Eazee Pro in Settings to use it.');
+        return;
+      }
+
+      try {
+        setIsBootstrappingCompactHandoff(true);
+        await handleNewChat();
+        const content = await loadWeekPlanContext(user?.uid);
+        weekPlanContextRef.current = { sessionId: null, content };
+        await sendTextMessage('Fix my life: plan my whole week.', {
+          onRequestStarted: () => setIsBootstrappingCompactHandoff(false),
+        });
+      } catch (error) {
+        console.warn('Could not start Fix my life:', error);
+        Alert.alert('Error', 'Could not start planning your week. Please try again.');
+      } finally {
+        setIsBootstrappingCompactHandoff(false);
+      }
+    };
+
+    void run();
+  }, [fixMyLifeRequestKey, handleNewChat, sendTextMessage]);
 
   const handleSend = useCallback(() => {
     const text = (inputValueRef.current || '').trim();

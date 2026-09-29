@@ -21,6 +21,8 @@ import SkillGuideModel from '../../../database/models/SkillGuideModel';
 import TaskGuideModel from '../../../database/models/TaskGuideModel';
 import AIInputBox from '@/components/AIInputBox';
 import HomeBlob, { BLOB_APPEARANCE_PRESETS, type BlobAppearancePresetId } from '@/components/blob/HomeBlob';
+import FixMyLifeButton from '@/components/FixMyLifeButton';
+import { checkAiFeatureAccess } from '@/lib/subscriptionUsage';
 import type { MoodState } from '@/components/blob/BlobFace';
 import LifeGraphSettingsModal from '@/components/blob/LifeGraphSettingsModal';
 import { useLifeGraph } from '@/lib/useLifeGraph';
@@ -2397,6 +2399,34 @@ export default function HomePage() {
     );
   };
 
+  const [isCheckingFixMyLifeAccess, setIsCheckingFixMyLifeAccess] = useState(false);
+  const handleFixMyLife = useCallback(async () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+    if (!user) {
+      router.push({ pathname: '/home/login', params: { source: 'home' } });
+      return;
+    }
+
+    // Checked at tap time, not from a cached tier, so a just-completed upgrade counts.
+    setIsCheckingFixMyLifeAccess(true);
+    const access = await checkAiFeatureAccess(user.uid, 'dayPlanning', user.email).finally(() => {
+      setIsCheckingFixMyLifeAccess(false);
+    });
+    if (!access.allowed) {
+      router.replace({
+        pathname: '/(tabs)/home',
+        params: { settings: 'true', settingsPanel: 'paywall', settingsNonce: String(Date.now()) },
+      });
+      return;
+    }
+
+    router.push({
+      pathname: '/(tabs)/chat',
+      params: { chatAction: 'fix-my-life', chatActionNonce: String(Date.now()) },
+    });
+  }, [user]);
+
   const handleOpenSettings = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
@@ -2750,6 +2780,7 @@ export default function HomePage() {
             <Text className="text-[13px] leading-[18px] font-medium italic text-[#FFFFFF]/70 mb-4" numberOfLines={2}>
               {motivationalQuote}
             </Text>
+            <FixMyLifeButton onPress={() => void handleFixMyLife()} disabled={isCheckingFixMyLifeAccess} />
 
             {homePersonalization.order.map((cardId) => {
               if (cardId === 'suggestions') {
