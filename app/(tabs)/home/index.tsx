@@ -2243,6 +2243,8 @@ export default function HomePage() {
 
   const renderNextStepItem = (item: ScheduleItem) => {
     const isCompleting = completingItemIds.has(item.id);
+    // Scheduled events get a lighter card so they read apart from tasks.
+    const isEvent = item.type === 'event';
     const isSnoozed =
       item.type === 'todo'
         ? snoozedNextStepTodoIds.has(item.sourceId)
@@ -2261,7 +2263,7 @@ export default function HomePage() {
         }}
       >
         <LinearGradient
-          colors={['#9D997C', '#4D4A3B']}
+          colors={isEvent ? ['#D4CFB2', '#8C8268'] : ['#9D997C', '#4D4A3B']}
           locations={[0, 0.85]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
@@ -2306,10 +2308,16 @@ export default function HomePage() {
               opacity: pressed ? 0.72 : 1,
             })}
           >
-            <Text className="flex-1 text-[16px] font-semibold text-[#ffffff]" numberOfLines={1}>
+            <Text
+              className={`flex-1 text-[16px] font-semibold ${isEvent ? 'text-[#3D3A2E]' : 'text-[#ffffff]'}`}
+              numberOfLines={1}
+            >
               {item.label}
             </Text>
-            <Text className="text-[12px] font-semibold text-[#E8E0C7] ml-2" numberOfLines={1}>
+            <Text
+              className={`text-[12px] font-semibold ml-2 ${isEvent ? 'text-[#5A5645]' : 'text-[#E8E0C7]'}`}
+              numberOfLines={1}
+            >
               {formatScheduleLabel(item)}
             </Text>
           </Pressable>
