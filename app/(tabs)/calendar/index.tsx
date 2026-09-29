@@ -5129,7 +5129,7 @@ const CalendarScreen: React.FC = () => {
             onTextInputPress={hideCalendarTutorialCreateCard}
             onMicrophonePress={handleCalendarAiMicrophonePress}
             microphoneSide={isLeftHanded ? 'left' : 'right'}
-            surfaceVariant="chatAsset"
+            surfaceVariant="chat"
             containerStyle={{ backgroundColor: 'transparent' }}
           />
         </Animated.View>

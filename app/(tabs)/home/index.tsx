@@ -3115,7 +3115,7 @@ export default function HomePage() {
           multiline
           minInputHeight={40}
           maxInputHeight={120}
-          surfaceVariant="allinity3d"
+          surfaceVariant="home"
           inputRef={inputRef}
           onChangeText={setInputValue}
           onSubmitEditing={submit}

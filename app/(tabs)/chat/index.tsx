@@ -5337,7 +5337,7 @@ export default function ChatScreen() {
                     </View>
                   </GuidedTarget>
                 )}
-                  surfaceVariant="chatAsset"
+                  surfaceVariant="chat"
                 />
               </GuidedTarget>
             </Animated.View>

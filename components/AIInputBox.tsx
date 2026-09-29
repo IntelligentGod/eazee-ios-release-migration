@@ -3,7 +3,6 @@ import {
     ActivityIndicator,
     Animated,
     Image,
-    ImageSourcePropType,
     Keyboard,
     Text,
     TextInput,
@@ -15,8 +14,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 
-type AIInputSurfaceVariant = 'default' | 'allinity3d' | 'chatAsset' | 'todoAsset';
-type AssetSurfaceVariant = Exclude<AIInputSurfaceVariant, 'default'>;
+type AIInputSurfaceVariant = 'default' | 'home' | 'chat' | 'todo';
+type ThemedSurfaceVariant = Exclude<AIInputSurfaceVariant, 'default'>;
 type MicrophoneSide = 'left' | 'right';
 
 interface AIInputBoxProps {
@@ -75,30 +74,24 @@ interface AIInputBoxProps {
     containerStyle?: ViewStyle;
 }
 
-interface AssetSurfaceConfig {
-    inputSource: ImageSourcePropType;
-    microphoneSource: ImageSourcePropType;
-    sendSource?: ImageSourcePropType;
-    sendArrowSource?: ImageSourcePropType;
-    sendArrowBounds?: {
-        sourceWidth: number;
-        sourceHeight: number;
-        left: number;
-        top: number;
-        width: number;
-        height: number;
-    };
-    sendSourceBounds?: {
-        sourceWidth: number;
-        sourceHeight: number;
-        left: number;
-        top: number;
-        width: number;
-        height: number;
-    };
+type GradientPair = readonly [string, string];
+
+/** A raised pill: a lit-from-above rim around a left-to-right fill. */
+interface BevelColors {
+    /** Top to bottom: the lit top edge, then the shaded bottom edge. */
+    rim: GradientPair;
+    /** Left to right. */
+    fill: GradientPair;
+}
+
+interface SurfaceTheme {
+    field: BevelColors;
+    microphone: BevelColors;
+    logoColor: string;
+    /** Send takes over the microphone button slot instead of sitting inside the field. */
+    sendInMicrophoneSlot: boolean;
     textColor: string;
     placeholderTextColor: string;
-    idleMicrophoneColor: string;
     sendOuterColors: readonly [string, string, string];
     sendInnerColor: string;
     sendIconColor: string;
@@ -106,65 +99,41 @@ interface AssetSurfaceConfig {
     lineHeight: number;
 }
 
-const assetSurfaceConfigs: Record<AssetSurfaceVariant, AssetSurfaceConfig> = {
-    allinity3d: {
-        inputSource: require('../assets/images/home-ai-chat-2.png'),
-        microphoneSource: require('../assets/images/home-ai-mic.png'),
-        sendSource: require('../assets/images/home-ai-send.png'),
-        sendArrowSource: require('../assets/images/home-ai-arrow.png'),
-        sendArrowBounds: {
-            sourceWidth: 1024,
-            sourceHeight: 1536,
-            left: 234,
-            top: 345,
-            width: 548,
-            height: 901,
-        },
-        sendSourceBounds: {
-            sourceWidth: 1024,
-            sourceHeight: 724,
-            left: 373,
-            top: 279,
-            width: 263,
-            height: 164,
-        },
+// Colors sampled from the PNGs these surfaces used to be drawn from.
+const surfaceThemes: Record<ThemedSurfaceVariant, SurfaceTheme> = {
+    home: {
+        field: { rim: ['#F4F1CB', '#5E5D4B'], fill: ['#3D3C35', '#6A685E'] },
+        microphone: { rim: ['#F4F1CB', '#5E5D4B'], fill: ['#6E6C63', '#4A4943'] },
+        logoColor: '#EFEBCF',
+        sendInMicrophoneSlot: true,
         textColor: '#F4EFCF',
         placeholderTextColor: 'rgba(244,239,207,0.64)',
-        idleMicrophoneColor: '#E6E0BD',
         sendOuterColors: ['#6E6A46', '#D0CC95', '#FFF7BD'],
         sendInnerColor: '#3D3A33',
         sendIconColor: '#E6E0BD',
         sendBorderColor: 'rgba(255, 247, 205, 0.48)',
         lineHeight: 19,
     },
-    chatAsset: {
-        inputSource: require('../assets/images/chat-ai-chat.png'),
-        microphoneSource: require('../assets/images/chat-ai-voice.png'),
-        sendSource: require('../assets/images/chat-ai-send.png'),
-        sendArrowSource: require('../assets/images/chat-ai-arrow.png'),
-        sendSourceBounds: {
-            sourceWidth: 1024,
-            sourceHeight: 724,
-            left: 0,
-            top: 10,
-            width: 1013,
-            height: 706,
-        },
+    chat: {
+        field: { rim: ['#9DFFFF', '#1A4F54'], fill: ['#237C80', '#71CACE'] },
+        microphone: { rim: ['#9DFFFF', '#1A4F54'], fill: ['#62B8BB', '#2F7E84'] },
+        logoColor: '#AEF7E4',
+        sendInMicrophoneSlot: true,
         textColor: '#E8FFFC',
         placeholderTextColor: 'rgba(232,255,252,0.6)',
-        idleMicrophoneColor: '#CBFFF3',
         sendOuterColors: ['#1A5960', '#7DF8FD', '#D5FFFF'],
         sendInnerColor: '#215B63',
         sendIconColor: '#E9FFFB',
         sendBorderColor: 'rgba(223, 255, 255, 0.98)',
         lineHeight: 18,
     },
-    todoAsset: {
-        inputSource: require('../assets/images/todo-ai-chat.png'),
-        microphoneSource: require('../assets/images/todo-ai-voice.png'),
+    todo: {
+        field: { rim: ['#8FFFF0', '#1C6358'], fill: ['#2E6D61', '#39B9A1'] },
+        microphone: { rim: ['#8FFFF0', '#1C6358'], fill: ['#3CB4A1', '#2E7D70'] },
+        logoColor: '#C2FFEF',
+        sendInMicrophoneSlot: false,
         textColor: '#E8FFF7',
         placeholderTextColor: 'rgba(232,255,247,0.6)',
-        idleMicrophoneColor: '#D6FFF4',
         sendOuterColors: ['#175C57', '#77F2E4', '#DAFFF7'],
         sendInnerColor: '#1E645C',
         sendIconColor: '#E9FFF8',
@@ -173,12 +142,12 @@ const assetSurfaceConfigs: Record<AssetSurfaceVariant, AssetSurfaceConfig> = {
     },
 };
 
-const assetSurfaceLayout = {
+const themedSurfaceLayout = {
     inputMarginLeft: 12,
     inputMarginRight: 5,
     inputHorizontalInset: 14,
     inputVerticalInset: 4,
-    inputHorizontalOverscan: 2,
+    rimWidth: 3,
     microphoneWidth: 74,
     microphoneHeight: 45,
     microphoneMarginLeft: 5,
@@ -226,37 +195,58 @@ function GlowRing({
     );
 }
 
-function AssetSurface({
-    source,
+/** Drawn at any size without stretching, unlike the bitmaps it replaces. */
+function BevelBackground({ colors, borderRadius }: { colors: BevelColors; borderRadius: number }) {
+    const { rimWidth } = themedSurfaceLayout;
+
+    return (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+            <LinearGradient
+                colors={colors.rim}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius }}
+            />
+            <LinearGradient
+                colors={colors.fill}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={{
+                    position: 'absolute',
+                    top: rimWidth,
+                    left: rimWidth,
+                    right: rimWidth,
+                    bottom: rimWidth,
+                    borderRadius: Math.max(borderRadius - rimWidth, 0),
+                    borderWidth: 1,
+                    borderColor: 'rgba(0, 0, 0, 0.22)',
+                }}
+            />
+        </View>
+    );
+}
+
+function ThemedSurface({
+    colors,
+    borderRadius,
     style,
     contentStyle,
     children,
 }: {
-    source: ImageSourcePropType;
+    colors: BevelColors;
+    borderRadius: number;
     style?: ViewStyle;
     contentStyle?: ViewStyle;
     children: ReactNode;
 }) {
     return (
         <View style={style}>
-            <Image
-                source={source}
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: -assetSurfaceLayout.inputHorizontalOverscan,
-                    right: -assetSurfaceLayout.inputHorizontalOverscan,
-                    bottom: 0,
-                    width: undefined,
-                    height: undefined,
-                }}
-                resizeMode="stretch"
-            />
+            <BevelBackground colors={colors} borderRadius={borderRadius} />
             <View
                 style={{
                     flex: 1,
-                    marginHorizontal: assetSurfaceLayout.inputHorizontalInset,
-                    marginVertical: assetSurfaceLayout.inputVerticalInset,
+                    marginHorizontal: themedSurfaceLayout.inputHorizontalInset,
+                    marginVertical: themedSurfaceLayout.inputVerticalInset,
                 }}
             >
                 <View style={[{ flex: 1 }, contentStyle]}>{children}</View>
@@ -266,7 +256,7 @@ function AssetSurface({
 }
 
 function SendButton({
-    assetConfig,
+    surfaceTheme,
     defaultColors,
     defaultBorderColor,
     defaultBorderWidth,
@@ -275,7 +265,7 @@ function SendButton({
     onPress,
     rightOffset,
 }: {
-    assetConfig?: AssetSurfaceConfig;
+    surfaceTheme?: SurfaceTheme;
     defaultColors: readonly [string, string];
     defaultBorderColor: string;
     defaultBorderWidth: number;
@@ -284,7 +274,7 @@ function SendButton({
     onPress?: () => void;
     rightOffset?: number;
 }) {
-    const size = assetConfig ? 22 : 22;
+    const size = surfaceTheme ? 22 : 22;
     const radius = size / 2;
 
     return (
@@ -293,9 +283,9 @@ function SendButton({
             hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             style={{
                 position: 'absolute',
-                right: rightOffset ?? (assetConfig ? -2 : 6),
+                right: rightOffset ?? (surfaceTheme ? -2 : 6),
                 top: isExpandedMultiline ? undefined : '50%',
-                bottom: isExpandedMultiline ? (bottomOffset ?? (assetConfig ? 6 : 8)) : undefined,
+                bottom: isExpandedMultiline ? (bottomOffset ?? (surfaceTheme ? 6 : 8)) : undefined,
                 marginTop: isExpandedMultiline ? 0 : -radius,
                 width: size,
                 height: size,
@@ -304,17 +294,17 @@ function SendButton({
                 justifyContent: 'center',
                 overflow: 'hidden',
                 zIndex: 30,
-                shadowColor: assetConfig ? '#041317' : '#000000',
+                shadowColor: surfaceTheme ? '#041317' : '#000000',
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: assetConfig ? 0.34 : 0,
-                shadowRadius: assetConfig ? 8 : 0,
-                elevation: assetConfig ? 8 : 0,
+                shadowOpacity: surfaceTheme ? 0.34 : 0,
+                shadowRadius: surfaceTheme ? 8 : 0,
+                elevation: surfaceTheme ? 8 : 0,
             }}
         >
-            {assetConfig ? (
+            {surfaceTheme ? (
                 <>
                     <LinearGradient
-                        colors={assetConfig.sendOuterColors}
+                        colors={surfaceTheme.sendOuterColors}
                         start={{ x: 0.12, y: 0.88 }}
                         end={{ x: 0.88, y: 0.12 }}
                         style={{
@@ -331,12 +321,12 @@ function SendButton({
                             style={{
                                 flex: 1,
                                 borderRadius: radius - 2,
-                                backgroundColor: assetConfig.sendInnerColor,
+                                backgroundColor: surfaceTheme.sendInnerColor,
                                 alignItems: 'center',
                                 justifyContent: 'center',
                             }}
                         >
-                            <MIcon name="arrow-up-bold" size={15} color={assetConfig.sendIconColor} />
+                            <MIcon name="arrow-up-bold" size={15} color={surfaceTheme.sendIconColor} />
                         </View>
                     </LinearGradient>
                     <View
@@ -349,7 +339,7 @@ function SendButton({
                             bottom: 0,
                             borderRadius: radius,
                             borderWidth: 1,
-                            borderColor: assetConfig.sendBorderColor,
+                            borderColor: surfaceTheme.sendBorderColor,
                         }}
                     />
                     <View
@@ -449,7 +439,7 @@ function CancelButton({
 }
 
 function MicrophoneButton({
-    assetConfig,
+    surfaceTheme,
     glowAnim,
     isListening,
     isProcessing,
@@ -466,7 +456,7 @@ function MicrophoneButton({
     micStrokeWidth,
     microphoneSide,
 }: {
-    assetConfig?: AssetSurfaceConfig;
+    surfaceTheme?: SurfaceTheme;
     glowAnim: Animated.Value;
     isListening: boolean;
     isProcessing: boolean;
@@ -493,56 +483,22 @@ function MicrophoneButton({
         }).start();
     }, [sendMode, sendTransition]);
 
-    if (assetConfig) {
-        const microphoneRadius = assetSurfaceLayout.microphoneHeight / 2;
-        const showAssetSend = sendMode && !!assetConfig.sendSource && !!assetConfig.sendArrowSource;
-        const arrowSize = assetSurfaceLayout.microphoneHeight * 0.98 * 0.75;
-        const arrowWidth = assetConfig.sendArrowBounds ? arrowSize * 690 / 1254 : arrowSize;
-        const arrowHeight = assetConfig.sendArrowBounds ? arrowSize * 968 / 1254 : arrowSize;
-        const handlePress = showAssetSend && onSendPress ? onSendPress : onPress;
-        const sendSourceStyle = assetConfig.sendSourceBounds
-            ? {
-                width: assetSurfaceLayout.microphoneWidth * assetConfig.sendSourceBounds.sourceWidth / assetConfig.sendSourceBounds.width,
-                height: assetSurfaceLayout.microphoneHeight * assetConfig.sendSourceBounds.sourceHeight / assetConfig.sendSourceBounds.height,
-                left: -assetSurfaceLayout.microphoneWidth * assetConfig.sendSourceBounds.left / assetConfig.sendSourceBounds.width,
-                top: -assetSurfaceLayout.microphoneHeight * assetConfig.sendSourceBounds.top / assetConfig.sendSourceBounds.height,
-            }
-            : {
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                width: undefined,
-                height: undefined,
-            };
-        const sendArrowSourceStyle = assetConfig.sendArrowBounds
-            ? {
-                width: arrowWidth * assetConfig.sendArrowBounds.sourceWidth / assetConfig.sendArrowBounds.width,
-                height: arrowHeight * assetConfig.sendArrowBounds.sourceHeight / assetConfig.sendArrowBounds.height,
-                left: -arrowWidth * assetConfig.sendArrowBounds.left / assetConfig.sendArrowBounds.width,
-                top: -arrowHeight * assetConfig.sendArrowBounds.top / assetConfig.sendArrowBounds.height,
-            }
-            : {
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                width: undefined,
-                height: undefined,
-            };
+    if (surfaceTheme) {
+        const microphoneRadius = themedSurfaceLayout.microphoneHeight / 2;
+        const handlePress = sendMode && onSendPress ? onSendPress : onPress;
 
         return (
             <TouchableOpacity
                 style={{
-                    width: assetSurfaceLayout.microphoneWidth,
-                    height: assetSurfaceLayout.microphoneHeight,
-                    marginVertical: assetSurfaceLayout.microphoneMarginVertical,
+                    width: themedSurfaceLayout.microphoneWidth,
+                    height: themedSurfaceLayout.microphoneHeight,
+                    marginVertical: themedSurfaceLayout.microphoneMarginVertical,
                     marginLeft: microphoneSide === 'left'
-                        ? assetSurfaceLayout.microphoneMarginRight
-                        : assetSurfaceLayout.microphoneMarginLeft,
+                        ? themedSurfaceLayout.microphoneMarginRight
+                        : themedSurfaceLayout.microphoneMarginLeft,
                     marginRight: microphoneSide === 'left'
-                        ? assetSurfaceLayout.microphoneMarginLeft
-                        : assetSurfaceLayout.microphoneMarginRight,
+                        ? themedSurfaceLayout.microphoneMarginLeft
+                        : themedSurfaceLayout.microphoneMarginRight,
                 }}
                 onPress={handlePress}
                 onLongPress={onLongPress}
@@ -558,19 +514,16 @@ function MicrophoneButton({
                         overflow: 'hidden',
                     }}
                 >
-                    <Animated.Image
-                        source={assetConfig.microphoneSource}
+                    <BevelBackground colors={surfaceTheme.microphone} borderRadius={microphoneRadius} />
+                    <Animated.View
+                        pointerEvents="none"
                         style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            width: undefined,
-                            height: undefined,
+                            flex: 1,
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             opacity: sendTransition.interpolate({
                                 inputRange: [0, 1],
-                                outputRange: [1, 0],
+                                outputRange: [isProcessing ? 0.6 : 1, 0],
                             }),
                             transform: [{
                                 scale: sendTransition.interpolate({
@@ -579,9 +532,18 @@ function MicrophoneButton({
                                 }),
                             }],
                         }}
-                        resizeMode="stretch"
-                    />
-                    {assetConfig.sendSource && assetConfig.sendArrowSource ? (
+                    >
+                        <Image
+                            source={require('../assets/images/ez-logo.png')}
+                            style={{
+                                width: 32,
+                                height: 32,
+                                tintColor: isListening ? microphoneColor : surfaceTheme.logoColor,
+                            }}
+                            resizeMode="contain"
+                        />
+                    </Animated.View>
+                    {surfaceTheme.sendInMicrophoneSlot ? (
                         <Animated.View
                             pointerEvents="none"
                             style={{
@@ -590,6 +552,8 @@ function MicrophoneButton({
                                 left: 0,
                                 right: 0,
                                 bottom: 0,
+                                alignItems: 'center',
+                                justifyContent: 'center',
                                 opacity: sendTransition,
                                 transform: [{
                                     scale: sendTransition.interpolate({
@@ -599,33 +563,7 @@ function MicrophoneButton({
                                 }],
                             }}
                         >
-                            <Image
-                                source={assetConfig.sendSource}
-                                style={{
-                                    position: 'absolute',
-                                    ...sendSourceStyle,
-                                }}
-                                resizeMode="stretch"
-                            />
-                            <View
-                                style={{
-                                    position: 'absolute',
-                                    width: arrowWidth,
-                                    height: arrowHeight,
-                                    left: (assetSurfaceLayout.microphoneWidth - arrowWidth) / 2,
-                                    top: (assetSurfaceLayout.microphoneHeight - arrowHeight) / 2,
-                                    overflow: 'hidden',
-                                }}
-                            >
-                                <Image
-                                    source={assetConfig.sendArrowSource}
-                                    style={{
-                                        position: 'absolute',
-                                        ...sendArrowSourceStyle,
-                                    }}
-                                    resizeMode="stretch"
-                                />
-                            </View>
+                            <MIcon name="arrow-up-bold" size={26} color={surfaceTheme.logoColor} />
                         </Animated.View>
                     ) : null}
                 </View>
@@ -756,22 +694,22 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
     }
     const reportedHeightRef = useRef(0);
     const contentHeightRef = useRef(minInputHeight);
-    const assetConfig = surfaceVariant === 'default' ? undefined : assetSurfaceConfigs[surfaceVariant];
-    const usesAssetSurface = !!assetConfig;
-    const assetInputHeight =
-        usesAssetSurface
-            ? Math.max(minInputHeight - (surfaceVariant === 'allinity3d' ? 2 : 3), 0)
+    const surfaceTheme = surfaceVariant === 'default' ? undefined : surfaceThemes[surfaceVariant];
+    const usesThemedSurface = !!surfaceTheme;
+    const themedInputHeight =
+        usesThemedSurface
+            ? Math.max(minInputHeight - (surfaceVariant === 'home' ? 2 : 3), 0)
             : minInputHeight;
-    const fieldHeight = usesAssetSurface
-        ? assetInputHeight
+    const fieldHeight = usesThemedSurface
+        ? themedInputHeight
         : multiline
           ? Math.min(Math.max(inputHeight, minInputHeight), maxInputHeight)
           : minInputHeight;
     const innerInputHeight = multiline ? fieldHeight : minInputHeight;
-    const outerInputHeight = usesAssetSurface ? innerInputHeight : innerInputHeight + 4;
+    const outerInputHeight = usesThemedSurface ? innerInputHeight : innerInputHeight + 4;
     const isExpandedMultiline = multiline && fieldHeight > minInputHeight;
-    const fieldBorderRadius = multiline ? (usesAssetSurface ? 22 : 18) : 9999;
-    const inputPaddingLeft = usesAssetSurface ? 2 : 10;
+    const fieldBorderRadius = multiline ? (usesThemedSurface ? 22 : 18) : 9999;
+    const inputPaddingLeft = usesThemedSurface ? 2 : 10;
     const hasVoicePreviewContent = !!voicePreviewContent;
     const showsSendButton =
         !isProcessing &&
@@ -780,8 +718,8 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             (localTextInput.trim().length > 0 && (showSendButton ?? editable)) ||
             (hasVoicePreviewContent && showSendButton === true)
         );
-    const showsAssetSendButton = showsSendButton && !!assetConfig?.sendSource && !!assetConfig.sendArrowSource;
-    const showsInlineSendButton = showsSendButton && !showsAssetSendButton;
+    const showsSendInMicrophoneSlot = showsSendButton && !!surfaceTheme?.sendInMicrophoneSlot;
+    const showsInlineSendButton = showsSendButton && !showsSendInMicrophoneSlot;
     const isStopMode = !!onStopPress && (isProcessing || isResponding);
     const showsCancelButton = isStopMode || (
         !isProcessing &&
@@ -792,13 +730,13 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
     );
     const cancelButtonSpace = showsCancelButton ? 28 : 0;
     const inputPaddingRight =
-        (showsInlineSendButton ? (usesAssetSurface ? 18 : 44) : (usesAssetSurface ? 2 : 10)) +
-        (usesAssetSurface ? 0 : cancelButtonSpace);
-    const inputPaddingVertical = multiline ? (usesAssetSurface ? 2 : 9) : 0;
-    const inputTextColor = assetConfig?.textColor ?? '#FFFFFF';
-    const placeholderTextColor = assetConfig?.placeholderTextColor ?? '#FFFFFF';
-    const lineHeight = assetConfig?.lineHeight ?? 18;
-    const scrollsInternally = multiline && (usesAssetSurface || fieldHeight >= maxInputHeight);
+        (showsInlineSendButton ? (usesThemedSurface ? 18 : 44) : (usesThemedSurface ? 2 : 10)) +
+        (usesThemedSurface ? 0 : cancelButtonSpace);
+    const inputPaddingVertical = multiline ? (usesThemedSurface ? 2 : 9) : 0;
+    const inputTextColor = surfaceTheme?.textColor ?? '#FFFFFF';
+    const placeholderTextColor = surfaceTheme?.placeholderTextColor ?? '#FFFFFF';
+    const lineHeight = surfaceTheme?.lineHeight ?? 18;
+    const scrollsInternally = multiline && (usesThemedSurface || fieldHeight >= maxInputHeight);
     const showsProcessingState = isProcessing;
     const defaultSendButtonColors = [inputBgLeftColor ?? inputRingLeftColor, inputBgColor] as const;
     const defaultSendBorderColor =
@@ -806,12 +744,12 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
         inputStrokeLeftColor ??
         (inputStrokeColor !== '#000000' ? inputStrokeColor : inputRingLeftColor);
     const defaultSendBorderWidth = defaultSendBorderColor === 'transparent' ? 0 : 1;
-    const assetInputMarginLeft = microphoneSide === 'left'
-        ? assetSurfaceLayout.inputMarginRight
-        : assetSurfaceLayout.inputMarginLeft;
-    const assetInputMarginRight = microphoneSide === 'left'
-        ? assetSurfaceLayout.inputMarginLeft
-        : assetSurfaceLayout.inputMarginRight;
+    const themedInputMarginLeft = microphoneSide === 'left'
+        ? themedSurfaceLayout.inputMarginRight
+        : themedSurfaceLayout.inputMarginLeft;
+    const themedInputMarginRight = microphoneSide === 'left'
+        ? themedSurfaceLayout.inputMarginLeft
+        : themedSurfaceLayout.inputMarginRight;
 
     useEffect(() => {
         setLocalTextInput(textInput);
@@ -844,9 +782,9 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
 
     const sendButton = showsInlineSendButton ? (
         <SendButton
-            assetConfig={assetConfig}
+            surfaceTheme={surfaceTheme}
             defaultColors={defaultSendButtonColors}
-            defaultBorderColor={assetConfig?.sendBorderColor ?? defaultSendBorderColor}
+            defaultBorderColor={surfaceTheme?.sendBorderColor ?? defaultSendBorderColor}
             defaultBorderWidth={defaultSendBorderWidth}
             isExpandedMultiline={isExpandedMultiline}
             onPress={onSendPress}
@@ -857,8 +795,8 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
         <CancelButton
             isStopMode={isStopMode}
             isExpandedMultiline={isExpandedMultiline}
-            bottomOffset={usesAssetSurface ? 10 : 8}
-            rightOffset={showsInlineSendButton ? 34 : (usesAssetSurface ? 10 : 6)}
+            bottomOffset={usesThemedSurface ? 10 : 8}
+            rightOffset={showsInlineSendButton ? 34 : (usesThemedSurface ? 10 : 6)}
             onPress={handleCancelPress}
         />
     ) : null;
@@ -890,7 +828,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             <ActivityIndicator size="small" color="#FFFFFF" />
             <Text
                 style={{
-                    fontSize: usesAssetSurface ? 13 : 12,
+                    fontSize: usesThemedSurface ? 13 : 12,
                     lineHeight,
                     color: inputTextColor,
                 }}
@@ -903,7 +841,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             ref={inputRef}
             style={{
                 flex: 1,
-                fontSize: usesAssetSurface ? 13 : 12,
+                fontSize: usesThemedSurface ? 13 : 12,
                 lineHeight,
                 color: inputTextColor,
                 paddingLeft: inputPaddingLeft,
@@ -927,7 +865,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             }}
             onSubmitEditing={onSubmitEditing}
             onContentSizeChange={(event) => {
-                if (!multiline || usesAssetSurface) return;
+                if (!multiline || usesThemedSurface) return;
                 const nextHeight = Math.min(Math.max(event.nativeEvent.contentSize.height, minInputHeight), maxInputHeight);
                 if (contentHeightRef.current === nextHeight) return;
                 contentHeightRef.current = nextHeight;
@@ -1008,18 +946,19 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
         </LinearGradient>
     );
 
-    const assetInput = assetConfig ? (
+    const themedInput = surfaceTheme ? (
         <View
             style={{
                 height: innerInputHeight,
-                marginRight: assetInputMarginRight,
-                marginLeft: assetInputMarginLeft,
+                marginRight: themedInputMarginRight,
+                marginLeft: themedInputMarginLeft,
                 position: 'relative',
                 overflow: 'visible',
             }}
         >
-            <AssetSurface
-                source={assetConfig.inputSource}
+            <ThemedSurface
+                colors={surfaceTheme.field}
+                borderRadius={innerInputHeight / 2}
                 style={{ flex: 1 }}
                 contentStyle={{
                     justifyContent: multiline ? 'flex-start' : 'center',
@@ -1027,13 +966,13 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
                 }}
             >
                 {inputContent}
-            </AssetSurface>
+            </ThemedSurface>
             {cancelButton}
             {showsInlineSendButton ? (
                 <SendButton
-                    assetConfig={assetConfig}
+                    surfaceTheme={surfaceTheme}
                     defaultColors={defaultSendButtonColors}
-                    defaultBorderColor={assetConfig.sendBorderColor}
+                    defaultBorderColor={surfaceTheme.sendBorderColor}
                     defaultBorderWidth={defaultSendBorderWidth}
                     isExpandedMultiline={isExpandedMultiline}
                     bottomOffset={10}
@@ -1046,13 +985,13 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
 
     const inputNode = (
         <View style={{ flex: 1, justifyContent: 'center', height: outerInputHeight }}>
-            {assetConfig ? assetInput : defaultInput}
+            {surfaceTheme ? themedInput : defaultInput}
         </View>
     );
     const wrappedInputNode = inputWrapper ? inputWrapper(inputNode) : inputNode;
     const microphoneNode = (
         <MicrophoneButton
-            assetConfig={assetConfig}
+            surfaceTheme={surfaceTheme}
             glowAnim={glowAnim}
             isListening={isListening}
             isProcessing={isProcessing}
@@ -1062,7 +1001,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             onPressOut={onMicrophonePressOut}
             delayLongPress={microphoneDelayLongPress}
             onSendPress={onSendPress}
-            sendMode={showsAssetSendButton}
+            sendMode={showsSendInMicrophoneSlot}
             micBgLeftColor={micBgLeftColor}
             micBgColor={micBgColor}
             micStrokeColor={micStrokeColor}

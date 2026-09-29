@@ -13796,7 +13796,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               onTextInputPress={() => {}}
               onMicrophonePress={handleTodoAiMicrophonePress}
               microphoneSide={isLeftHanded ? 'left' : 'right'}
-              surfaceVariant="todoAsset"
+              surfaceVariant="todo"
               containerStyle={{ backgroundColor: 'transparent' }}
             />
           </Animated.View>
@@ -14334,7 +14334,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                         </View>
                       </GuidedTarget>
                     )}
-                    surfaceVariant="todoAsset"
+                    surfaceVariant="todo"
                     containerStyle={{ backgroundColor: 'transparent' }}
                   />
                 </Animated.View>
