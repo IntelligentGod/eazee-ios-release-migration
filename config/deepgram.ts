@@ -4,6 +4,7 @@ import { auth } from '../firebaseConfig';
 import { getFirebaseAppCheckHeaders } from '../lib/firebaseAppCheck';
 import { checkAiFeatureAccess } from '../lib/subscriptionUsage';
 import { createSubscriptionRequiredError } from '../lib/subscriptionAccess';
+import { getDeviceTimeZone } from '../lib/aiRequest';
 
 export interface DeepgramConfig {
   getAccessToken: (signal?: AbortSignal) => Promise<string>;
@@ -32,6 +33,7 @@ export async function fetchDeepgramAccessToken(signal?: AbortSignal): Promise<st
     headers: {
       Authorization: `Bearer ${firebaseIdToken}`,
       'Content-Type': 'application/json',
+      'X-Eazee-Timezone': getDeviceTimeZone(),
       ...await getFirebaseAppCheckHeaders(),
     },
     body: JSON.stringify({}),
@@ -49,6 +51,30 @@ export async function fetchDeepgramAccessToken(signal?: AbortSignal): Promise<st
   }
 
   return accessToken;
+}
+
+/**
+ * Deepgram streams straight from the phone, so the server only learns how much
+ * voice a free user spent from this report. Best effort: a failed report is dropped.
+ */
+export async function reportVoiceUsageToServer(seconds: number) {
+  const user = auth.currentUser;
+  if (!user?.uid || !(seconds > 0)) return;
+  try {
+    const firebaseIdToken = await user.getIdToken();
+    await fetch(`${SERVER_URL}/usage/voice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${firebaseIdToken}`,
+        'Content-Type': 'application/json',
+        'X-Eazee-Timezone': getDeviceTimeZone(),
+        ...await getFirebaseAppCheckHeaders(),
+      },
+      body: JSON.stringify({ seconds: Math.min(600, Math.round(seconds)) }),
+    });
+  } catch (error) {
+    console.warn('Could not report voice usage:', error);
+  }
 }
 
 export function getDeepgramConfig(): DeepgramConfig {

@@ -37,6 +37,8 @@ describe('AI request headers', () => {
     await expect(getAiRequestHeaders()).resolves.toEqual({
       'Content-Type': 'application/json',
       Authorization: 'Bearer token-1',
+      'X-Eazee-Ai-Feature': 'aiChat',
+      'X-Eazee-Timezone': expect.any(String),
     });
 
     expect(mockRequireAiDataSharingConsent).toHaveBeenCalledWith('user-1');

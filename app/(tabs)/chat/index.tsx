@@ -3325,7 +3325,7 @@ export default function ChatScreen() {
       if (!recent.length) return;
       const resp = await fetch(`${SERVER_URL}/ai/route`, {
         method: 'POST',
-        headers: await getAiRequestHeaders(),
+        headers: await getAiRequestHeaders('aiChatSummary'),
         body: JSON.stringify({
           clientId: clientIdRef.current || undefined,
           messages: [

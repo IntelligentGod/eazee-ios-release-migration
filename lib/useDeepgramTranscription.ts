@@ -6,6 +6,7 @@ import LiveAudioStream from 'react-native-live-audio-stream';
 import { PRIVACY_POLICY_URL } from './legalLinks';
 import { auth } from '@/firebaseConfig';
 import { recordVoiceUsage } from './subscriptionUsage';
+import { reportVoiceUsageToServer } from '@/config/deepgram';
 import {
   createDeepgramStreamingSession,
   DeepgramSession,
@@ -436,7 +437,9 @@ export function useDeepgramTranscription(
       listeningStartedAtRef.current = null;
       const voiceUid = auth.currentUser?.uid;
       if (startedAt && voiceUid) {
-        void recordVoiceUsage(voiceUid, (Date.now() - startedAt) / 1000);
+        const voiceSeconds = (Date.now() - startedAt) / 1000;
+        void recordVoiceUsage(voiceUid, voiceSeconds);
+        void reportVoiceUsageToServer(voiceSeconds);
       }
 
       if (deliverFinalTranscript) {

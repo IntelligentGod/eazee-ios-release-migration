@@ -49,6 +49,7 @@ export type AiFeatureKey =
   | 'aiChat'
   | 'aiChatToolResult'
   | 'aiChatTitle'
+  | 'aiChatSummary'
   | 'voiceInput'
   | 'homeSuggestions'
   | 'dayPlanning'
@@ -67,11 +68,11 @@ export const PRO_ONLY_FEATURES: readonly AiFeatureKey[] = [
 
 /**
  * Work that finishes a turn the user already spent an action on: the agent loop
- * posting a tool result back, and the automatic session title. Never charged
- * and never refused - blocking these would strand an in-flight conversation or
- * quietly spend the allowance on something the user did not ask for.
+ * posting a tool result back, and the automatic session title and summary. Never
+ * charged and never refused - blocking these would strand an in-flight conversation
+ * or quietly spend the allowance on something the user did not ask for.
  */
-export const UNCHARGED_CHAT_FEATURES: readonly AiFeatureKey[] = ['aiChatToolResult', 'aiChatTitle'];
+export const UNCHARGED_CHAT_FEATURES: readonly AiFeatureKey[] = ['aiChatToolResult', 'aiChatTitle', 'aiChatSummary'];
 
 export const isProOnlyFeature = (feature: AiFeatureKey) => PRO_ONLY_FEATURES.includes(feature);
 

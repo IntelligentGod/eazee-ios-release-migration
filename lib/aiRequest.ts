@@ -43,6 +43,11 @@ export const getAiRequestHeaders = async (feature: AiFeatureKey = 'aiChat') => {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${firebaseIdToken}`,
+    // The server meters free users per local day and lets titles and summaries through uncharged.
+    'X-Eazee-Ai-Feature': feature,
+    'X-Eazee-Timezone': getDeviceTimeZone(),
     ...await getFirebaseAppCheckHeaders(),
   };
 };
+
+export const getDeviceTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';

@@ -7,6 +7,11 @@ jest.mock('@react-native-async-storage/async-storage', () => {
     removeItem: jest.fn(async (key: string) => { store.delete(key); }),
   };
 });
+jest.mock('@/config/backend', () => ({ SERVER_URL: 'https://api.test' }));
+jest.mock('@/lib/firebaseAppCheck', () => ({ getFirebaseAppCheckHeaders: jest.fn(async () => ({})) }));
+jest.mock('@/firebaseConfig', () => ({
+  auth: { currentUser: { uid: 'user-1', getIdToken: jest.fn(async () => 'id-token') } },
+}));
 
 type Listener = (value: any) => void;
 const mockListeners: { updated: Listener[]; error: Listener[] } = { updated: [], error: [] };
@@ -37,25 +42,56 @@ import { purchaseSubscription, restorePurchases, syncStoreSubscriptionStatus } f
 
 const mockIap = jest.requireMock('expo-iap') as Record<string, jest.Mock>;
 const YEARLY_SKU = 'com.eazee.subscription.pro.yearly';
+const ACCOUNT_TOKEN = '11111111-2222-4333-8444-555555555555';
 const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+type ServerReply = { status: number; body: unknown };
+let verifyReply: ServerReply | Error;
+const fetchMock = jest.fn(async (url: string) => {
+  if (url.endsWith('/subscriptions/apple/account-token')) {
+    return { ok: true, status: 200, json: async () => ({ appAccountToken: ACCOUNT_TOKEN }) };
+  }
+  if (verifyReply instanceof Error) throw verifyReply;
+  const { status, body } = verifyReply;
+  return { ok: status >= 200 && status < 300, status, json: async () => body };
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockListeners.updated = [];
   mockListeners.error = [];
+  verifyReply = { status: 200, body: { isPro: true, planId: 'yearly', expiresAt: Date.now() + 1000 } };
+  (global as any).fetch = fetchMock;
 });
 
 describe('purchaseSubscription', () => {
-  it('buys the plan through the App Store and finishes the transaction', async () => {
+  it('stamps the purchase with this account, verifies it on the server, then finishes it', async () => {
     const result = purchaseSubscription('yearly');
     await flush();
 
-    expect(mockIap.requestPurchase).toHaveBeenCalledWith({ request: { apple: { sku: YEARLY_SKU } }, type: 'subs' });
-    mockListeners.updated.forEach((listener) => listener({ productId: YEARLY_SKU }));
+    expect(mockIap.requestPurchase).toHaveBeenCalledWith({
+      request: { apple: { sku: YEARLY_SKU, appAccountToken: ACCOUNT_TOKEN } },
+      type: 'subs',
+    });
+    mockListeners.updated.forEach((listener) => listener({ id: 't-1', productId: YEARLY_SKU, purchaseToken: 'jws' }));
 
     await expect(result).resolves.toEqual({ status: 'success', planId: 'yearly' });
-    expect(mockIap.finishTransaction).toHaveBeenCalledWith({ purchase: { productId: YEARLY_SKU }, isConsumable: false });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.test/subscriptions/apple/verify',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ signedTransaction: 'jws' }) })
+    );
+    expect(mockIap.finishTransaction).toHaveBeenCalledTimes(1);
     expect(mockListeners.updated).toHaveLength(0);
+  });
+
+  it('leaves the transaction unfinished when the server cannot be reached, so it is retried', async () => {
+    verifyReply = new Error('offline');
+    const result = purchaseSubscription('yearly');
+    await flush();
+    mockListeners.updated.forEach((listener) => listener({ id: 't-1', productId: YEARLY_SKU, purchaseToken: 'jws' }));
+
+    await expect(result).resolves.toMatchObject({ status: 'unavailable' });
+    expect(mockIap.finishTransaction).not.toHaveBeenCalled();
   });
 
   it('reports a cancel without an error message', async () => {
@@ -78,21 +114,26 @@ describe('purchaseSubscription', () => {
 });
 
 describe('restorePurchases and status sync', () => {
-  it('restores an active subscription', async () => {
-    mockIap.getActiveSubscriptions.mockResolvedValueOnce([{ productId: YEARLY_SKU, isActive: true }]);
+  const activeSubscription = { productId: YEARLY_SKU, isActive: true, purchaseToken: 'jws' };
+
+  it('restores an active subscription the server confirms', async () => {
+    mockIap.getActiveSubscriptions.mockResolvedValueOnce([activeSubscription]);
 
     await expect(restorePurchases()).resolves.toEqual({ status: 'success', planId: 'yearly' });
   });
 
-  it('says so when this Apple ID has no subscription', async () => {
+  it('treats a subscription bought by another Eazee account as free here', async () => {
+    mockIap.getActiveSubscriptions.mockResolvedValueOnce([activeSubscription]);
+    verifyReply = { status: 403, body: { error: 'Transaction does not belong to this account' } };
+
     await expect(restorePurchases()).resolves.toEqual({
       status: 'unavailable',
-      message: 'No active Eazee Pro subscription was found for this Apple ID.',
+      message: 'No active Eazee Pro subscription was found for this Eazee account and Apple ID.',
     });
   });
 
   it('turns Pro off once the App Store no longer reports the subscription', async () => {
-    mockIap.getActiveSubscriptions.mockResolvedValueOnce([{ productId: YEARLY_SKU, isActive: true }]);
+    mockIap.getActiveSubscriptions.mockResolvedValueOnce([activeSubscription]);
     await syncStoreSubscriptionStatus('user-1');
     expect(await readCachedSubscriptionStatus('user-1')).toMatchObject({ isPro: true, planId: 'yearly' });
 
@@ -100,10 +141,11 @@ describe('restorePurchases and status sync', () => {
     expect(await readCachedSubscriptionStatus('user-1')).toMatchObject({ isPro: false, planId: null });
   });
 
-  it('keeps the cached status when the App Store cannot be reached', async () => {
-    mockIap.getActiveSubscriptions.mockResolvedValueOnce([{ productId: YEARLY_SKU, isActive: true }]);
+  it('keeps the cached status when the server cannot be reached', async () => {
+    mockIap.getActiveSubscriptions.mockResolvedValueOnce([activeSubscription]);
     await syncStoreSubscriptionStatus('user-2');
-    mockIap.getActiveSubscriptions.mockRejectedValueOnce(new Error('offline'));
+    mockIap.getActiveSubscriptions.mockResolvedValueOnce([activeSubscription]);
+    verifyReply = new Error('offline');
 
     await syncStoreSubscriptionStatus('user-2');
     expect(await readCachedSubscriptionStatus('user-2')).toMatchObject({ isPro: true, planId: 'yearly' });
