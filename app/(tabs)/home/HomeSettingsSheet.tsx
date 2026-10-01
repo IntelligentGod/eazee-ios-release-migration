@@ -26,6 +26,8 @@ import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import LowerSwipeGesture from '@/components/navigation/LowerSwipeGesture';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import PaywallPanel from './PaywallPanel';
+import { useRoleSession } from '@/app/context/RoleSessionContext';
+import { isStaffRole } from '@/lib/userRole';
 import { useSubscriptionStatus } from '@/lib/useSubscriptionStatus';
 import {
   getHomeAccountGuidanceTargetId,
@@ -733,6 +735,15 @@ export default function HomeSettingsSheet({
   }, [toggleLeftHanded]);
 
   const { tier: subscriptionTier } = useSubscriptionStatus(userId);
+  const { role } = useRoleSession();
+
+  // Admins and the super admin can return to the admin panel from the user app without signing out.
+  const handleOpenAdminPanel = useCallback(() => {
+    handleClose();
+    requestAnimationFrame(() => {
+      router.push('/admin');
+    });
+  }, [handleClose]);
 
   const handleOpenPaywall = useCallback(() => {
     setActivePanel('paywall');
@@ -873,6 +884,15 @@ export default function HomeSettingsSheet({
       />
 
       <View style={styles.list}>
+        {isStaffRole(role) && (
+          <SettingsRow
+            icon={<MaterialCommunityIcons name="shield-crown-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+            label="Admin panel"
+            accessibilityRole="button"
+            onPress={handleOpenAdminPanel}
+            right={<MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.78)" />}
+          />
+        )}
         <SettingsRow
           icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🫆</Text>}
           label="Manage Account"

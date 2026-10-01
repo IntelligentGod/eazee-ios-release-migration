@@ -21,7 +21,7 @@ export default function PurchaseRow({ purchase, subtitle }: { purchase: Purchase
   const plan = purchase.planId === 'yearly' ? 'Eazee Pro Yearly' : purchase.planId === 'monthly' ? 'Eazee Pro Monthly' : purchase.productId;
 
   return (
-    <View className="border-b border-gray-200 bg-white px-4 py-3">
+    <View className="mx-3 mt-2 rounded-2xl bg-white px-4 py-3">
       <View className="flex-row items-center justify-between">
         <Text className="flex-1 text-base font-semibold text-gray-900" numberOfLines={1}>{plan}</Text>
         <Text className="ml-3 text-base font-semibold text-gray-900">
@@ -29,7 +29,7 @@ export default function PurchaseRow({ purchase, subtitle }: { purchase: Purchase
         </Text>
       </View>
       {!!subtitle && <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>{subtitle}</Text>}
-      <View className="mt-1.5 flex-row flex-wrap items-center gap-2">
+      <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 8 }}>
         <Text className={`overflow-hidden rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASSES[purchase.status]}`}>
           {PURCHASE_STATUS_LABELS[purchase.status]}
         </Text>

@@ -139,7 +139,7 @@ export const ADMIN_ENVIRONMENT_OPTIONS: { value: AdminEnvironment; label: string
 
 export const adminApi = {
   me: () => adminRequest<{ uid: string; email: string | null; role: UserRole }>('/me'),
-  users: (params: { search?: string; role?: UserRole; cursor?: string | null }) =>
+  users: (params: { search?: string; role?: 'admin' | 'customer'; cursor?: string | null }) =>
     adminRequest<{ users: AdminUser[]; nextCursor: string | null }>(`/users${toQuery(params)}`),
   user: (uid: string) => adminRequest<AdminUserDetail>(`/users/${encodeURIComponent(uid)}`),
   purchases: (params: {

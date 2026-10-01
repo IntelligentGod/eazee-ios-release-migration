@@ -20,7 +20,7 @@ export function FilterChips<T extends string>({
   const choices: { value: T | null; label: string }[] = allowAll ? [{ value: null, label: 'All' }, ...options] : options;
   return (
     <View className="mb-2">
-      <Text className="mb-1 px-4 text-xs font-semibold uppercase text-gray-500">{label}</Text>
+      <Text className="mb-1 px-4 text-xs font-semibold uppercase text-[#0F5A4D]">{label}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
         {choices.map((choice) => {
           const selected = choice.value === value;
@@ -60,7 +60,7 @@ export function BarChart({ data, emptyLabel }: { data: BarDatum[]; emptyLabel: s
     return <Text className="p-4 text-center text-sm text-gray-500">{emptyLabel}</Text>;
   }
   return (
-    <View className="gap-1.5 p-4">
+    <View className="p-4" style={{ gap: 6 }}>
       {data.map((datum) => (
         <View key={datum.label} className="flex-row items-center">
           <Text className="w-20 text-xs text-gray-600" numberOfLines={1}>{datum.label}</Text>
@@ -75,5 +75,5 @@ export function BarChart({ data, emptyLabel }: { data: BarDatum[]; emptyLabel: s
 }
 
 export function SectionTitle({ children }: { children: string }) {
-  return <Text className="px-4 pb-1 pt-4 text-sm font-bold uppercase text-gray-500">{children}</Text>;
+  return <Text className="px-4 pb-1 pt-4 text-sm font-bold uppercase text-[#0F5A4D]">{children}</Text>;
 }

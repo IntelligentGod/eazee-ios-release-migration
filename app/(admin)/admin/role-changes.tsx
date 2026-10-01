@@ -10,9 +10,9 @@ import { isSuperAdminRole } from '@/lib/userRole';
 
 function RoleChangeRow({ change }: { change: RoleChange }) {
   return (
-    <View className="border-b border-gray-200 bg-white px-4 py-3">
+    <View className="mx-3 mt-2 rounded-2xl bg-white px-4 py-3">
       <Text className="text-base font-semibold text-gray-900" numberOfLines={1}>{change.targetEmail || change.targetUid}</Text>
-      <View className="mt-1 flex-row items-center gap-2">
+      <View className="mt-1 flex-row items-center" style={{ gap: 8 }}>
         <RoleBadge role={change.from} />
         <Text className="text-xs text-gray-500">to</Text>
         <RoleBadge role={change.to} />

@@ -46,7 +46,7 @@ export default function AdminPurchasesScreen() {
 
   return (
     <SimpleScreen title="Purchases">
-      <View className="border-b border-gray-200 bg-white pt-3">
+      <View className="pt-3" style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }}>
         <FilterChips label="Product" options={PRODUCT_OPTIONS} value={productId} onChange={setProductId} />
         <FilterChips label="Status" options={STATUS_OPTIONS} value={status} onChange={setStatus} />
         <FilterChips label="Environment" options={ADMIN_ENVIRONMENT_OPTIONS} value={environment} onChange={setEnvironment} />

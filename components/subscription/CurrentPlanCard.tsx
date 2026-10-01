@@ -94,7 +94,7 @@ export default function CurrentPlanCard({
         />
       )}
 
-      <View className="mt-4 flex-row justify-center gap-6">
+      <View className="mt-4 flex-row justify-center" style={{ gap: 24 }}>
         {!isSandboxAccount && (
           <TouchableOpacity accessibilityRole="button" onPress={onManage} disabled={isProcessing} className="py-1.5">
             <Text className="text-sm font-semibold text-[#FFD6D6]">Manage or cancel</Text>

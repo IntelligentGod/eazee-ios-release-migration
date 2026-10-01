@@ -9,7 +9,8 @@ import { formatSubscriptionDate } from '@/lib/subscriptionStatusText';
 import { usePagedServerData } from '@/lib/usePagedServerData';
 import { ROLE_LABELS, type UserRole } from '@/lib/userRole';
 
-const ROLE_OPTIONS: ChipOption<UserRole>[] = (['superAdmin', 'admin', 'customer'] as const)
+/** The Super Admin is not listed in Users, so it is not a filter either. */
+const ROLE_OPTIONS: ChipOption<'admin' | 'customer'>[] = (['admin', 'customer'] as const)
   .map((role) => ({ value: role, label: ROLE_LABELS[role] }));
 
 const STATE_LABELS: Record<AdminUser['subscription']['state'], string> = {
@@ -28,7 +29,7 @@ function UserRow({ user }: { user: AdminUser }) {
     <TouchableOpacity
       accessibilityRole="button"
       onPress={() => router.push({ pathname: '/admin/users/[uid]', params: { uid: user.uid } })}
-      className="border-b border-gray-200 bg-white px-4 py-3"
+      className="mx-3 mt-2 rounded-2xl bg-white px-4 py-3"
     >
       <View className="flex-row items-center justify-between">
         <Text className="flex-1 text-base font-semibold text-gray-900" numberOfLines={1}>
@@ -55,7 +56,7 @@ function UserRow({ user }: { user: AdminUser }) {
 export default function AdminUsersScreen() {
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [role, setRole] = useState<'admin' | 'customer' | null>(null);
   const users = usePagedServerData<AdminUser>(
     async (cursor) => {
       const page = await adminApi.users({ search: submittedSearch || undefined, role: role ?? undefined, cursor });
@@ -66,19 +67,20 @@ export default function AdminUsersScreen() {
 
   return (
     <SimpleScreen title="Users">
-      <View className="border-b border-gray-200 bg-white p-3">
+      <View className="p-3" style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }}>
         <TextInput
           value={search}
           onChangeText={setSearch}
           onSubmitEditing={() => setSubmittedSearch(search.trim())}
           placeholder="Search by email or uid"
+          placeholderTextColor="#6B7280"
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          className="rounded-xl bg-gray-100 px-3 py-2 text-base text-gray-900"
+          className="rounded-xl bg-white px-3 py-2 text-base text-gray-900"
         />
       </View>
-      <View className="border-b border-gray-200 bg-white pt-2">
+      <View className="pt-2" style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }}>
         <FilterChips label="Role" options={ROLE_OPTIONS} value={role} onChange={setRole} />
       </View>
       {users.error && !users.items.length ? (

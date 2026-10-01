@@ -45,7 +45,7 @@ function IncomeSummary({ report }: { report: IncomeReport }) {
         <Text className="text-xs text-amber-900">Estimated. {report.note}</Text>
       </View>
 
-      <View className="flex-row flex-wrap gap-2 px-4 pt-3">
+      <View className="flex-row flex-wrap px-4 pt-3" style={{ gap: 8 }}>
         <StatTile label="Net revenue (est.)" value={formatMoney(report.totals.net)} detail={`${report.from} to ${report.to}`} />
         <StatTile label="Gross (est.)" value={formatMoney(report.totals.gross)} detail={`${report.totals.count} paid transactions`} />
         <StatTile label="Refunds" value={formatMoney(report.totals.refunds)} detail={`${report.totals.refundCount} refunded`} />
@@ -102,7 +102,7 @@ export default function AdminIncomeScreen() {
 
   return (
     <SimpleScreen title="Income" subtitle="Estimated from Eazee's transaction records">
-      <View className="border-b border-gray-200 bg-white pt-3">
+      <View className="pt-3" style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }}>
         <FilterChips label="Period" options={GRANULARITY_OPTIONS} value={granularity} allowAll={false} onChange={(value) => value && setGranularity(value)} />
         <FilterChips label="Environment" options={ADMIN_ENVIRONMENT_OPTIONS} value={environment} allowAll={false} onChange={(value) => value && setEnvironment(value)} />
       </View>

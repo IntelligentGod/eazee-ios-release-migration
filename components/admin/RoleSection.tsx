@@ -71,7 +71,7 @@ export default function RoleSection({
       {lockReason ? (
         <Text className="mt-2 text-xs text-gray-500">{lockReason}</Text>
       ) : (
-        <View className="mt-3 flex-row gap-2">
+        <View className="mt-3 flex-row" style={{ gap: 8 }}>
           {ASSIGNABLE.map((option) => {
             const selected = option === role;
             return (

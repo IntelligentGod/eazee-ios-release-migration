@@ -36,7 +36,7 @@ function LimitRow({
         <Text className="text-sm font-semibold text-gray-900">{label}</Text>
         <Text className="text-xs text-gray-500">{unit}</Text>
       </View>
-      <View className="flex-row gap-2">
+      <View className="flex-row" style={{ gap: 8 }}>
         {input('free', free)}
         {input('pro', pro)}
       </View>
@@ -82,7 +82,7 @@ function LimitsEditor({ config, onSaved }: { config: AdminConfig; onSaved: (conf
         Empty means unlimited. 0 means not included: for free users the feature shows as Eazee Pro only.
         Limits reset each day in the user&apos;s time zone.
       </Text>
-      <View className="flex-row justify-end gap-2 px-4 pt-3">
+      <View className="flex-row justify-end px-4 pt-3" style={{ gap: 8 }}>
         <Text className="w-24 text-center text-xs font-bold uppercase text-gray-500">Free</Text>
         <Text className="w-24 text-center text-xs font-bold uppercase text-gray-500">Pro</Text>
       </View>
