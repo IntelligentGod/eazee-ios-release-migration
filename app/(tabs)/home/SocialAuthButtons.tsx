@@ -64,9 +64,12 @@ export function SocialAuthButtons({ showLegalNotice = true }: { showLegalNotice?
       }
       router.replace(isNewUser ? '/(tabs)/chat' : '/home');
     } catch (error) {
+      // The alert is generic; the code (e.g. Google's DEVELOPER_ERROR) is what explains a failure.
+      console.warn(`${PROVIDER_LABELS[provider]} sign-in failed`, (error as { code?: unknown })?.code, error);
       const message = getSocialAuthErrorMessage(error, PROVIDER_LABELS[provider]);
       if (message) {
-        Alert.alert('Sign in failed', message);
+        const code = (error as { code?: unknown })?.code;
+        Alert.alert('Sign in failed', __DEV__ && code ? `${message}\n\n(${String(code)})` : message);
       }
     } finally {
       setLoadingProvider(null);

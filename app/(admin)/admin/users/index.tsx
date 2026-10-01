@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import { FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import SimpleScreen, { ErrorState, LoadingState } from '@/components/SimpleScreen';
+import { FilterChips, type ChipOption } from '@/components/admin/AdminControls';
+import RoleBadge from '@/components/admin/RoleBadge';
 import { adminApi, type AdminUser } from '@/lib/adminApi';
 import { formatSubscriptionDate } from '@/lib/subscriptionStatusText';
 import { usePagedServerData } from '@/lib/usePagedServerData';
+import { ROLE_LABELS, type UserRole } from '@/lib/userRole';
+
+const ROLE_OPTIONS: ChipOption<UserRole>[] = (['superAdmin', 'admin', 'customer'] as const)
+  .map((role) => ({ value: role, label: ROLE_LABELS[role] }));
 
 const STATE_LABELS: Record<AdminUser['subscription']['state'], string> = {
   none: 'Free',
@@ -30,6 +36,9 @@ function UserRow({ user }: { user: AdminUser }) {
         </Text>
         <Text className="ml-2 text-sm font-semibold text-[#0F5A4D]">{plan}</Text>
       </View>
+      <View className="mt-1 flex-row">
+        <RoleBadge role={user.role} />
+      </View>
       <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
         {[
           user.displayName,
@@ -46,12 +55,13 @@ function UserRow({ user }: { user: AdminUser }) {
 export default function AdminUsersScreen() {
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
+  const [role, setRole] = useState<UserRole | null>(null);
   const users = usePagedServerData<AdminUser>(
     async (cursor) => {
-      const page = await adminApi.users({ search: submittedSearch || undefined, cursor });
+      const page = await adminApi.users({ search: submittedSearch || undefined, role: role ?? undefined, cursor });
       return { items: page.users, nextCursor: page.nextCursor };
     },
-    submittedSearch
+    `${submittedSearch}|${role ?? ''}`
   );
 
   return (
@@ -67,6 +77,9 @@ export default function AdminUsersScreen() {
           returnKeyType="search"
           className="rounded-xl bg-gray-100 px-3 py-2 text-base text-gray-900"
         />
+      </View>
+      <View className="border-b border-gray-200 bg-white pt-2">
+        <FilterChips label="Role" options={ROLE_OPTIONS} value={role} onChange={setRole} />
       </View>
       {users.error && !users.items.length ? (
         <ErrorState error={users.error} onRetry={users.reload} />

@@ -1,22 +1,23 @@
 import React from 'react';
 import { Redirect, Stack } from 'expo-router';
 import { LoadingState } from '@/components/SimpleScreen';
-import { readIsAdmin } from '@/lib/userRole';
-import { useServerData } from '@/lib/useServerData';
+import { isStaffRole } from '@/lib/userRole';
 import { useAuthSession } from '../context/AuthSessionContext';
+import { useRoleSession } from '../context/RoleSessionContext';
 
 /**
- * Client-side guard for every admin screen: no `admin` claim, no admin UI. The
- * server checks the claim again on every admin request, so this only keeps
- * customers from seeing screens they could not load anyway.
+ * Client-side guard for every admin screen: admins and the super admin only.
+ * Role-management screens add a super-admin check of their own. The server
+ * checks the role again on every admin request, so this only keeps customers
+ * from seeing screens they could not load anyway.
  */
 export default function AdminLayout() {
   const { user, isLoading: isAuthLoading } = useAuthSession();
-  const role = useServerData(() => readIsAdmin(user), user?.uid ?? 'signed-out');
+  const { role, isResolving } = useRoleSession();
 
   if (!isAuthLoading && !user) return <Redirect href="/" />;
-  if (isAuthLoading || role.isLoading) return <LoadingState label="Checking access..." />;
-  if (role.data !== true) return <Redirect href="/(tabs)/chat" />;
+  if (isResolving) return <LoadingState label="Checking access..." />;
+  if (!isStaffRole(role)) return <Redirect href="/(tabs)/chat" />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

@@ -4,6 +4,9 @@ import { useLocalSearchParams } from 'expo-router';
 import SimpleScreen, { ErrorState, LoadingState } from '@/components/SimpleScreen';
 import { SectionTitle } from '@/components/admin/AdminControls';
 import PurchaseRow from '@/components/subscription/PurchaseRow';
+import RoleSection from '@/components/admin/RoleSection';
+import { useAuthSession } from '@/app/context/AuthSessionContext';
+import { useRoleSession } from '@/app/context/RoleSessionContext';
 import { adminApi, type AdminUserDetail } from '@/lib/adminApi';
 import { formatSubscriptionDate } from '@/lib/subscriptionStatusText';
 import { useServerData } from '@/lib/useServerData';
@@ -29,7 +32,6 @@ function ProfileSection({ detail }: { detail: AdminUserDetail }) {
       <Field label="Sign-in" value={(auth?.providers || user?.providers || []).join(', ') || '-'} />
       <Field label="Created" value={dateOrDash(auth?.createdAt ?? user?.createdAt)} />
       <Field label="Last sign-in" value={dateOrDash(auth?.lastSignInAt)} />
-      {auth?.isAdmin && <Field label="Role" value="Admin" />}
       {auth?.disabled && <Field label="Account" value="Disabled" />}
       <Field
         label="Plan"
@@ -62,6 +64,8 @@ function UsageSection({ usage }: { usage: AdminUserDetail['usage'] }) {
 export default function AdminUserDetailScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
   const detail = useServerData(() => adminApi.user(String(uid)), String(uid));
+  const { user: viewer } = useAuthSession();
+  const { role: viewerRole } = useRoleSession();
 
   return (
     <SimpleScreen title={detail.data?.auth?.email || detail.data?.user?.email || 'User'} subtitle={String(uid)}>
@@ -72,6 +76,15 @@ export default function AdminUserDetailScreen() {
       ) : (
         <ScrollView>
           <SectionTitle>Profile and plan</SectionTitle>
+          <SectionTitle>Role</SectionTitle>
+          <RoleSection
+            targetUid={String(uid)}
+            targetEmail={detail.data.auth?.email ?? detail.data.user?.email ?? null}
+            role={detail.data.auth?.role ?? detail.data.user?.role ?? 'customer'}
+            viewerRole={viewerRole}
+            viewerUid={viewer?.uid ?? null}
+            onChanged={detail.reload}
+          />
           <ProfileSection detail={detail.data} />
           <SectionTitle>Purchase history</SectionTitle>
           {detail.data.transactions.length

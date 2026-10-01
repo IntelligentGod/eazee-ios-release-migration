@@ -17,6 +17,7 @@ import { useStoreSubscriptionSync } from '@/lib/useStoreSubscriptionSync';
 import * as WebBrowser from 'expo-web-browser';
 import { auth } from '@/firebaseConfig';
 import { AuthSessionProvider, useAuthSession } from './context/AuthSessionContext';
+import { RoleSessionProvider } from './context/RoleSessionContext';
 import { TokenProvider } from './context/TokenContext';
 import { GuidanceProvider } from '@/components/guidance/GuidanceProvider';
 import { finishPendingAccountDeletion, hasPendingAccountDeletion } from '@/lib/accountDeletion';
@@ -307,71 +308,73 @@ export default Sentry.wrap(function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="light" backgroundColor="transparent" />
       <AuthSessionProvider>
-        <DemoAccountSetupGate>
-          <AccountDeletionRecoveryGate>
-            <TokenProvider>
-              <BottomSheetModalProvider>
-                <TabProvider>
-                  <GuidanceProvider>
-                    <Stack>
-                  <Stack.Screen
-                    name="index"
-                    options={{
-                      headerShown: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="welcome"
-                    options={{
-                      headerShown: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="welcome-finish"
-                    options={{
-                      headerShown: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="account-deletion"
-                    options={{
-                      headerShown: false,
-                      animation: 'none',
-                      gestureEnabled: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="(tabs)"
-                    options={{
-                      headerShown: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="role-chooser"
-                    options={{
-                      headerShown: false,
-                      gestureEnabled: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="purchase-history"
-                    options={{
-                      headerShown: false
-                    }}
-                  />
-                  <Stack.Screen
-                    name="(admin)"
-                    options={{
-                      headerShown: false
-                    }}
-                  />
-                    </Stack>
-                  </GuidanceProvider>
-                </TabProvider>
-              </BottomSheetModalProvider>
-            </TokenProvider>
-          </AccountDeletionRecoveryGate>
-        </DemoAccountSetupGate>
+        <RoleSessionProvider>
+          <DemoAccountSetupGate>
+            <AccountDeletionRecoveryGate>
+              <TokenProvider>
+                <BottomSheetModalProvider>
+                  <TabProvider>
+                    <GuidanceProvider>
+                      <Stack>
+                    <Stack.Screen
+                      name="index"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="welcome"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="welcome-finish"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="account-deletion"
+                      options={{
+                        headerShown: false,
+                        animation: 'none',
+                        gestureEnabled: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="(tabs)"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="role-chooser"
+                      options={{
+                        headerShown: false,
+                        gestureEnabled: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="purchase-history"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="(admin)"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                      </Stack>
+                    </GuidanceProvider>
+                  </TabProvider>
+                </BottomSheetModalProvider>
+              </TokenProvider>
+            </AccountDeletionRecoveryGate>
+          </DemoAccountSetupGate>
+        </RoleSessionProvider>
       </AuthSessionProvider>
     </GestureHandlerRootView>
   )

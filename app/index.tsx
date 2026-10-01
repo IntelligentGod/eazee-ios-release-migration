@@ -3,11 +3,13 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import OnboardingScaffold from '@/components/onboarding/OnboardingScaffold';
 import { completeOnboarding, getOnboardingPhase, resolveOnboardingRoute, type OnboardingRoute } from '@/lib/onboarding';
-import { getPostLoginRoute, readIsAdmin, type PostLoginRoute } from '@/lib/userRole';
+import { getPostLoginRoute, type PostLoginRoute } from '@/lib/userRole';
 import { useAuthSession } from './context/AuthSessionContext';
+import { useRoleSession } from './context/RoleSessionContext';
 
 export default function AppEntryScreen() {
   const { user, isLoading: isAuthLoading } = useAuthSession();
+  const { role } = useRoleSession();
   const [targetRoute, setTargetRoute] = useState<OnboardingRoute | PostLoginRoute | null>(null);
 
   useEffect(() => {
@@ -19,15 +21,16 @@ export default function AppEntryScreen() {
       }
 
       if (user) {
+        // The role is read from a fresh token by RoleSessionProvider; wait for it.
+        if (!role) return;
         try {
           await completeOnboarding();
         } catch (error) {
           console.warn('Failed to persist onboarding completion', error);
         }
-        // Admins choose between the admin panel and the app; customers go straight to chat.
-        const route = getPostLoginRoute(await readIsAdmin(user));
+        // Admins and the super admin choose between the admin panel and the app; customers go straight to chat.
         if (isActive) {
-          setTargetRoute(route);
+          setTargetRoute(getPostLoginRoute(role));
         }
         return;
       }
@@ -51,7 +54,7 @@ export default function AppEntryScreen() {
     return () => {
       isActive = false;
     };
-  }, [isAuthLoading, user]);
+  }, [isAuthLoading, role, user]);
 
   if (targetRoute) {
     return <Redirect href={targetRoute} />;
