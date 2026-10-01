@@ -1,43 +1,29 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { formatDailyLimit, type GuidanceFeature, type PlanLimits, type SubscriptionLimits } from '@/lib/subscriptionLimits';
 
 export type SubscriptionPlanId = 'monthly' | 'yearly';
 
+/**
+ * The plans and their store product ids. Names, prices and periods come from
+ * the App Store at runtime (lib/subscriptionProducts.ts).
+ */
 export type SubscriptionPlan = {
   id: SubscriptionPlanId;
   title: string;
-  price: string;
-  period: string;
-  caption: string;
-  highlight: boolean;
-  /** Store product id; must match App Store Connect (group "Eazee Pro", 22404127) and Play Console exactly. */
+  /** Store product id; must match App Store Connect (group "Eazee Pro", 22404127), eazee_products.storekit and Play Console exactly. */
   productId: string;
 };
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
-  {
-    id: 'monthly',
-    title: 'Monthly',
-    price: '$9.99',
-    period: '/ month',
-    caption: 'Cancel anytime',
-    highlight: false,
-    productId: 'com.eazee.subscription.pro.monthly',
-  },
-  {
-    id: 'yearly',
-    title: 'Yearly',
-    price: '$79.99',
-    period: '/ year',
-    caption: 'Save 33% (only $6.67/month)',
-    highlight: true,
-    productId: 'com.eazee.subscription.pro.yearly',
-  },
+  { id: 'monthly', title: 'Monthly', productId: 'com.eazee.subscription.pro.monthly' },
+  { id: 'yearly', title: 'Yearly', productId: 'com.eazee.subscription.pro.yearly' },
 ];
 
 export const DEFAULT_SUBSCRIPTION_PLAN_ID: SubscriptionPlanId = 'yearly';
 
-export const TRIAL_DAYS = 14;
+export const getPlanIdForProduct = (productId?: string | null): SubscriptionPlanId | null =>
+  SUBSCRIPTION_PLANS.find((plan) => plan.productId === productId)?.id ?? null;
 
 export type SubscriptionTier = 'free' | 'pro';
 
@@ -58,13 +44,17 @@ export type AiFeatureKey =
   | 'recipeAndSkill'
   | 'wishlistIntent';
 
-/** Capabilities Free never gets, regardless of remaining allowance. */
+/** Capabilities Free never gets. Guidance has per-plan limits instead (see GUIDANCE_LIMITS_BY_FEATURE). */
 export const PRO_ONLY_FEATURES: readonly AiFeatureKey[] = [
   'dayPlanning',
-  'guidance',
   'todoClassification',
-  'recipeAndSkill',
 ];
+
+/** The guidance allowances each guidance capability draws on; matches GUIDANCE_PATHS on the server. */
+export const GUIDANCE_LIMITS_BY_FEATURE: Partial<Record<AiFeatureKey, readonly GuidanceFeature[]>> = {
+  guidance: ['goalGuidance', 'taskGuidance', 'guidanceQuestions'],
+  recipeAndSkill: ['recipeSkillGuide', 'guidanceQuestions'],
+};
 
 /**
  * Work that finishes a turn the user already spent an action on: the agent loop
@@ -79,20 +69,20 @@ export const isProOnlyFeature = (feature: AiFeatureKey) => PRO_ONLY_FEATURES.inc
 export const isUnchargedChatFeature = (feature: AiFeatureKey) =>
   UNCHARGED_CHAT_FEATURES.includes(feature);
 
-/** Free allowances reset daily so a heavy day never kills the rest of the week. */
-export const FREE_DAILY_AI_ACTIONS = 5;
-export const FREE_DAILY_VOICE_SECONDS = 2 * 60;
+/**
+ * Counted against the daily AI actions, like the server's usage meter: not the
+ * free follow-ups, voice (metered by minutes), Pro-only work, guidance (its own
+ * limits) or home suggestions (limited by days).
+ */
+export const isChatMeteredFeature = (feature: AiFeatureKey) =>
+  !isUnchargedChatFeature(feature)
+  && !isProOnlyFeature(feature)
+  && !GUIDANCE_LIMITS_BY_FEATURE[feature]
+  && feature !== 'voiceInput'
+  && feature !== 'homeSuggestions';
 
 /** Free gets daily home suggestions on this many days per week. */
 export const FREE_HOME_SUGGESTION_DAYS_PER_WEEK = 3;
-
-/**
- * Pro is "unlimited (fair use)". Tracked and surfaced, deliberately not
- * enforced on the client - a subscriber who trips one should be contacted, not
- * cut off mid-sentence.
- */
-export const PRO_FAIR_USE_DAILY_AI_ACTIONS = 200;
-export const PRO_FAIR_USE_DAILY_VOICE_SECONDS = 60 * 60;
 
 /** Internal testing account that always gets Pro, with no purchase needed. */
 export const UNLIMITED_ACCESS_EMAIL = 'developer_sandbox@eazee.ai';
@@ -131,7 +121,7 @@ export type ComparisonRow = {
     | 'microphone-outline'
     | 'home-outline'
     | 'target'
-    | 'format-list-bulleted'
+    | 'calendar-check-outline'
     | 'play-circle-outline'
     | 'cart-outline';
   title: string;
@@ -140,77 +130,99 @@ export type ComparisonRow = {
   pro: ComparisonValue;
 };
 
-export const PLAN_COMPARISON_ROWS: ComparisonRow[] = [
-  {
-    icon: 'text-box-outline',
-    title: 'Notes / todos / calendar / booking',
-    description: 'Keep your life in one place',
-    free: { kind: 'text', label: 'Unlimited' },
-    pro: { kind: 'text', label: 'Unlimited' },
-  },
-  {
-    icon: 'google',
-    title: 'Google Calendar sync',
-    description: 'Sync your events and stay on track',
-    free: { kind: 'check' },
-    pro: { kind: 'check' },
-  },
-  {
-    icon: 'shimmer',
-    title: 'AI actions',
-    description: 'Get things done with AI',
-    free: { kind: 'text', label: `${FREE_DAILY_AI_ACTIONS} per day` },
-    pro: { kind: 'text', label: 'Unlimited\n(fair use)' },
-  },
-  {
-    icon: 'microphone-outline',
-    title: 'Voice input',
-    description: 'Speak naturally, get things done',
-    free: { kind: 'text', label: `${FREE_DAILY_VOICE_SECONDS / 60} min / day` },
-    pro: { kind: 'text', label: 'Unlimited\n(fair use)' },
-  },
-  {
-    icon: 'home-outline',
-    title: 'Daily home suggestions',
-    description: 'Personalized ideas to improve your day',
-    free: { kind: 'text', label: `${FREE_HOME_SUGGESTION_DAYS_PER_WEEK} days / week` },
-    pro: { kind: 'text', label: 'Every day' },
-  },
-  {
-    icon: 'target',
-    title: 'Day planning, goal & task guidance',
-    description: 'Plan smarter with AI',
-    free: { kind: 'none' },
-    pro: { kind: 'check' },
-  },
-  {
-    icon: 'format-list-bulleted',
-    title: 'Auto todo classification',
-    description: 'Let AI organize your tasks',
-    free: { kind: 'none' },
-    pro: { kind: 'check' },
-  },
-  {
-    icon: 'play-circle-outline',
-    title: 'Recipe & skill generation, video lookup',
-    description: 'Find recipes, learn new skills',
-    free: { kind: 'none' },
-    pro: { kind: 'check' },
-  },
-  {
-    icon: 'cart-outline',
-    title: 'Wishlist purchase intent',
-    description: 'Save ideas and get smart shopping help',
-    free: { kind: 'check' },
-    pro: { kind: 'check' },
-  },
-];
+const guidanceValue = (limits: (number | null)[]): ComparisonValue => {
+  if (limits.every((limit) => limit === 0)) return { kind: 'none' };
+  if (limits.every((limit) => limit === null)) return { kind: 'check' };
+  const daily = limits.filter((limit): limit is number => typeof limit === 'number' && limit > 0);
+  return { kind: 'text', label: daily.length ? `Up to ${Math.max(...daily)} / day` : 'Unlimited' };
+};
+
+const allowanceValue = (limit: number | null, unit: string): ComparisonValue =>
+  ({ kind: 'text', label: formatDailyLimit(limit, unit) });
+
+/** The paywall's Free vs Pro table, from the limits the server enforces. */
+export function buildPlanComparisonRows(limits: SubscriptionLimits): ComparisonRow[] {
+  const goalAndTask = (plan: PlanLimits) => guidanceValue([plan.guidance.goalGuidance, plan.guidance.taskGuidance]);
+  return [
+    {
+      icon: 'text-box-outline',
+      title: 'Notes / todos / calendar / booking',
+      description: 'Keep your life in one place',
+      free: { kind: 'text', label: 'Unlimited' },
+      pro: { kind: 'text', label: 'Unlimited' },
+    },
+    {
+      icon: 'google',
+      title: 'Google Calendar sync',
+      description: 'Sync your events and stay on track',
+      free: { kind: 'check' },
+      pro: { kind: 'check' },
+    },
+    {
+      icon: 'shimmer',
+      title: 'AI actions',
+      description: 'Get things done with AI',
+      free: allowanceValue(limits.free.chatMessagesPerDay, 'per day'),
+      pro: allowanceValue(limits.pro.chatMessagesPerDay, 'per day'),
+    },
+    {
+      icon: 'microphone-outline',
+      title: 'Voice input',
+      description: 'Speak naturally, get things done',
+      free: allowanceValue(limits.free.voiceMinutesPerDay, 'min / day'),
+      pro: allowanceValue(limits.pro.voiceMinutesPerDay, 'min / day'),
+    },
+    {
+      icon: 'home-outline',
+      title: 'Daily home suggestions',
+      description: 'Personalized ideas to improve your day',
+      free: { kind: 'text', label: `${FREE_HOME_SUGGESTION_DAYS_PER_WEEK} days / week` },
+      pro: { kind: 'text', label: 'Every day' },
+    },
+    {
+      icon: 'target',
+      title: 'Goal & task guidance',
+      description: 'Plan smarter with AI',
+      free: goalAndTask(limits.free),
+      pro: goalAndTask(limits.pro),
+    },
+    {
+      icon: 'calendar-check-outline',
+      title: 'Day planning & auto todo classification',
+      description: 'Let AI organize your day and tasks',
+      free: { kind: 'none' },
+      pro: { kind: 'check' },
+    },
+    {
+      icon: 'play-circle-outline',
+      title: 'Recipe & skill generation, video lookup',
+      description: 'Find recipes, learn new skills',
+      free: guidanceValue([limits.free.guidance.recipeSkillGuide]),
+      pro: guidanceValue([limits.pro.guidance.recipeSkillGuide]),
+    },
+    {
+      icon: 'cart-outline',
+      title: 'Wishlist purchase intent',
+      description: 'Save ideas and get smart shopping help',
+      free: { kind: 'check' },
+      pro: { kind: 'check' },
+    },
+  ];
+}
+
+export type SubscriptionState = 'none' | 'active' | 'cancelled' | 'billing_retry' | 'expired' | 'refunded';
 
 export type SubscriptionStatus = {
   isPro: boolean;
   planId: SubscriptionPlanId | null;
   /** Epoch ms the entitlement was last confirmed by the store or backend. */
   verifiedAt: number | null;
+  /** From the server; absent in statuses cached by older builds. */
+  state?: SubscriptionState;
+  expiresAt?: number | null;
+  autoRenew?: boolean | null;
+  /** A plan change that takes effect at the next renewal (a downgrade). */
+  pendingPlanId?: SubscriptionPlanId | null;
 };
 
 export const FREE_SUBSCRIPTION_STATUS: SubscriptionStatus = {
@@ -222,6 +234,8 @@ export const FREE_SUBSCRIPTION_STATUS: SubscriptionStatus = {
 export type BillingOutcome =
   | { status: 'success'; planId: SubscriptionPlanId }
   | { status: 'cancelled' }
+  /** StoreKit has not reported a result yet, e.g. a downgrade that starts at renewal. */
+  | { status: 'pending' }
   | { status: 'unavailable'; message: string };
 
 const SUBSCRIPTION_STATUS_STORAGE_KEY = 'subscription:status:v1:';
@@ -245,10 +259,15 @@ export async function readCachedSubscriptionStatus(userId: string): Promise<Subs
       return FREE_SUBSCRIPTION_STATUS;
     }
 
+    const asPlanId = (value: unknown) => (value === 'monthly' || value === 'yearly' ? value : null);
     return {
       isPro: parsed.isPro,
-      planId: parsed.planId === 'monthly' || parsed.planId === 'yearly' ? parsed.planId : null,
+      planId: asPlanId(parsed.planId),
       verifiedAt: typeof parsed.verifiedAt === 'number' ? parsed.verifiedAt : null,
+      state: parsed.state,
+      expiresAt: typeof parsed.expiresAt === 'number' ? parsed.expiresAt : null,
+      autoRenew: typeof parsed.autoRenew === 'boolean' ? parsed.autoRenew : null,
+      pendingPlanId: asPlanId(parsed.pendingPlanId),
     };
   } catch {
     return FREE_SUBSCRIPTION_STATUS;

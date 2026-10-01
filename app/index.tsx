@@ -3,11 +3,12 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import OnboardingScaffold from '@/components/onboarding/OnboardingScaffold';
 import { completeOnboarding, getOnboardingPhase, resolveOnboardingRoute, type OnboardingRoute } from '@/lib/onboarding';
+import { getPostLoginRoute, readIsAdmin, type PostLoginRoute } from '@/lib/userRole';
 import { useAuthSession } from './context/AuthSessionContext';
 
 export default function AppEntryScreen() {
   const { user, isLoading: isAuthLoading } = useAuthSession();
-  const [targetRoute, setTargetRoute] = useState<OnboardingRoute | null>(null);
+  const [targetRoute, setTargetRoute] = useState<OnboardingRoute | PostLoginRoute | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -22,10 +23,11 @@ export default function AppEntryScreen() {
           await completeOnboarding();
         } catch (error) {
           console.warn('Failed to persist onboarding completion', error);
-        } finally {
-          if (isActive) {
-            setTargetRoute('/(tabs)/chat');
-          }
+        }
+        // Admins choose between the admin panel and the app; customers go straight to chat.
+        const route = getPostLoginRoute(await readIsAdmin(user));
+        if (isActive) {
+          setTargetRoute(route);
         }
         return;
       }

@@ -346,6 +346,25 @@ export default Sentry.wrap(function RootLayout() {
                       headerShown: false
                     }}
                   />
+                  <Stack.Screen
+                    name="role-chooser"
+                    options={{
+                      headerShown: false,
+                      gestureEnabled: false
+                    }}
+                  />
+                  <Stack.Screen
+                    name="purchase-history"
+                    options={{
+                      headerShown: false
+                    }}
+                  />
+                  <Stack.Screen
+                    name="(admin)"
+                    options={{
+                      headerShown: false
+                    }}
+                  />
                     </Stack>
                   </GuidanceProvider>
                 </TabProvider>

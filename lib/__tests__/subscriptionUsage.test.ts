@@ -1,6 +1,4 @@
 import {
-  FREE_DAILY_AI_ACTIONS,
-  FREE_DAILY_VOICE_SECONDS,
   PRO_ONLY_FEATURES,
   UNCHARGED_CHAT_FEATURES,
   isProOnlyFeature,
@@ -16,7 +14,16 @@ import {
   recordAiAction,
   recordVoiceUsage,
   type DailyUsage,
+  mergeServerUsage,
 } from '@/lib/subscriptionUsage';
+import {
+  DEFAULT_SUBSCRIPTION_LIMITS,
+  writeCachedSubscriptionLimits,
+  type PlanLimits,
+} from '@/lib/subscriptionLimits';
+
+const FREE_DAILY_AI_ACTIONS = DEFAULT_SUBSCRIPTION_LIMITS.free.chatMessagesPerDay!;
+const FREE_DAILY_VOICE_SECONDS = DEFAULT_SUBSCRIPTION_LIMITS.free.voiceMinutesPerDay! * 60;
 
 jest.mock('@react-native-async-storage/async-storage', () => {
   let store: Record<string, string> = {};
@@ -218,5 +225,64 @@ describe('usage accounting', () => {
       allowed: false,
       reason: 'aiActionsExhausted',
     });
+  });
+});
+
+describe('limits from the server', () => {
+  const freeLimits = (overrides: Partial<PlanLimits> = {}): PlanLimits => ({
+    ...DEFAULT_SUBSCRIPTION_LIMITS.free,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    storageMock.__reset();
+  });
+
+  it('applies the chat and voice limits it is given', () => {
+    const limits = freeLimits({ chatMessagesPerDay: 2, voiceMinutesPerDay: 1 });
+    expect(decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: 1 }), SUGGESTION_DAY, limits)).toEqual({ allowed: true });
+    expect(decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: 2 }), SUGGESTION_DAY, limits))
+      .toEqual({ allowed: false, reason: 'aiActionsExhausted' });
+    expect(decideAiFeatureAccess('free', 'voiceInput', usage({ voiceSeconds: 60 }), SUGGESTION_DAY, limits))
+      .toEqual({ allowed: false, reason: 'voiceExhausted' });
+  });
+
+  it('treats a null limit as unlimited, and applies a Pro fair-use limit when set', () => {
+    expect(decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: 999 }), SUGGESTION_DAY, freeLimits({ chatMessagesPerDay: null })))
+      .toEqual({ allowed: true });
+    const proLimits = { ...DEFAULT_SUBSCRIPTION_LIMITS.pro, chatMessagesPerDay: 200 };
+    expect(decideAiFeatureAccess('pro', 'aiChat', usage({ aiActions: 200 }), SUGGESTION_DAY, proLimits))
+      .toEqual({ allowed: false, reason: 'aiActionsExhausted' });
+  });
+
+  it('keeps guidance Pro-only on free while every related limit is 0, and allows it once one is raised', () => {
+    expect(decideAiFeatureAccess('free', 'guidance', usage(), SUGGESTION_DAY, freeLimits()))
+      .toEqual({ allowed: false, reason: 'proOnly' });
+    const goalAllowed = freeLimits({ guidance: { ...DEFAULT_SUBSCRIPTION_LIMITS.free.guidance, goalGuidance: 1 } });
+    expect(decideAiFeatureAccess('free', 'guidance', usage(), SUGGESTION_DAY, goalAllowed)).toEqual({ allowed: true });
+    expect(decideAiFeatureAccess('free', 'recipeAndSkill', usage(), SUGGESTION_DAY, goalAllowed))
+      .toEqual({ allowed: false, reason: 'proOnly' });
+  });
+
+  it('reads the cached limits when checking access', async () => {
+    await writeCachedSubscriptionLimits('user-1', {
+      ...DEFAULT_SUBSCRIPTION_LIMITS,
+      free: freeLimits({ chatMessagesPerDay: 1 }),
+    });
+    await recordAiAction('user-1');
+
+    await expect(checkAiFeatureAccess('user-1', 'aiChat')).resolves.toEqual({
+      allowed: false,
+      reason: 'aiActionsExhausted',
+    });
+  });
+
+  it('takes the server count when it is higher than the local one', async () => {
+    await recordAiAction('user-1');
+    await mergeServerUsage('user-1', { aiActions: 4, voiceSeconds: 0 });
+    await expect(readDailyUsage('user-1')).resolves.toEqual({ aiActions: 4, voiceSeconds: 0 });
+
+    await mergeServerUsage('user-1', { aiActions: 1 });
+    await expect(readDailyUsage('user-1')).resolves.toEqual({ aiActions: 4, voiceSeconds: 0 });
   });
 });

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { auth } from '@/firebaseConfig';
 import {
-  FREE_DAILY_AI_ACTIONS,
-  FREE_DAILY_VOICE_SECONDS,
   FREE_SUBSCRIPTION_STATUS,
   hasUnlimitedAccess,
   UNLIMITED_ACCESS_PLAN_ID,
@@ -10,6 +8,12 @@ import {
   type SubscriptionStatus,
   type SubscriptionTier,
 } from '@/lib/subscription';
+import {
+  DEFAULT_SUBSCRIPTION_LIMITS,
+  readCachedSubscriptionLimits,
+  type PlanLimits,
+  type SubscriptionLimits,
+} from '@/lib/subscriptionLimits';
 import { EMPTY_DAILY_USAGE, readDailyUsage, type DailyUsage } from '@/lib/subscriptionUsage';
 
 export type SubscriptionSnapshot = {
@@ -17,20 +21,26 @@ export type SubscriptionSnapshot = {
   status: SubscriptionStatus;
   isSandboxAccount: boolean;
   usage: DailyUsage;
-  remainingAiActions: number;
-  remainingVoiceSeconds: number;
+  /** Both plans' limits, as last reported by the server. */
+  limits: SubscriptionLimits;
+  /** The limits of this account's plan. */
+  planLimits: PlanLimits;
+  /** null when the plan has no limit. */
+  remainingAiActions: number | null;
+  remainingVoiceSeconds: number | null;
   isLoading: boolean;
   refresh: () => void;
 };
 
 /**
- * Reads the cached entitlement plus today's usage. Purchases and the daily
- * reset both happen outside React, so `refresh` is exposed for screens that act
- * and need to re-read.
+ * Reads the cached entitlement, limits and today's usage. Purchases, syncs and
+ * the daily reset all happen outside React, so `refresh` is exposed for screens
+ * that act and need to re-read.
  */
 export function useSubscriptionStatus(userId?: string | null): SubscriptionSnapshot {
   const [status, setStatus] = useState<SubscriptionStatus>(FREE_SUBSCRIPTION_STATUS);
   const [usage, setUsage] = useState<DailyUsage>(EMPTY_DAILY_USAGE);
+  const [limits, setLimits] = useState<SubscriptionLimits>(DEFAULT_SUBSCRIPTION_LIMITS);
   const [isLoading, setIsLoading] = useState(true);
   const [nonce, setNonce] = useState(0);
 
@@ -40,6 +50,7 @@ export function useSubscriptionStatus(userId?: string | null): SubscriptionSnaps
     if (!userId) {
       setStatus(FREE_SUBSCRIPTION_STATUS);
       setUsage(EMPTY_DAILY_USAGE);
+      setLimits(DEFAULT_SUBSCRIPTION_LIMITS);
       setIsLoading(false);
       return;
     }
@@ -47,11 +58,12 @@ export function useSubscriptionStatus(userId?: string | null): SubscriptionSnaps
     let cancelled = false;
     setIsLoading(true);
 
-    void Promise.all([readCachedSubscriptionStatus(userId), readDailyUsage(userId)])
-      .then(([nextStatus, nextUsage]) => {
+    void Promise.all([readCachedSubscriptionStatus(userId), readDailyUsage(userId), readCachedSubscriptionLimits(userId)])
+      .then(([nextStatus, nextUsage, nextLimits]) => {
         if (cancelled) return;
         setStatus(nextStatus);
         setUsage(nextUsage);
+        setLimits(nextLimits);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -63,8 +75,10 @@ export function useSubscriptionStatus(userId?: string | null): SubscriptionSnaps
   }, [nonce, userId]);
 
   const isSandboxAccount = hasUnlimitedAccess(auth.currentUser?.email);
+  const tier: SubscriptionTier = status.isPro || isSandboxAccount ? 'pro' : 'free';
+  const planLimits = limits[tier];
   return {
-    tier: status.isPro || isSandboxAccount ? 'pro' : 'free',
+    tier,
     // A plan actually recorded for the account still wins over the sandbox default.
     status: isSandboxAccount
       ? { ...status, isPro: true, planId: status.planId ?? UNLIMITED_ACCESS_PLAN_ID }
@@ -72,8 +86,14 @@ export function useSubscriptionStatus(userId?: string | null): SubscriptionSnaps
     /** Pro through the sandbox email, with no store purchase behind it. */
     isSandboxAccount,
     usage,
-    remainingAiActions: Math.max(0, FREE_DAILY_AI_ACTIONS - usage.aiActions),
-    remainingVoiceSeconds: Math.max(0, FREE_DAILY_VOICE_SECONDS - usage.voiceSeconds),
+    limits,
+    planLimits,
+    remainingAiActions: planLimits.chatMessagesPerDay === null
+      ? null
+      : Math.max(0, planLimits.chatMessagesPerDay - usage.aiActions),
+    remainingVoiceSeconds: planLimits.voiceMinutesPerDay === null
+      ? null
+      : Math.max(0, planLimits.voiceMinutesPerDay * 60 - usage.voiceSeconds),
     isLoading,
     refresh,
   };

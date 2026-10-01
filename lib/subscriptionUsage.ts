@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  FREE_DAILY_AI_ACTIONS,
-  FREE_DAILY_VOICE_SECONDS,
   FREE_HOME_SUGGESTION_DAYS_PER_WEEK,
+  GUIDANCE_LIMITS_BY_FEATURE,
   hasUnlimitedAccess,
   isProOnlyFeature,
   isUnchargedChatFeature,
@@ -10,6 +9,11 @@ import {
   type AiFeatureKey,
   type SubscriptionTier,
 } from '@/lib/subscription';
+import {
+  DEFAULT_SUBSCRIPTION_LIMITS,
+  readCachedSubscriptionLimits,
+  type PlanLimits,
+} from '@/lib/subscriptionLimits';
 
 export type DailyUsage = {
   aiActions: number;
@@ -85,6 +89,22 @@ export async function recordVoiceUsage(userId: string, seconds: number) {
   });
 }
 
+/**
+ * The server counts usage too (when enforcement is on); its count wins when it
+ * is higher, e.g. after using Eazee on another device.
+ */
+export async function mergeServerUsage(userId: string, server: { aiActions?: number; voiceSeconds?: number }) {
+  const periodKey = getUsagePeriodKey();
+  const usage = await readDailyUsage(userId, periodKey);
+  const merged = {
+    aiActions: Math.max(usage.aiActions, Number(server.aiActions) || 0),
+    voiceSeconds: Math.max(usage.voiceSeconds, Number(server.voiceSeconds) || 0),
+  };
+  if (merged.aiActions !== usage.aiActions || merged.voiceSeconds !== usage.voiceSeconds) {
+    await writeDailyUsage(userId, periodKey, merged);
+  }
+}
+
 export async function clearDailyUsage(userId: string, periodKey: string = getUsagePeriodKey()) {
   try {
     await AsyncStorage.removeItem(getUsageStorageKey(userId, periodKey));
@@ -108,40 +128,46 @@ export type AccessDecision =
   | { allowed: false; reason: 'proOnly' | 'aiActionsExhausted' | 'voiceExhausted' | 'notToday' };
 
 /**
- * Pure so the tier rules can be tested without storage. Pro passes everything -
- * its fair-use ceilings are surfaced in the UI, not enforced here.
+ * Pure so the tier rules can be tested without storage. The limits are the
+ * plan's, from the server (cached); null means unlimited. This keeps the UI
+ * honest; the server enforces the same limits.
  */
 export function decideAiFeatureAccess(
   tier: SubscriptionTier,
   feature: AiFeatureKey,
   usage: DailyUsage,
-  now: Date = new Date()
+  now: Date = new Date(),
+  limits: PlanLimits = DEFAULT_SUBSCRIPTION_LIMITS[tier]
 ): AccessDecision {
-  if (tier === 'pro') {
-    return { allowed: true };
-  }
-
-  if (isProOnlyFeature(feature)) {
-    return { allowed: false, reason: 'proOnly' };
-  }
-
   if (isUnchargedChatFeature(feature)) {
     return { allowed: true };
   }
 
+  if (isProOnlyFeature(feature)) {
+    return tier === 'pro' ? { allowed: true } : { allowed: false, reason: 'proOnly' };
+  }
+
+  // Each guide is counted on the server; here only "not on this plan" is decided.
+  const guidanceLimits = GUIDANCE_LIMITS_BY_FEATURE[feature];
+  if (guidanceLimits) {
+    return tier === 'free' && guidanceLimits.every((key) => limits.guidance[key] === 0)
+      ? { allowed: false, reason: 'proOnly' }
+      : { allowed: true };
+  }
+
   if (feature === 'homeSuggestions') {
-    return isHomeSuggestionDayForFree(now)
+    return tier === 'pro' || isHomeSuggestionDayForFree(now)
       ? { allowed: true }
       : { allowed: false, reason: 'notToday' };
   }
 
   if (feature === 'voiceInput') {
-    return usage.voiceSeconds >= FREE_DAILY_VOICE_SECONDS
+    return limits.voiceMinutesPerDay !== null && usage.voiceSeconds >= limits.voiceMinutesPerDay * 60
       ? { allowed: false, reason: 'voiceExhausted' }
       : { allowed: true };
   }
 
-  return usage.aiActions >= FREE_DAILY_AI_ACTIONS
+  return limits.chatMessagesPerDay !== null && usage.aiActions >= limits.chatMessagesPerDay
     ? { allowed: false, reason: 'aiActionsExhausted' }
     : { allowed: true };
 }
@@ -151,10 +177,12 @@ export async function checkAiFeatureAccess(
   feature: AiFeatureKey,
   email?: string | null
 ): Promise<AccessDecision> {
-  const [status, usage] = await Promise.all([
+  const [status, usage, limits] = await Promise.all([
     readCachedSubscriptionStatus(userId),
     readDailyUsage(userId),
+    readCachedSubscriptionLimits(userId),
   ]);
 
-  return decideAiFeatureAccess(status.isPro || hasUnlimitedAccess(email) ? 'pro' : 'free', feature, usage);
+  const tier = status.isPro || hasUnlimitedAccess(email) ? 'pro' : 'free';
+  return decideAiFeatureAccess(tier, feature, usage, new Date(), limits[tier]);
 }

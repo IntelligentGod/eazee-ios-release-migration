@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { router } from 'expo-router';
 import ScreenHeader from '@/components/ScreenHeader';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
@@ -18,25 +19,32 @@ import { getHomeSettingsBackGuidanceTargetId } from '@/lib/navigationHelp';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '@/lib/legalLinks';
 import { useSubscriptionStatus } from '@/lib/useSubscriptionStatus';
 import {
-  isBillingConfigured,
-  openStoreSubscriptionManagement,
+  changeSubscriptionPlan,
+  getStoreProducts,
+  openManageSubscriptions,
   purchaseSubscription,
   restorePurchases,
   syncStoreSubscriptionStatus,
 } from '@/lib/storeBilling';
 import {
   DEFAULT_SUBSCRIPTION_PLAN_ID,
-  PLAN_COMPARISON_ROWS,
-  SUBSCRIPTION_PLANS,
-  SUBSCRIPTION_STORE_NAME,
-  TRIAL_DAYS,
-  getManageSubscriptionUrl,
-  writeCachedSubscriptionStatus,
+  buildPlanComparisonRows,
   type ComparisonRow,
   type ComparisonValue,
-  type SubscriptionPlan,
   type SubscriptionPlanId,
 } from '@/lib/subscription';
+import {
+  DEFAULT_PRODUCT_DISPLAY,
+  FALLBACK_STORE_PRODUCTS,
+  formatPeriodLabel,
+  getSwitchTargetPlanId,
+  getYearlySavingsLabel,
+  isUpgrade,
+  orderStoreProducts,
+  type StoreProduct,
+} from '@/lib/subscriptionProducts';
+import type { ProductDisplaySettings } from '@/lib/subscriptionApi';
+import CurrentPlanCard from '@/components/subscription/CurrentPlanCard';
 
 const ACCENT = '#1FF5EF';
 const HEADLINE_ACCENT = '#74FEFE';
@@ -84,7 +92,7 @@ function ComparisonTableRow({ row, isLast }: { row: ComparisonRow; isLast: boole
   );
 }
 
-function ComparisonTable() {
+function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
   return (
     <View style={styles.table}>
       <View style={styles.tableHeader}>
@@ -93,11 +101,11 @@ function ComparisonTable() {
         <Text style={[styles.headerLabel, styles.valueCell, styles.valueCellLast]}>Pro</Text>
       </View>
 
-      {PLAN_COMPARISON_ROWS.map((row, index) => (
+      {rows.map((row, index) => (
         <ComparisonTableRow
           key={row.title}
           row={row}
-          isLast={index === PLAN_COMPARISON_ROWS.length - 1}
+          isLast={index === rows.length - 1}
         />
       ))}
     </View>
@@ -105,11 +113,15 @@ function ComparisonTable() {
 }
 
 function PlanCard({
-  plan,
+  product,
+  badge,
+  caption,
   selected,
   onSelect,
 }: {
-  plan: SubscriptionPlan;
+  product: StoreProduct;
+  badge: string | null;
+  caption: string | null;
   selected: boolean;
   onSelect: (planId: SubscriptionPlanId) => void;
 }) {
@@ -118,14 +130,14 @@ function PlanCard({
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       activeOpacity={0.85}
-      onPress={() => onSelect(plan.id)}
+      onPress={() => onSelect(product.planId)}
       style={[styles.planCard, selected && styles.planCardSelected]}
     >
       <View style={styles.planTopRow}>
-        <Text style={styles.planTitle}>{plan.title}</Text>
-        {plan.highlight && (
+        <Text style={styles.planTitle}>{product.planId === 'yearly' ? 'Yearly' : 'Monthly'}</Text>
+        {!!badge && (
           <View style={styles.planBadge}>
-            <Text style={styles.planBadgeText}>Best Value</Text>
+            <Text style={styles.planBadgeText}>{badge}</Text>
           </View>
         )}
         <View style={[styles.radio, selected && styles.radioSelected]}>
@@ -134,13 +146,15 @@ function PlanCard({
       </View>
 
       <View style={styles.planPriceRow}>
-        <Text style={styles.planPrice}>{plan.price}</Text>
-        <Text style={styles.planPeriod}>{plan.period}</Text>
+        <Text style={styles.planPrice}>{product.displayPrice}</Text>
+        <Text style={styles.planPeriod}>{formatPeriodLabel(product)}</Text>
       </View>
 
-      <Text style={[styles.planCaption, selected && styles.planCaptionSelected]}>
-        {plan.caption}
-      </Text>
+      {!!caption && (
+        <Text style={[styles.planCaption, selected && styles.planCaptionSelected]}>
+          {caption}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -158,11 +172,18 @@ export default function PaywallPanel({
     DEFAULT_SUBSCRIPTION_PLAN_ID
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [products, setProducts] = useState<StoreProduct[]>(FALLBACK_STORE_PRODUCTS);
+  const [productDisplay, setProductDisplay] = useState<ProductDisplaySettings>(DEFAULT_PRODUCT_DISPLAY);
   const { setTabBarTheme } = useTabContext();
-  const { tier, status, isSandboxAccount, refresh } = useSubscriptionStatus(userId);
+  const { tier, status, isSandboxAccount, limits, refresh } = useSubscriptionStatus(userId);
   const isPro = tier === 'pro';
-  // No plan id means Pro without a purchase, e.g. the developer sandbox account.
-  const currentPlan = SUBSCRIPTION_PLANS.find((plan) => plan.id === status.planId);
+  const orderedProducts = useMemo(() => orderStoreProducts(products, productDisplay), [productDisplay, products]);
+  const comparisonRows = useMemo(() => buildPlanComparisonRows(limits), [limits]);
+  const savingsLabel = getYearlySavingsLabel(products);
+  const currentProduct = products.find((product) => product.planId === status.planId);
+  const switchPlanId = getSwitchTargetPlanId(status.planId);
+  const switchProduct = products.find((product) => product.planId === switchPlanId);
+  const trialOffer = products.find((product) => product.planId === selectedPlanId)?.introOffer;
 
   // Tied to mount rather than the back handler so the tab bar always reverts,
   // including when the panel unmounts by switching tabs.
@@ -171,28 +192,30 @@ export default function PaywallPanel({
     return () => setTabBarTheme('default');
   }, [setTabBarTheme]);
 
-  // Show the App Store's current answer, e.g. after a cancellation made in Settings.
+  // Plans and prices from the App Store; plan, limits and display settings from
+  // the server, which also picks up a cancellation made in Settings.
   useEffect(() => {
+    void getStoreProducts().then(setProducts);
     if (!userId) return;
-    void syncStoreSubscriptionStatus(userId).then(refresh);
+    void syncStoreSubscriptionStatus(userId).then((overview) => {
+      if (overview) setProductDisplay(overview.products);
+      refresh();
+    });
   }, [refresh, userId]);
 
   const handleContinue = useCallback(async () => {
     setIsProcessing(true);
     try {
       const outcome = await purchaseSubscription(selectedPlanId);
+      refresh();
 
       if (outcome.status === 'success') {
-        if (userId) {
-          await writeCachedSubscriptionStatus(userId, {
-            isPro: true,
-            planId: outcome.planId,
-            verifiedAt: Date.now(),
-          });
-        }
-        refresh();
         onBack();
         return;
+      }
+
+      if (outcome.status === 'pending') {
+        Alert.alert('Eazee Pro', 'The App Store is still confirming your purchase. Eazee Pro turns on as soon as it does.');
       }
 
       if (outcome.status === 'unavailable') {
@@ -201,22 +224,48 @@ export default function PaywallPanel({
     } finally {
       setIsProcessing(false);
     }
-  }, [onBack, refresh, selectedPlanId, userId]);
+  }, [onBack, refresh, selectedPlanId]);
+
+  const handleSwitchPlan = useCallback(async (product: StoreProduct) => {
+    setIsProcessing(true);
+    try {
+      const outcome = await changeSubscriptionPlan(status.planId, product.planId);
+      refresh();
+      if (outcome.status === 'success' || outcome.status === 'pending') {
+        const upgrading = !!status.planId && isUpgrade(status.planId, product.planId);
+        Alert.alert(
+          'Eazee Pro',
+          upgrading
+            ? `You are now on ${product.title}. Apple credits the unused part of your current plan.`
+            : `${product.title} starts at your next renewal. You keep your current plan until then.`
+        );
+      }
+      if (outcome.status === 'unavailable') {
+        Alert.alert('Eazee Pro', outcome.message);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [refresh, status.planId]);
+
+  const handleManage = useCallback(async () => {
+    if (!userId) return;
+    setIsProcessing(true);
+    try {
+      await openManageSubscriptions(userId);
+      refresh();
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [refresh, userId]);
 
   const handleRestore = useCallback(async () => {
     setIsProcessing(true);
     try {
       const outcome = await restorePurchases();
+      refresh();
 
       if (outcome.status === 'success') {
-        if (userId) {
-          await writeCachedSubscriptionStatus(userId, {
-            isPro: true,
-            planId: outcome.planId,
-            verifiedAt: Date.now(),
-          });
-        }
-        refresh();
         Alert.alert('Eazee Pro', 'Your subscription has been restored.');
         return;
       }
@@ -227,43 +276,13 @@ export default function PaywallPanel({
     } finally {
       setIsProcessing(false);
     }
-  }, [refresh, userId]);
+  }, [refresh]);
 
   const openLink = useCallback((url: string) => {
     void Linking.openURL(url).catch((error) => {
       console.warn('Failed to open legal link', error);
     });
   }, []);
-
-  const handleCancelSubscription = useCallback(() => {
-    if (isSandboxAccount) {
-      Alert.alert(
-        'Test account',
-        `This sandbox account has Pro without a purchase, so there is no ${SUBSCRIPTION_STORE_NAME} subscription to cancel.`
-      );
-      return;
-    }
-
-    const period = currentPlan?.id === 'monthly' ? 'month' : currentPlan?.id === 'yearly' ? 'year' : 'billing period';
-    Alert.alert(
-      'Cancel subscription',
-      `Your subscription is managed by ${SUBSCRIPTION_STORE_NAME}. You can cancel it there, and you keep Eazee Pro until the end of your current ${period}.`,
-      [
-        { text: 'Keep Pro', style: 'cancel' },
-        {
-          text: `Open ${SUBSCRIPTION_STORE_NAME}`,
-          style: 'destructive',
-          onPress: () => {
-            if (!isBillingConfigured()) {
-              openLink(getManageSubscriptionUrl(status.planId));
-              return;
-            }
-            void openStoreSubscriptionManagement().catch(() => openLink(getManageSubscriptionUrl(status.planId)));
-          },
-        },
-      ]
-    );
-  }, [currentPlan?.id, isSandboxAccount, openLink, status.planId]);
 
   return (
     <View style={styles.root}>
@@ -326,16 +345,19 @@ export default function PaywallPanel({
             />
           </View>
 
-          <ComparisonTable />
+          <ComparisonTable rows={comparisonRows} />
 
           {!isPro && (
             <>
               <View style={styles.planRow}>
-                {SUBSCRIPTION_PLANS.map((plan) => (
+                {orderedProducts.map((product) => (
                   <PlanCard
-                    key={plan.id}
-                    plan={plan}
-                    selected={plan.id === selectedPlanId}
+                    key={product.productId}
+                    product={product}
+                    badge={productDisplay[product.productId]?.badge ?? null}
+                    caption={productDisplay[product.productId]?.marketingText
+                      ?? (product.planId === 'yearly' ? savingsLabel : null)}
+                    selected={product.planId === selectedPlanId}
                     onSelect={setSelectedPlanId}
                   />
                 ))}
@@ -353,33 +375,33 @@ export default function PaywallPanel({
               </TouchableOpacity>
 
               <Text style={styles.trialNote}>
-                {TRIAL_DAYS}-day free trial  •  Cancel anytime
+                {trialOffer ? `${trialOffer}  •  Cancel anytime` : 'Cancel anytime'}
               </Text>
             </>
           )}
 
           {isPro && (
-            <View style={styles.proBanner}>
-              <MaterialCommunityIcons name="crown-outline" size={22} color={CTA_TEXT} />
-              <View>
-                <Text style={styles.proBannerText}>You are on Eazee Pro</Text>
-                <Text style={styles.proBannerPlanText}>
-                  {currentPlan
-                    ? `${currentPlan.title} plan · ${currentPlan.price} ${currentPlan.period}`
-                    : 'Complimentary access'}
-                </Text>
-              </View>
-            </View>
+            <CurrentPlanCard
+              status={status}
+              currentProduct={currentProduct}
+              switchProduct={switchProduct}
+              savingsLabel={savingsLabel}
+              isSandboxAccount={isSandboxAccount}
+              isProcessing={isProcessing}
+              onSwitchPlan={handleSwitchPlan}
+              onManage={handleManage}
+              onOpenHistory={() => router.push('/purchase-history')}
+            />
           )}
 
-          {isPro && (
+          {!isPro && !!status.planId && (
             <TouchableOpacity
               accessibilityRole="button"
               activeOpacity={0.7}
-              onPress={handleCancelSubscription}
-              style={styles.cancelSubscriptionButton}
+              onPress={() => router.push('/purchase-history')}
+              style={styles.restoreButton}
             >
-              <Text style={styles.cancelSubscriptionText}>Cancel subscription</Text>
+              <Text style={styles.restoreText}>Purchase history</Text>
             </TouchableOpacity>
           )}
 
@@ -661,39 +683,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.82)',
     fontSize: 13,
     textAlign: 'center',
-  },
-  proBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    minHeight: 60,
-    paddingVertical: 10,
-    marginTop: 18,
-    borderRadius: 30,
-    backgroundColor: CTA_FILL,
-  },
-  proBannerText: {
-    color: CTA_TEXT,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  proBannerPlanText: {
-    color: CTA_TEXT,
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.8,
-    marginTop: 1,
-  },
-  cancelSubscriptionButton: {
-    marginTop: 14,
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  cancelSubscriptionText: {
-    color: '#FFD6D6',
-    fontSize: 14,
-    fontWeight: '600',
   },
   restoreButton: {
     marginTop: 14,

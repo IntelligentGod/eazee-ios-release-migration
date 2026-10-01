@@ -107,6 +107,7 @@
         }
       ],
       "./ios-device-fixes.plugin.js",
+      "./storekit-config.plugin.js",
       [
         "@sentry/react-native/expo",
         {

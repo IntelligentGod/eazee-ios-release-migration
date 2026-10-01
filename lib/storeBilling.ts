@@ -1,9 +1,9 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import {
-  deepLinkToSubscriptions,
   fetchProducts,
   finishTransaction,
   getActiveSubscriptions,
+  getAllTransactionsIOS,
   getUserFriendlyErrorMessage,
   initConnection,
   isUserCancelledError,
@@ -11,65 +11,46 @@ import {
   purchaseUpdatedListener,
   requestPurchase,
   restorePurchases as restoreStorePurchases,
+  showManageSubscriptionsIOS,
+  type ActiveSubscription,
   type Purchase,
 } from 'expo-iap';
 
-import { SERVER_URL } from '@/config/backend';
 import { auth } from '@/firebaseConfig';
-import { getFirebaseAppCheckHeaders } from '@/lib/firebaseAppCheck';
 import {
   FREE_SUBSCRIPTION_STATUS,
   SUBSCRIPTION_PLANS,
+  getManageSubscriptionUrl,
+  getPlanIdForProduct,
+  readCachedSubscriptionStatus,
   writeCachedSubscriptionStatus,
   type BillingOutcome,
   type SubscriptionPlanId,
   type SubscriptionStatus,
 } from '@/lib/subscription';
-
-/** The server refused the transaction: it was bought by a different Eazee account. */
-class OtherAccountSubscriptionError extends Error {}
-
-async function subscriptionApiRequest(path: string, init: { method: 'GET' | 'POST'; body?: unknown }) {
-  const idToken = await auth.currentUser?.getIdToken().catch(() => null);
-  if (!idToken) {
-    throw new Error('Sign in to manage Eazee Pro');
-  }
-  const response = await fetch(`${SERVER_URL}/subscriptions${path}`, {
-    method: init.method,
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json',
-      ...await getFirebaseAppCheckHeaders(),
-    },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  const body = await response.json().catch(() => null);
-  if (response.status === 403) {
-    throw new OtherAccountSubscriptionError('This App Store subscription belongs to another Eazee account.');
-  }
-  if (!response.ok) {
-    throw new Error(typeof body?.error === 'string' ? body.error : 'Could not reach Eazee');
-  }
-  return body;
-}
-
-/** Ties a purchase to this Eazee account, so another account on the same Apple ID cannot use it. */
-async function fetchAppAccountToken(): Promise<string> {
-  const body = await subscriptionApiRequest('/apple/account-token', { method: 'GET' });
-  if (typeof body?.appAccountToken !== 'string') {
-    throw new Error('Could not prepare the purchase');
-  }
-  return body.appAccountToken;
-}
+import {
+  OtherAccountSubscriptionError,
+  fetchAppAccountToken,
+  fetchSubscriptionOverview,
+  syncAppleTransactions,
+  toSubscriptionStatus,
+  verifyAppleTransaction,
+  type RenewalSnapshot,
+  type SubscriptionOverview,
+} from '@/lib/subscriptionApi';
+import { writeCachedSubscriptionLimits } from '@/lib/subscriptionLimits';
+import { mergeServerUsage } from '@/lib/subscriptionUsage';
+import { FALLBACK_STORE_PRODUCTS, loadStoreProducts, type StoreProduct } from '@/lib/subscriptionProducts';
 
 /**
  * The server checks Apple's signature, the app, the plan, and that this account
  * bought it, then records Pro on the account. Its answer is the source of truth.
  */
 async function verifyTransactionWithServer(signedTransaction: string): Promise<SubscriptionStatus> {
-  const body = await subscriptionApiRequest('/apple/verify', { method: 'POST', body: { signedTransaction } });
+  const body = await verifyAppleTransaction(signedTransaction);
   // New ID tokens carry the Pro claim the server just set, for its own Pro checks.
   await auth.currentUser?.getIdToken(true).catch(() => null);
+  if (body?.subscription) return toSubscriptionStatus(body.subscription);
   const planId = body?.planId === 'monthly' || body?.planId === 'yearly' ? body.planId : null;
   return body?.isPro === true && planId
     ? { isPro: true, planId, verifiedAt: Date.now() }
@@ -81,9 +62,10 @@ export const isBillingConfigured = () => Platform.OS === 'ios';
 
 const NOT_AVAILABLE_MESSAGE = 'Eazee Pro can be purchased on iPhone through the App Store.';
 const PRODUCT_IDS = SUBSCRIPTION_PLANS.map((plan) => plan.productId);
-
-const getPlanIdForProduct = (productId?: string | null): SubscriptionPlanId | null =>
-  SUBSCRIPTION_PLANS.find((plan) => plan.productId === productId)?.id ?? null;
+/** StoreKit sometimes reports a downgrade without a new transaction; stop waiting after this. */
+const PURCHASE_RESULT_TIMEOUT_MS = 90_000;
+/** The server accepts at most 25 transactions per sync. */
+const MAX_SYNCED_TRANSACTIONS = 25;
 
 let connectionPromise: Promise<boolean> | null = null;
 
@@ -98,6 +80,10 @@ function ensureStoreConnection() {
   return connectionPromise;
 }
 
+/** Plans with their App Store names and localized prices. */
+export const getStoreProducts = async (): Promise<StoreProduct[]> =>
+  isBillingConfigured() ? loadStoreProducts(ensureStoreConnection) : FALLBACK_STORE_PRODUCTS;
+
 const toFailureOutcome = (error: unknown): BillingOutcome =>
   isUserCancelledError(error)
     ? { status: 'cancelled' }
@@ -106,6 +92,11 @@ const toFailureOutcome = (error: unknown): BillingOutcome =>
 /**
  * Buys a plan and resolves once StoreKit reports the result. The purchase result
  * arrives on expo-iap's listeners, not from requestPurchase's return value.
+ *
+ * Switching between monthly and yearly is the same call: both plans are in one
+ * subscription group, and buying the other one with the same appAccountToken
+ * lets Apple handle proration and timing (an upgrade starts now, a downgrade at
+ * the next renewal).
  */
 export async function purchaseSubscription(planId: SubscriptionPlanId): Promise<BillingOutcome> {
   if (!isBillingConfigured()) {
@@ -129,18 +120,20 @@ export async function purchaseSubscription(planId: SubscriptionPlanId): Promise<
     return toFailureOutcome(error);
   }
 
-  return new Promise<BillingOutcome>((resolve) => {
+  const outcome = await new Promise<BillingOutcome>((resolve) => {
     let settled = false;
-    const settle = (outcome: BillingOutcome) => {
+    const settle = (result: BillingOutcome) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeout);
       updatedSubscription.remove();
       errorSubscription.remove();
-      resolve(outcome);
+      resolve(result);
     };
 
+    // A plan change can come back as a transaction for either plan, so any of ours settles it.
     const updatedSubscription = purchaseUpdatedListener((purchase: Purchase) => {
-      if (purchase.productId !== sku) return;
+      if (!getPlanIdForProduct(purchase.productId)) return;
       void handleStoreTransaction(purchase)
         .then((status) => settle(
           status.isPro && status.planId
@@ -157,10 +150,26 @@ export async function purchaseSubscription(planId: SubscriptionPlanId): Promise<
         ));
     });
     const errorSubscription = purchaseErrorListener((error) => settle(toFailureOutcome(error)));
+    const timeout = setTimeout(() => settle({ status: 'pending' }), PURCHASE_RESULT_TIMEOUT_MS);
 
     requestPurchase({ request: { apple: { sku, appAccountToken } }, type: 'subs' })
       .catch((error) => settle(toFailureOutcome(error)));
   });
+
+  // Renewal info (a downgrade due at renewal, auto-renew) only reaches the server through a sync.
+  if (outcome.status === 'success' || outcome.status === 'pending') {
+    const userId = auth.currentUser?.uid;
+    if (userId) await syncStoreSubscriptionStatus(userId);
+  }
+  return outcome;
+}
+
+/** Monthly <-> yearly. Refuses to "switch" to the plan the account already has. */
+export async function changeSubscriptionPlan(currentPlanId: SubscriptionPlanId | null, targetPlanId: SubscriptionPlanId) {
+  if (currentPlanId === targetPlanId) {
+    return { status: 'unavailable', message: 'You are already on this plan.' } satisfies BillingOutcome;
+  }
+  return purchaseSubscription(targetPlanId);
 }
 
 /**
@@ -197,25 +206,54 @@ async function verifyAndFinishTransaction(purchase: Purchase): Promise<Subscript
   }
 }
 
+const toRenewalSnapshot = (subscription: ActiveSubscription): RenewalSnapshot | undefined => {
+  const renewal = subscription.renewalInfoIOS;
+  if (!renewal) return undefined;
+  return {
+    productId: subscription.productId,
+    willAutoRenew: renewal.willAutoRenew,
+    pendingProductId: renewal.pendingUpgradeProductId ?? null,
+    isInBillingRetry: renewal.isInBillingRetry ?? undefined,
+  };
+};
+
 /**
- * This account's Pro status: StoreKit's active subscription on this Apple ID, as
- * confirmed by the server. A subscription bought by another Eazee account counts as free here.
+ * Sends StoreKit's view of this Apple ID to the server: the active subscription
+ * with its renewal info (auto-renew, a pending downgrade) and recent
+ * transactions, so purchase history includes renewals and plan changes made
+ * outside the app. Returns false when there is nothing to send.
  */
-async function readActiveStoreSubscription(): Promise<SubscriptionStatus> {
+async function sendStoreStateToServer(): Promise<boolean> {
   await ensureStoreConnection();
-  const subscriptions = await getActiveSubscriptions(PRODUCT_IDS);
-  const active = subscriptions.find((subscription) => subscription.isActive && getPlanIdForProduct(subscription.productId));
-  if (!active?.purchaseToken) {
-    return { ...FREE_SUBSCRIPTION_STATUS, verifiedAt: Date.now() };
-  }
+  const [active, history] = await Promise.all([
+    getActiveSubscriptions(PRODUCT_IDS),
+    getAllTransactionsIOS().catch(() => [] as Purchase[]),
+  ]);
+  const current = active.find((subscription) => subscription.isActive && getPlanIdForProduct(subscription.productId));
+  const recent = [...history]
+    .filter((purchase) => getPlanIdForProduct(purchase.productId) && purchase.purchaseToken)
+    .sort((a, b) => (b.transactionDate || 0) - (a.transactionDate || 0))
+    .map((purchase) => purchase.purchaseToken!);
+  const tokens = [...new Set([current?.purchaseToken, ...recent].filter((token): token is string => !!token))]
+    .slice(0, MAX_SYNCED_TRANSACTIONS);
+  if (!tokens.length) return false;
   try {
-    return await verifyTransactionWithServer(active.purchaseToken);
+    await syncAppleTransactions(tokens, current ? toRenewalSnapshot(current) : undefined);
+    await auth.currentUser?.getIdToken(true).catch(() => null);
   } catch (error) {
-    if (error instanceof OtherAccountSubscriptionError) {
-      return { ...FREE_SUBSCRIPTION_STATUS, verifiedAt: Date.now() };
-    }
-    throw error;
+    // Bought by another Eazee account on this Apple ID: nothing to apply here.
+    if (!(error instanceof OtherAccountSubscriptionError)) throw error;
   }
+  return true;
+}
+
+/** Caches what the server reports: plan, limits and today's usage. */
+async function cacheSubscriptionOverview(userId: string, overview: SubscriptionOverview) {
+  await Promise.all([
+    writeCachedSubscriptionStatus(userId, toSubscriptionStatus(overview.subscription)),
+    writeCachedSubscriptionLimits(userId, overview.limits),
+    mergeServerUsage(userId, overview.usage),
+  ]);
 }
 
 export async function restorePurchases(): Promise<BillingOutcome> {
@@ -226,9 +264,13 @@ export async function restorePurchases(): Promise<BillingOutcome> {
   try {
     await ensureStoreConnection();
     await restoreStorePurchases();
-    const status = await readActiveStoreSubscription();
-    return status.isPro && status.planId
-      ? { status: 'success', planId: status.planId }
+    await sendStoreStateToServer();
+    const overview = await fetchSubscriptionOverview();
+    const userId = auth.currentUser?.uid;
+    if (userId) await cacheSubscriptionOverview(userId, overview);
+    const { isPro, plan, isUnlimitedAccount } = overview.subscription;
+    return isPro && plan && !isUnlimitedAccount
+      ? { status: 'success', planId: plan }
       : { status: 'unavailable', message: 'No active Eazee Pro subscription was found for this Eazee account and Apple ID.' };
   } catch (error) {
     return toFailureOutcome(error);
@@ -236,16 +278,25 @@ export async function restorePurchases(): Promise<BillingOutcome> {
 }
 
 /**
- * Refreshes the cached Pro status from StoreKit, so renewals, cancellations and
- * expirations are picked up. A failed check keeps the cached status, so being
- * offline never takes Pro away.
+ * Refreshes the cached Pro status, limits and usage: StoreKit's state goes to
+ * the server first, then the server's answer is cached. A failed check keeps the
+ * cached status, so being offline never takes Pro away.
  */
-export async function syncStoreSubscriptionStatus(userId: string) {
-  if (!isBillingConfigured()) return;
+export async function syncStoreSubscriptionStatus(userId: string): Promise<SubscriptionOverview | null> {
+  if (isBillingConfigured()) {
+    try {
+      await sendStoreStateToServer();
+    } catch (error) {
+      console.warn('Could not check the App Store subscription:', error);
+    }
+  }
   try {
-    await writeCachedSubscriptionStatus(userId, await readActiveStoreSubscription());
+    const overview = await fetchSubscriptionOverview();
+    await cacheSubscriptionOverview(userId, overview);
+    return overview;
   } catch (error) {
-    console.warn('Could not check the App Store subscription:', error);
+    console.warn('Could not load the Eazee subscription:', error);
+    return null;
   }
 }
 
@@ -271,7 +322,25 @@ export function listenForStoreTransactions(onTransaction: () => void) {
   }
 }
 
-/** Apple's own manage-subscriptions sheet, where the user can cancel or switch plans. */
-export async function openStoreSubscriptionManagement() {
-  await deepLinkToSubscriptions();
+/**
+ * Apple's manage-subscriptions sheet, shown inside the app, where the user can
+ * cancel or switch plans (apps cannot cancel a subscription themselves). Falls
+ * back to the App Store's subscriptions page when the sheet is unavailable.
+ * Once it closes, StoreKit's new state is sent to the server and cached.
+ */
+export async function openManageSubscriptions(userId: string): Promise<SubscriptionStatus> {
+  const cached = await readCachedSubscriptionStatus(userId);
+  if (isBillingConfigured()) {
+    try {
+      await ensureStoreConnection();
+      await showManageSubscriptionsIOS();
+    } catch (error) {
+      console.warn('Manage subscriptions sheet unavailable:', error);
+      await Linking.openURL(getManageSubscriptionUrl(cached.planId)).catch(() => {});
+    }
+  } else {
+    await Linking.openURL(getManageSubscriptionUrl(cached.planId)).catch(() => {});
+  }
+  await syncStoreSubscriptionStatus(userId);
+  return readCachedSubscriptionStatus(userId);
 }

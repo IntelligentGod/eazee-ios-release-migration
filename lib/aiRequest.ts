@@ -4,7 +4,8 @@ import { createAiAuthRequiredError } from '@/lib/aiAuth';
 import { getFirebaseAppCheckHeaders } from '@/lib/firebaseAppCheck';
 import { createSubscriptionRequiredError } from '@/lib/subscriptionAccess';
 import { checkAiFeatureAccess, recordAiAction } from '@/lib/subscriptionUsage';
-import { isUnchargedChatFeature, type AiFeatureKey } from '@/lib/subscription';
+import { readCachedSubscriptionLimits } from '@/lib/subscriptionLimits';
+import { isChatMeteredFeature, type AiFeatureKey } from '@/lib/subscription';
 
 /**
  * Every server-backed AI call funnels through here, so this is where the plan
@@ -25,7 +26,7 @@ export const getAiRequestHeaders = async (feature: AiFeatureKey = 'aiChat') => {
 
   const decision = await checkAiFeatureAccess(user.uid, feature, user.email);
   if (!decision.allowed) {
-    throw createSubscriptionRequiredError(decision, feature);
+    throw createSubscriptionRequiredError(decision, feature, await readCachedSubscriptionLimits(user.uid));
   }
 
   const firebaseIdToken = await user.getIdToken().catch(() => null);
@@ -33,10 +34,9 @@ export const getAiRequestHeaders = async (feature: AiFeatureKey = 'aiChat') => {
     throw createAiAuthRequiredError();
   }
 
-  // Counted only once the request is cleared to go out. Tool results and the
-  // automatic session title finish a turn that was already charged, and voice
-  // is metered by duration instead.
-  if (!isUnchargedChatFeature(feature) && feature !== 'voiceInput') {
+  // Counted only once the request is cleared to go out, and only for what the
+  // server counts as an AI action (see isChatMeteredFeature).
+  if (isChatMeteredFeature(feature)) {
     await recordAiAction(user.uid);
   }
 
