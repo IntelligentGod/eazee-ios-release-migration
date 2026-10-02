@@ -540,6 +540,43 @@ const plan_my_day: ToolHandler = async (args: any) => {
   return buildDayPlanCardValue(date, plannedTimeline, draftId);
 };
 
+const MAX_WEEK_PLAN_DAYS = 7;
+
+/**
+ * Fix my life: one call drafts every day, because a client tool call ends the model's turn.
+ * Each day is a single plan, its main goal, saved as a todo for that day with no time.
+ */
+const plan_my_week: ToolHandler = async (args: any) => {
+  const seenDates = new Set<string>();
+  const openTodoIdsByTitle = await fetchOpenTodoIdsByTitle();
+  const days = (Array.isArray(args?.days) ? args.days : [])
+    .map((day: any) => ({ date: normalizePlanDate(day?.date), mainGoal: normalizeText(day?.mainGoal) }))
+    .filter((day: { date: string; mainGoal: string }) => day.mainGoal && !seenDates.has(day.date) && !!seenDates.add(day.date))
+    .sort((left: { date: string }, right: { date: string }) => left.date.localeCompare(right.date))
+    .slice(0, MAX_WEEK_PLAN_DAYS);
+  if (!days.length) throw new Error('NO_WEEK_PLAN_DAYS');
+
+  const stamp = Date.now().toString(36);
+  return {
+    days: days.map(({ date, mainGoal }: { date: string; mainGoal: string }) => {
+      const goalItem: DayPlanTimelineItem = {
+        id: `draft-goal-${date}`,
+        kind: 'task',
+        source: 'draft',
+        title: mainGoal,
+        dueDate: date,
+        hasDueTime: false,
+        durationMinutes: 45,
+        timeSource: 'none',
+        priority: 'high',
+        starred: true,
+        existingTodoId: openTodoIdsByTitle.get(normalizeTodoTitleKey(mainGoal)),
+      };
+      return { ...buildDayPlanCardValue(date, [goalItem], `week-plan-${date}-${stamp}`), mainGoal };
+    }),
+  };
+};
+
 const save_day_plan: ToolHandler = async () => {
   const plan = getLastDayPlan();
   if (!plan) {
@@ -916,6 +953,7 @@ const daily_overview: ToolHandler = async (args: any) => {
 
 export const overviewToolHandlers: Record<string, ToolHandler> = {
   plan_my_day,
+  plan_my_week,
   save_day_plan,
   daily_overview,
 };

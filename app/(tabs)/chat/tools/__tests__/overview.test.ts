@@ -536,6 +536,37 @@ describe('plan_my_day', () => {
     });
   });
 
+  it('drafts one card per week day holding only its main goal', async () => {
+    const result = await executeToolCall(
+      {
+        name: 'plan_my_week',
+        arguments: {
+          days: [
+            { date: '2026-03-19', mainGoal: 'Practice vowel sounds' },
+            { date: '2026-03-18', mainGoal: 'Record pronunciation baseline' },
+            { date: '2026-03-18', mainGoal: 'Duplicate' },
+            { date: '2026-03-20', mainGoal: ' ' },
+          ],
+        },
+      },
+      { serverUrl: 'http://localhost' }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.messages).toHaveLength(3);
+    expect(result.messages[0]?.content).toContain('2 days');
+    expect(result.messages.slice(1).map((message: any) => [message.card?.date, message.card?.mainGoal])).toEqual([
+      ['2026-03-18', 'Record pronunciation baseline'],
+      ['2026-03-19', 'Practice vowel sounds'],
+    ]);
+    const card = result.messages[1]?.card;
+    expect(card?.timelineItems).toHaveLength(1);
+    expect(card?.calendarItems).toEqual([]);
+    expect(card?.todoItems).toEqual([
+      expect.objectContaining({ text: 'Record pronunciation baseline', dueDate: '2026-03-18', hasDueTime: false }),
+    ]);
+  });
+
   it('saves a confirmed plan before classifying todos in the background', async () => {
     jest.useFakeTimers();
     try {

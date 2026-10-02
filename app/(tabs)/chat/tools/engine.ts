@@ -108,6 +108,27 @@ export async function executeToolCall(
             card,
           },
         ];
+      } else if (name === 'plan_my_week') {
+        const days: any[] = Array.isArray(result?.days) ? result.days : [];
+        const cards = days.map((day) => ({
+          type: 'dayPlan' as const,
+          draftId: typeof day?.draftId === 'string' ? day.draftId : undefined,
+          date: String(day?.date || ''),
+          mainGoal: typeof day?.mainGoal === 'string' ? day.mainGoal : undefined,
+          calendarItems: Array.isArray(day?.calendarItems) ? day.calendarItems : [],
+          todoItems: Array.isArray(day?.todoItems) ? day.todoItems : [],
+          timelineItems: Array.isArray(day?.timelineItems) ? day.timelineItems : undefined,
+          saveBlockedReason: typeof day?.saveBlockedReason === 'string' ? day.saveBlockedReason : undefined,
+        }));
+        const first = cards[0];
+        if (first) setLastDayPlan(first);
+        messages = [
+          {
+            role: 'assistant',
+            content: `Here's your week: ${cards.length} ${cards.length === 1 ? 'day' : 'days'}, one main goal per day. Tap Save on each day you want, or reply with changes.`,
+          },
+          ...cards.map((card) => ({ role: 'assistant' as const, content: '', card })),
+        ];
       } else if (name === 'save_day_plan') {
         const savedPlan = getLastDayPlan();
         const shouldShowHomeShortcut = savedPlan?.date === getLocalTodayYmd();

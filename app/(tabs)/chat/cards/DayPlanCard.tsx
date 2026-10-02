@@ -44,6 +44,7 @@ type Props = {
   todoItems: TodoItem[];
   timelineItems?: DayPlanTimelineItem[];
   saveBlockedReason?: string;
+  mainGoal?: string;
   saved?: boolean;
   cancelled?: boolean;
   onChange?: (nextCard: DayPlanCardValue) => void;
@@ -115,6 +116,7 @@ export function DayPlanCard({
   todoItems,
   timelineItems,
   saveBlockedReason,
+  mainGoal,
   saved,
   cancelled,
   onChange,
@@ -139,7 +141,7 @@ export function DayPlanCard({
   const canCancel = !!onCancel && !isSaving && !isCancelling && !saved && !cancelled;
 
   const emitTimeline = (nextItems: DayPlanTimelineItem[]) => {
-    onChange?.(buildDayPlanCardValue(date, nextItems, draftId));
+    onChange?.({ ...buildDayPlanCardValue(date, nextItems, draftId), mainGoal });
   };
 
   const closePicker = () => {
@@ -351,12 +353,26 @@ export function DayPlanCard({
       <View style={{ paddingVertical: 12, paddingHorizontal: 12, gap: 10 }}>
         <View style={{ paddingHorizontal: 2, paddingTop: 2 }}>
           <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>Plan for {formatDateLabel(date)}</Text>
-          <Text style={{ color: '#037A7A', fontSize: 12, marginTop: 2 }}>
-            {eventCount} events • {taskCount} tasks
-          </Text>
+          {!mainGoal && (
+            <Text style={{ color: '#037A7A', fontSize: 12, marginTop: 2 }}>
+              {eventCount} events • {taskCount} tasks
+            </Text>
+          )}
         </View>
 
-        {visibleItems.length > 0 ? (
+        {mainGoal ? (
+          <View
+            style={{
+              backgroundColor: 'rgba(43, 165, 145, 0.85)',
+              borderRadius: CHAT_SURFACE_RADIUS,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+            }}
+          >
+            <Text style={[sectionTitleStyle, { color: 'rgba(255, 255, 255, 0.75)' }]}>Main goal</Text>
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 4 }}>{mainGoal}</Text>
+          </View>
+        ) : visibleItems.length > 0 ? (
           <View style={{ gap: 6 }}>
             <Text style={[sectionTitleStyle, { color: '#A3CFCF' }]}>Timeline</Text>
             <FlatList

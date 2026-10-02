@@ -1446,6 +1446,7 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
               todoItems={message.card.todoItems ?? []}
               timelineItems={message.card.timelineItems ?? []}
               saveBlockedReason={message.card.saveBlockedReason}
+              mainGoal={message.card.mainGoal}
               saved={message.card.saved === true}
               cancelled={message.card.cancelled === true}
               onChange={onUpdateDayPlanCard}

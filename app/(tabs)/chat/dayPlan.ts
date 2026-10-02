@@ -49,6 +49,8 @@ export type DayPlanCardValue = {
   }>;
   timelineItems?: DayPlanTimelineItem[];
   saveBlockedReason?: string;
+  /** The day's main goal, set when the day was drafted as part of a week plan. */
+  mainGoal?: string;
   saved?: boolean;
   cancelled?: boolean;
 };
