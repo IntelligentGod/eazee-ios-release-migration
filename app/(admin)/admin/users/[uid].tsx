@@ -35,7 +35,9 @@ function ProfileSection({ detail }: { detail: AdminUserDetail }) {
       {auth?.disabled && <Field label="Account" value="Disabled" />}
       <Field
         label="Plan"
-        value={subscription?.isUnlimitedAccount ? 'Unlimited (test account)' : subscription?.plan ? `Pro ${subscription.plan}` : 'Free'}
+        value={subscription?.isUnlimitedAccount
+          ? 'Unlimited (test account)'
+          : subscription?.isPro && subscription.plan ? `Pro ${subscription.plan}` : 'Free'}
       />
       <Field label="Status" value={subscription?.state ?? 'none'} />
       <Field label="Expires" value={dateOrDash(subscription?.expiresAt)} />

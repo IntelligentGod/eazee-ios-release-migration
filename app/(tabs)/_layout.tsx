@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import { getTabGuidanceTargetId, type GuidanceTab } from '@/lib/navigationHelp';
 import { useTabContext } from '@/app/context/TabContext';
-import RoleChoiceGate from '@/components/RoleChoiceGate';
 import Animated, {
   Easing,
   interpolate,
@@ -380,11 +379,7 @@ function FloatingTabLayout() {
 }
 
 export default function TabLayout() {
-  return (
-    <RoleChoiceGate>
-      {Platform.OS === 'ios' ? <IosTabLayout /> : <FloatingTabLayout />}
-    </RoleChoiceGate>
-  );
+  return Platform.OS === 'ios' ? <IosTabLayout /> : <FloatingTabLayout />;
 }
 
 const styles = StyleSheet.create({

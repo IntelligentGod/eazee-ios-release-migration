@@ -52,13 +52,13 @@ function IncomeSummary({ report }: { report: IncomeReport }) {
         <StatTile label="MRR (est.)" value={formatMoney(subscribers.mrr)} detail="Renewing paid plans, yearly / 12" />
         <StatTile
           label="Active subscribers"
-          value={String(subscribers.active + subscribers.cancelled + subscribers.billingRetry)}
+          value={String(subscribers.active + subscribers.billingRetry)}
           detail={`${subscribers.byPlan.monthly} monthly · ${subscribers.byPlan.yearly} yearly`}
         />
         <StatTile
-          label="Not renewing"
+          label="Cancelled"
           value={String(subscribers.cancelled)}
-          detail={`${subscribers.trial} in free trial · ${subscribers.billingRetry} billing issues`}
+          detail={`Back on Free · ${subscribers.trial} in free trial · ${subscribers.billingRetry} billing issues`}
         />
       </View>
 

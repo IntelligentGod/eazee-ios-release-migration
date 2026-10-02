@@ -1,8 +1,6 @@
 import {
-  getPostLoginRoute,
   isStaffRole,
   isSuperAdminRole,
-  needsRoleChoice,
   readRoleClaim,
   readUserRole,
 } from '@/lib/userRole';
@@ -43,24 +41,9 @@ describe('readUserRole', () => {
   });
 });
 
-describe('routing by role', () => {
-  it('sends admins and the super admin to the chooser after login, and customers to the AI chat', () => {
-    expect(getPostLoginRoute('superAdmin')).toBe('/role-chooser');
-    expect(getPostLoginRoute('admin')).toBe('/role-chooser');
-    expect(getPostLoginRoute('customer')).toBe('/(tabs)/chat');
-  });
-
-  it('shows staff the chooser on every cold start until they choose, and never shows it to customers', () => {
-    // A cold start with a saved session begins with nothing chosen this launch.
-    expect(needsRoleChoice('superAdmin', false)).toBe(true);
-    expect(needsRoleChoice('admin', false)).toBe(true);
-    expect(needsRoleChoice('admin', true)).toBe(false);
-    expect(needsRoleChoice('customer', false)).toBe(false);
-    expect(needsRoleChoice(null, false)).toBe(false);
-  });
-
-  it('knows which roles are staff and which can manage roles', () => {
-    expect([isStaffRole('superAdmin'), isStaffRole('admin'), isStaffRole('customer')]).toEqual([true, true, false]);
+describe('role helpers', () => {
+  it('knows which roles are staff (they see the Admin panel row in Settings) and which can manage roles', () => {
+    expect([isStaffRole('superAdmin'), isStaffRole('admin'), isStaffRole('customer'), isStaffRole(null)]).toEqual([true, true, false, false]);
     expect([isSuperAdminRole('superAdmin'), isSuperAdminRole('admin')]).toEqual([true, false]);
   });
 });

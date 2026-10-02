@@ -25,13 +25,14 @@ const SECTIONS: Section[] = [
 ];
 
 export default function AdminHomeScreen() {
-  const { role, markRoleChosen } = useRoleSession();
+  const { role } = useRoleSession();
+  const backToApp = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/home'));
   const sections = SECTIONS.filter((section) => !section.superAdminOnly || isSuperAdminRole(role));
 
   return (
     <SimpleScreen
       title="Admin panel"
-      onBack={() => router.replace('/role-chooser')}
+      onBack={backToApp}
       right={role ? <View className="pr-2"><RoleBadge role={role} /></View> : null}
     >
       <ScrollView contentContainerStyle={{ gap: 12, padding: 16 }}>
@@ -55,20 +56,10 @@ export default function AdminHomeScreen() {
         ))}
         <TouchableOpacity
           accessibilityRole="button"
-          onPress={() => {
-            markRoleChosen();
-            router.replace('/(tabs)/chat');
-          }}
+          onPress={backToApp}
           className="mt-2 items-center rounded-2xl bg-[#0F5A4D] p-4"
         >
-          <Text className="font-bold text-white">Open the user app</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityRole="button"
-          onPress={() => router.replace('/role-chooser')}
-          className="items-center rounded-2xl border border-[#0F5A4D] p-4"
-        >
-          <Text className="font-bold text-[#0F5A4D]">Back to the chooser</Text>
+          <Text className="font-bold text-white">Back to the app</Text>
         </TouchableOpacity>
       </ScrollView>
     </SimpleScreen>

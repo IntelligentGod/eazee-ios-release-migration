@@ -20,6 +20,7 @@ import { TodoCard, CalendarListCard, CalendarDetailCard, DailyOverviewCard, DayP
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFloatingTabBarInset } from '@/components/navigation/floatingTabBar';
 import AIInputBox from '@/components/AIInputBox';
+import AiReplyLoadingOverlay from '@/components/AiReplyLoadingOverlay';
 import FancyText from '@/components/FancyText';
 import ScreenHeader from '@/components/ScreenHeader';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
@@ -1686,6 +1687,9 @@ function buildCompactHandoffRequest(handoff: CompactAiChatHandoff) {
   };
 }
 
+/** Longest the Fix my life overlay may block the screen if no reply ever arrives. */
+const FIX_MY_LIFE_MAX_WAIT_MS = 120_000;
+
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { compactHandoff, compactHandoffNonce, chatAction, chatActionNonce } = useLocalSearchParams<{
@@ -2045,6 +2049,11 @@ export default function ChatScreen() {
   const clientIdRef = useRef<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatUIMessage[]>([]);
   const [isBootstrappingCompactHandoff, setIsBootstrappingCompactHandoff] = useState(false);
+  /**
+   * Fix my life waits for the AI's first reply behind a blocking overlay:
+   * 'starting' while the new chat is prepared, 'sent' until the first reply appears.
+   */
+  const [fixMyLifeWaitPhase, setFixMyLifeWaitPhase] = useState<'starting' | 'sent' | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSessionListItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSessionSummary, setActiveSessionSummary] = useState('');
@@ -2276,6 +2285,11 @@ export default function ChatScreen() {
   const isListening = isStreaming;
   const isCurrentSessionTyping = !!activeSessionId && typingSessionIds.includes(activeSessionId);
   const showCompactHandoffLoader = isBootstrappingCompactHandoff && chatMessages.length === 0;
+  // Fix my life starts a new chat, so any assistant text or card in it is the first reply.
+  const hasFirstAssistantReply = chatMessages.some((message) => message.role === 'assistant' && (!!message.content?.trim() || !!message.card));
+  const hasFailedDelivery = chatMessages.some((message) => message.deliveryStatus === 'failed');
+  const isAwaitingFixMyLifeReply = fixMyLifeWaitPhase === 'starting'
+    || (fixMyLifeWaitPhase === 'sent' && !hasFirstAssistantReply && !hasFailedDelivery);
   const activeChatSession = activeSessionId
     ? chatSessions.find((session) => session.id === activeSessionId)
     : null;
@@ -4663,6 +4677,19 @@ export default function ChatScreen() {
     }
   }, [refreshChatSessions, replaceVisibleChat, stopActiveChatResponse]);
 
+  // The wait ends with the first reply or a failed send; the timeout only guards against a stuck stream.
+  useEffect(() => {
+    if (fixMyLifeWaitPhase === 'sent' && (hasFirstAssistantReply || hasFailedDelivery)) {
+      setFixMyLifeWaitPhase(null);
+    }
+  }, [fixMyLifeWaitPhase, hasFailedDelivery, hasFirstAssistantReply]);
+
+  useEffect(() => {
+    if (!fixMyLifeWaitPhase) return;
+    const timeout = setTimeout(() => setFixMyLifeWaitPhase(null), FIX_MY_LIFE_MAX_WAIT_MS);
+    return () => clearTimeout(timeout);
+  }, [fixMyLifeWaitPhase]);
+
   useEffect(() => {
     if (!fixMyLifeRequestKey) return;
     setFixMyLifeRequestKey('');
@@ -4676,15 +4703,18 @@ export default function ChatScreen() {
       }
 
       try {
+        setFixMyLifeWaitPhase('starting');
         setIsBootstrappingCompactHandoff(true);
         await handleNewChat();
         const content = await loadWeekPlanContext(user?.uid);
         weekPlanContextRef.current = { sessionId: null, content };
+        setFixMyLifeWaitPhase('sent');
         await sendTextMessage('Fix my life: plan my whole week.', {
           onRequestStarted: () => setIsBootstrappingCompactHandoff(false),
         });
       } catch (error) {
         console.warn('Could not start Fix my life:', error);
+        setFixMyLifeWaitPhase(null);
         Alert.alert('Error', 'Could not start planning your week. Please try again.');
       } finally {
         setIsBootstrappingCompactHandoff(false);
@@ -5205,6 +5235,8 @@ export default function ChatScreen() {
               }}
             >
               {showCompactHandoffLoader ? (
+                // Fix my life shows its own blocking overlay, so the inline loader stays empty under it.
+                isAwaitingFixMyLifeReply ? <View style={{ flex: 1 }} /> : (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
                   <ActivityIndicator size="small" color="#C8FFFB" />
                   <Text
@@ -5219,6 +5251,7 @@ export default function ChatScreen() {
                     Continuing chat
                   </Text>
                 </View>
+                )
               ) : showChatPanel ? (
                 <FlatList
                   key={activeSessionId || 'empty-chat'}
@@ -5423,6 +5456,11 @@ export default function ChatScreen() {
             </Animated.View>
           </LowerSwipeGesture>
         </View>
+        <AiReplyLoadingOverlay
+          visible={isAwaitingFixMyLifeReply}
+          title="Planning your week..."
+          subtitle="Eazee is looking at your todos, calendar and goals. This can take a little while."
+        />
         <ChatHistoryModal
           visible={isHistoryModalVisible}
           sessions={chatSessions}

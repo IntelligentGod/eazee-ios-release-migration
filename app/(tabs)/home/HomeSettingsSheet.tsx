@@ -734,7 +734,11 @@ export default function HomeSettingsSheet({
     void toggleLeftHanded();
   }, [toggleLeftHanded]);
 
-  const { tier: subscriptionTier } = useSubscriptionStatus(userId);
+  const { tier: subscriptionTier, status: subscriptionStatus } = useSubscriptionStatus(userId);
+  // Pro shows its plan; complimentary Pro with no recorded plan just says Pro.
+  const subscriptionBadgeLabel = subscriptionTier !== 'pro'
+    ? 'Free'
+    : subscriptionStatus.planId === 'yearly' ? 'Yearly' : subscriptionStatus.planId === 'monthly' ? 'Monthly' : 'Pro';
   const { role } = useRoleSession();
 
   // Admins and the super admin can return to the admin panel from the user app without signing out.
@@ -908,7 +912,7 @@ export default function HomeSettingsSheet({
             <View style={styles.rowRightGroup}>
               <View style={[styles.tierBadge, subscriptionTier === 'pro' && styles.tierBadgePro]}>
                 <Text style={[styles.tierBadgeText, subscriptionTier === 'pro' && styles.tierBadgeTextPro]}>
-                  {subscriptionTier === 'pro' ? 'Pro' : 'Free'}
+                  {subscriptionBadgeLabel}
                 </Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.78)" />
@@ -1161,20 +1165,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  // Free uses the same dark track and border as the unselected options in the pickers (e.g. "Off").
   tierBadge: {
     paddingVertical: 3,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.34)',
+    backgroundColor: 'rgba(46, 45, 34, 0.30)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
   },
-  tierBadgePro: { backgroundColor: '#AEFFE8', borderColor: '#AEFFE8' },
+  // Same cream as the selected option in the Guided / Direct and reminder pickers.
+  tierBadgePro: { backgroundColor: 'rgba(246, 242, 227, 0.94)', borderColor: 'rgba(246, 242, 227, 0.94)' },
   tierBadgeText: {
-    color: 'rgba(255, 255, 255, 0.86)',
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
   },
-  tierBadgeTextPro: { color: '#0C4342' },
+  tierBadgeTextPro: { color: '#4D4A3B' },
   rowEmoji: {
     fontSize: 40,
     lineHeight: 44,

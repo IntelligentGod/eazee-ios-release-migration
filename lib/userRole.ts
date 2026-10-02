@@ -38,19 +38,6 @@ export async function readUserRole(user: Pick<User, 'getIdTokenResult'> | null |
   }
 }
 
-export type PostLoginRoute = '/role-chooser' | '/(tabs)/chat';
-
-/** Admins and the super admin choose between the admin panel and the app; customers go straight to the AI chat. */
-export const getPostLoginRoute = (role: UserRole): PostLoginRoute => (isStaffRole(role) ? '/role-chooser' : '/(tabs)/chat');
-
-/**
- * Staff see the chooser once per app launch and after every sign-in, before
- * any user-app screen; `hasChosenThisLaunch` lives in memory, so closing and
- * reopening the app shows it again.
- */
-export const needsRoleChoice = (role: UserRole | null, hasChosenThisLaunch: boolean) =>
-  isStaffRole(role) && !hasChosenThisLaunch;
-
 export const ROLE_LABELS: Record<UserRole, string> = {
   superAdmin: 'Super Admin',
   admin: 'Admin',

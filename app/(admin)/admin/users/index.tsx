@@ -24,7 +24,9 @@ const STATE_LABELS: Record<AdminUser['subscription']['state'], string> = {
 
 function UserRow({ user }: { user: AdminUser }) {
   const { subscription } = user;
-  const plan = subscription.isUnlimitedAccount ? 'Unlimited (test)' : subscription.plan ? `Pro ${subscription.plan}` : 'Free';
+  const plan = subscription.isUnlimitedAccount
+    ? 'Unlimited (test)'
+    : subscription.isPro && subscription.plan ? `Pro ${subscription.plan}` : 'Free';
   return (
     <TouchableOpacity
       accessibilityRole="button"

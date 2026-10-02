@@ -349,13 +349,6 @@ export default Sentry.wrap(function RootLayout() {
                       }}
                     />
                     <Stack.Screen
-                      name="role-chooser"
-                      options={{
-                        headerShown: false,
-                        gestureEnabled: false
-                      }}
-                    />
-                    <Stack.Screen
                       name="purchase-history"
                       options={{
                         headerShown: false

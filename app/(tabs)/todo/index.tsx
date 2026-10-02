@@ -83,13 +83,13 @@ import { useCompactTabAI, type CompactAiNoticeTarget } from '@/lib/useCompactTab
 import { useCompactGuidanceBridge } from '@/lib/useCompactGuidanceBridge';
 import { useCompactVoiceInput } from '@/lib/useCompactVoiceInput';
 import { isAiAuthRequiredError } from '@/lib/aiAuth';
+import TodoWorkspaceTabs from '@/components/todo/TodoWorkspaceTabs';
 import { GuidedTarget, useGuidance } from '@/components/guidance/GuidanceProvider';
 import {
   getShortcutForGuidanceTarget,
   getTodoBackGuidanceTargetId,
   getTodoItemGuidanceTargetId,
   getTodoControlGuidanceTargetId,
-  getTodoWorkspaceGuidanceTargetId,
   type GuidanceTarget,
 } from '@/lib/navigationHelp';
 import { setGuidanceActiveTab } from '@/lib/guidanceActiveTab';
@@ -10211,7 +10211,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             scrollRef={getWorkspaceScrollRef(workspace)}
             style={styles.listContainer}
             contentContainerStyle={styles.workspaceShellContent}
-            arrowColor={theme.workspaceNameColor}
+            scrollBarColor={theme.workspaceNameColor}
           >
             {sections}
             {hasTodoSearchQuery && sections.length === 0 && (
@@ -13557,6 +13557,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           onChangeQuery={setTodoSearchQuery}
           onToggle={() => setIsTodoSearchVisible((visible) => !visible)}
         />
+        <TodoWorkspaceTabs workspaces={workspaces} activeIndex={currentWorkspace} onSelect={handleDotPress} />
         {showSwipeHint && (
           <Animated.View
             style={[
@@ -13630,96 +13631,6 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               : <View key={`workspace-${w.key}`} style={styles.workspaceContainer} />
           ))}
         </PagerView>
-        <View className="items-center mb-5 mt-3">
-          <View className="flex-row items-center">
-            <Animated.Text
-              className="text-lg font-bold mb-1"
-              style={{
-                color: currentTheme.workspaceNameColor,
-                opacity: workspaceNameAnim.interpolate({
-                  inputRange: [0, 0.3, 0.7, 1],
-                  outputRange: [1, 0, 0, 1],
-                }),
-                transform: [
-                  {
-                    translateY: workspaceNameAnim.interpolate({
-                      inputRange: [0, 0.3, 0.7, 1],
-                      outputRange: [0, -10, 10, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              {workspaces[currentWorkspace]?.displayName}
-            </Animated.Text>
-          </View>
-
-          <View className="flex-row items-center gap-1.5">
-          <TouchableOpacity
-            onPress={() => handleDotPress(currentWorkspace - 1)}
-            disabled={currentWorkspace === 0}
-            hitSlop={{ top: 10, bottom: 10, left: 12, right: 6 }}
-            accessibilityRole="button"
-            accessibilityLabel={`Swipe to ${workspaces[currentWorkspace - 1]?.displayName ?? 'previous list'}`}
-            // Hidden rather than removed at the ends so the dots stay centered.
-            style={{ opacity: currentWorkspace === 0 ? 0 : 0.85 }}
-          >
-            <Ionicons name="chevron-back" size={20} color={currentTheme.workspaceNameColor} />
-          </TouchableOpacity>
-          <View className="flex-row justify-center items-center h-6 relative">
-            {workspaces.map((_, index) => (
-              <GuidedTarget
-                key={workspaces[index]?.key || index}
-                targetId={getTodoWorkspaceGuidanceTargetId(workspaces[index]?.key || '')}
-                label={workspaces[index]?.displayName}
-              >
-                <TouchableOpacity
-                  className="w-6 h-6 justify-center items-center"
-                  onPress={() => handleDotPress(index)}
-                >
-                  <View
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      backgroundColor: getTodoWorkspaceAppearance(workspaces[index]?.key)?.workspaceDotColor || getTheme(workspaceColors[index]).workspaceDotColor,
-                      opacity: currentWorkspace === index ? 1 : 0.4,
-                      borderWidth: currentWorkspace === index ? 0 : 1,
-                      borderColor: '#F8F8F8'
-                    }}
-                  />
-                </TouchableOpacity>
-              </GuidedTarget>
-            ))}
-            <Animated.View
-              className="absolute left-0 top-0 w-6 h-6 justify-center items-center"
-              style={{
-                transform: [
-                  {
-                    translateX: dotPositionAnim.interpolate({
-                      inputRange: [0, workspaces.length - 1],
-                      outputRange: [0, (workspaces.length - 1) * 24],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <View
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: currentWorkspaceAppearance?.workspaceDotColor || currentTheme.workspaceDotColor, borderWidth: 0 }}
-              />
-            </Animated.View>
-          </View>
-          <TouchableOpacity
-            onPress={() => handleDotPress(currentWorkspace + 1)}
-            disabled={currentWorkspace >= workspaces.length - 1}
-            hitSlop={{ top: 10, bottom: 10, left: 6, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel={`Swipe to ${workspaces[currentWorkspace + 1]?.displayName ?? 'next list'}`}
-            style={{ opacity: currentWorkspace >= workspaces.length - 1 ? 0 : 0.85 }}
-          >
-            <Ionicons name="chevron-forward" size={20} color={currentTheme.workspaceNameColor} />
-          </TouchableOpacity>
-          </View>
-        </View>
         <ActionSheet
           ref={bottomSheetRef}
           keyboardHandlerEnabled={true}

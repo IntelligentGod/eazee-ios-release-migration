@@ -34,45 +34,34 @@ const flush = () => act(async () => {
 });
 
 describe('RoleSessionProvider', () => {
-  it('holds the app until a saved session role is known, then asks a super admin to choose', async () => {
+  it('reads a saved session role on launch', async () => {
     mockAuthState = { user: userWithRole('super', 'superAdmin'), isLoading: false };
     const session = renderSession();
-    expect(session.latest().isResolving).toBe(true);
-    expect(session.latest().needsRoleChoice).toBe(false);
+    expect(session.latest()).toEqual({ role: null, isResolving: true });
 
     await flush();
-    expect(session.latest().role).toBe('superAdmin');
-    expect(session.latest().needsRoleChoice).toBe(true);
-
-    act(() => session.latest().markRoleChosen());
-    expect(session.latest().needsRoleChoice).toBe(false);
+    expect(session.latest()).toEqual({ role: 'superAdmin', isResolving: false });
     session.unmount();
   });
 
-  it('asks again after a new launch: the choice is never persisted', async () => {
-    mockAuthState = { user: userWithRole('admin-1', 'admin'), isLoading: false };
-    const firstLaunch = renderSession();
-    await flush();
-    act(() => firstLaunch.latest().markRoleChosen());
-    firstLaunch.unmount();
-
-    const secondLaunch = renderSession();
-    await flush();
-    expect(secondLaunch.latest().needsRoleChoice).toBe(true);
-    secondLaunch.unmount();
-  });
-
-  it('lets customers straight through, and re-checks the role when another account signs in', async () => {
+  it('re-reads the role when another account signs in', async () => {
     mockAuthState = { user: userWithRole('carol'), isLoading: false };
     const session = renderSession();
     await flush();
-    expect(session.latest()).toMatchObject({ role: 'customer', isResolving: false, needsRoleChoice: false });
+    expect(session.latest().role).toBe('customer');
 
     mockAuthState = { user: userWithRole('admin-2', 'admin'), isLoading: false };
     session.rerender();
     expect(session.latest().isResolving).toBe(true);
     await flush();
-    expect(session.latest()).toMatchObject({ role: 'admin', needsRoleChoice: true });
+    expect(session.latest()).toEqual({ role: 'admin', isResolving: false });
+    session.unmount();
+  });
+
+  it('has no role when signed out', () => {
+    mockAuthState = { user: null, isLoading: false };
+    const session = renderSession();
+    expect(session.latest()).toEqual({ role: null, isResolving: false });
     session.unmount();
   });
 });
