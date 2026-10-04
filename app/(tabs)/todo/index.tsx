@@ -2151,11 +2151,14 @@ TodoComposerDatePicker.displayName = 'TodoComposerDatePicker';
 
 const TodoComposer = React.memo(({
   initialTodo,
+  hideDateChip = false,
   isLeftHanded,
   weekStartsOn,
   onSave,
 }: {
   initialTodo: Partial<TodoItem>;
+  /** Opened from the Today section: the task is for today, so there is no date to pick. */
+  hideDateChip?: boolean;
   isLeftHanded: boolean;
   weekStartsOn: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   onSave: (draft: Partial<TodoItem>) => Promise<void>;
@@ -2362,7 +2365,7 @@ const TodoComposer = React.memo(({
             label={getGoalTimeframeLabel(previewGoalTimeframe)}
             accentColor={composerAccentColor}
           />
-        ) : (
+        ) : hideDateChip ? null : (
           <TouchableOpacity
             onPress={() => setShowDatePicker(true)}
             style={styles.todoComposerChip}
@@ -2817,6 +2820,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   const [fadeAnim] = useState(new Animated.Value(1));
   const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
   const [composerInitialTodo, setComposerInitialTodo] = useState<Partial<TodoItem>>({ hasDueTime: false });
+  const [isComposerForToday, setIsComposerForToday] = useState(false);
   const [composerKey, setComposerKey] = useState(0);
   const [localTodos, setLocalTodos] = useState<TodoItem[]>([]);
   const localTodosRef = useRef<TodoItem[]>([]);
@@ -7031,8 +7035,9 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   }, [getSectionSortScope, refreshLocalTodos]);
 
 
-  const addTodo = useCallback((workspace: string, sectionKey?: GoalSectionKey) => {
+  const addTodo = useCallback((workspace: string, sectionKey?: GoalSectionKey, options?: { forToday?: boolean }) => {
     const nextInitialTodo: Partial<TodoItem> = { workspace, hasDueTime: false };
+    setIsComposerForToday(!!options?.forToday);
 
     if (workspace === 'Goals') {
       const goalTimeframe = sectionKey || 'thisWeek';
@@ -9989,7 +9994,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               ) : (
                 canCreateFromEmptyState ? (
                   <TouchableOpacity
-                    onPress={() => addTodo(workspace, goalSectionKey)}
+                    onPress={() => addTodo(workspace, goalSectionKey, { forToday: !isGoalWorkspace && sectionKey === 'today' })}
                     activeOpacity={0.7}
                     style={styles.emptyStateAddButton}
                   >
@@ -13647,6 +13652,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           <TodoComposer
             key={composerKey}
             initialTodo={composerInitialTodo}
+            hideDateChip={isComposerForToday}
             isLeftHanded={isLeftHanded}
             weekStartsOn={weekStartsOn}
             onSave={saveTodo}
