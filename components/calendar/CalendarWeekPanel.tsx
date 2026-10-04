@@ -20,6 +20,7 @@ import PulsatingLine from '@/app/(tabs)/todo/PulsatingRGB';
 import { type CreateSlotResizeEdge } from '@/utils/calendarCreateSlotResize';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import { getCalendarEventGuidanceTargetId } from '@/lib/navigationHelp';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 export type CalendarEventLike = EventModel;
 
@@ -928,7 +929,7 @@ export default function CalendarWeekPanel(props: CalendarWeekPanelProps) {
         onGestureEvent={onPinchGestureEvent}
         onHandlerStateChange={onPinchHandlerStateChange}
       >
-        <ScrollView
+        <ScrollViewWithBar
           ref={(node) => {
             if (interactionsEnabled) {
               timelineScrollViewRef.current = node;
@@ -947,7 +948,6 @@ export default function CalendarWeekPanel(props: CalendarWeekPanelProps) {
             !createSlotResizeEdge &&
             !isCreateSlotMoving
           }
-          showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
@@ -978,7 +978,7 @@ export default function CalendarWeekPanel(props: CalendarWeekPanelProps) {
           } : undefined}
         >
           <CalendarTimeGrid {...props} />
-        </ScrollView>
+        </ScrollViewWithBar>
       </PinchGestureHandler>
     </View>
   );

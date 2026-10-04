@@ -66,6 +66,7 @@ import {
   isTutorialSessionActive,
   subscribeTutorialProgress,
 } from '@/lib/tutorial';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 const HOUR_HEIGHT = 60;
 const INITIAL_SCALE = 1;
@@ -202,6 +203,40 @@ const queuePendingGoogleCreateSync = async (sync: PendingGoogleCreateSync) => {
     ...syncs.filter((item) => item.localEventId !== sync.localEventId),
     sync,
   ]);
+};
+
+/** How far back app events are copied to Google Calendar when it is (re)connected. */
+const GOOGLE_BACKFILL_LOOKBACK_MS = 30 * 24 * 60 * 60_000;
+
+/**
+ * App events that have no Google copy yet (made before Google was connected, or
+ * a task sent to the calendar) join the pending queue, so the sync below copies
+ * them to Google Calendar. Each gets a fixed Google id, so this never duplicates.
+ */
+const queueUnsyncedLocalEvents = async (now = Date.now()) => {
+  const rows = await database
+    .get<EventModel>('events')
+    .query(
+      Q.where('is_google_event', Q.notEq(true)),
+      Q.or(Q.where('google_event_id', null), Q.where('google_event_id', '')),
+      Q.where('end_date', Q.gte(now - GOOGLE_BACKFILL_LOOKBACK_MS))
+    )
+    .fetch();
+  if (!rows.length) return;
+  const queued = new Set((await readPendingGoogleCreateSyncs()).map((sync) => sync.localEventId));
+  for (const row of rows) {
+    if (queued.has(row.id) || !row.startDate || !row.endDate) continue;
+    await queuePendingGoogleCreateSync({
+      localEventId: row.id,
+      queuedAt: now,
+      title: String(row.title || ''),
+      details: String(row.details || ''),
+      location: String(row.location || ''),
+      guests: [],
+      startDate: new Date(row.startDate),
+      endDate: new Date(row.endDate),
+    });
+  }
 };
 
 const removePendingGoogleCreateSync = async (localEventId: string) => {
@@ -3331,6 +3366,7 @@ const CalendarScreen: React.FC = () => {
     }
     pendingGoogleCreateSyncInFlightRef.current = true;
     try {
+      await queueUnsyncedLocalEvents().catch((error) => console.error('Error finding app events to copy to Google:', error));
       const pendingSyncs = await readPendingGoogleCreateSyncs();
       let shouldRefreshVisibleWeek = false;
 
@@ -3872,9 +3908,8 @@ const CalendarScreen: React.FC = () => {
         </View>
       </View>
       {selectedEvent && eventDetails ? (
-        <ScrollView
+        <ScrollViewWithBar
           bounces={false}
-          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.eventDetailsScrollContent}
         >
@@ -3945,7 +3980,7 @@ const CalendarScreen: React.FC = () => {
               </View>
             </View>
           )}
-        </ScrollView>
+        </ScrollViewWithBar>
       ) : (
         <Text style={styles.eventDetailsLoadingText}>Loading event details...</Text>
       )}
@@ -4662,7 +4697,6 @@ const CalendarScreen: React.FC = () => {
       <View style={styles.calendarHeader}>
         <ScreenHeader
           title="Calendar"
-          subtitle="Powered by Google"
           titleColor="#B3E7F0"
           horizontalPadding={16}
         />

@@ -279,7 +279,7 @@ const MOTION_SMOOTH_STEPS = 50;
  * actually be much brighter than the surrounding surface, which 8-bit LDR can't do.
  * RoomEnvironment on the emulator works for the same reason — its emissive boxes are HDR.
  */
-function buildStudioRoomEquirect(): THREE.DataTexture {
+export function buildStudioRoomEquirect(): THREE.DataTexture {
   const w = 256;
   const h = 128;
   const data = new Uint16Array(w * h * 4);

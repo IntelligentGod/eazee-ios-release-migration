@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -12,6 +12,7 @@ import { useAuthSession } from '../../context/AuthSessionContext';
 import { completeOnboarding } from '@/lib/onboarding';
 import { PasswordInput } from './PasswordInput';
 import { SocialAuthButtons } from './SocialAuthButtons';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 const HOME_BACKGROUND_COLORS: [string, string] = ['#F1ECCE', '#8C8268'];
 const INPUT_BACKGROUND = '#E8E5D3';
@@ -130,10 +131,9 @@ export default function LoginScreen() {
           className="flex-1"
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ScrollView
+          <ScrollViewWithBar
             contentContainerStyle={{ flexGrow: 1 }}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
           >
             <View className="flex-1 px-5 pb-8">
               <View className="flex-row items-center h-9">
@@ -214,7 +214,7 @@ export default function LoginScreen() {
                 <SocialAuthButtons />
               </View>
             </View>
-          </ScrollView>
+          </ScrollViewWithBar>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>

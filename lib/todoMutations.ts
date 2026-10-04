@@ -562,10 +562,22 @@ export const snapshotTodo = (todo: Pick<
   } satisfies TodoSnapshot;
 };
 
+/**
+ * A todo's reminder decides whether its calendar copy gets the Event Reminder, so
+ * event reminders are re-synced after a change. Loaded on use: event reminders
+ * read the calendar, which this module does not otherwise need.
+ */
+const resyncEventReminders = () => {
+  void import('@/lib/eventNotifications')
+    .then(({ syncEventReminders }) => syncEventReminders())
+    .catch(() => {});
+};
+
 const syncReminderForTodo = async (todo: TodoModel, requestPermission = true) => {
   const result = todo.reminderMode === 'none' || !todo.hasDueTime || todo.completed
     ? await cancelTodoReminder(todo)
     : await rescheduleTodoReminder(todo, { requestPermission });
+  resyncEventReminders();
 
   return {
     todo: await database.collections.get<TodoModel>('todos').find(todo.id),
@@ -1291,6 +1303,11 @@ export const deleteTodos = async (ids: string[]) => {
   for (const target of notificationTargets) {
     await cancelTodoReminder(target, { persist: false });
   }
+  // The tasks' calendar events go with them, in the app and on Google Calendar.
+  await import('@/lib/todoCalendarCopies')
+    .then(({ deleteCalendarCopiesForTodos }) => deleteCalendarCopiesForTodos(ids))
+    .catch((error) => console.warn('Could not delete calendar events for deleted tasks:', error));
+  resyncEventReminders();
 
   return snapshots;
 };

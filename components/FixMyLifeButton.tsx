@@ -28,17 +28,17 @@ export default function FixMyLifeButton({ onPress, disabled }: { onPress: () => 
         end={{ x: 1, y: 1 }}
         className="flex-row items-center px-4 py-3 rounded-[20px] border border-white/40"
       >
-        <View className="w-10 h-10 rounded-full items-center justify-center bg-[#4D4A3B]">
-          <MIcon name="auto-fix" size={22} color="#F4EBC4" />
+        <View className="w-10 h-10 rounded-full items-center justify-center bg-white/50 border border-white/70">
+          <MIcon name="auto-fix" size={22} color="#6B5B2E" />
         </View>
         <View className="flex-1 ml-3">
           <Text className="text-[17px] font-bold text-[#3D3A2E]">Fix my life</Text>
           <Text className="text-[12px] font-medium text-[#5A5645]">Plan my whole week, Mon to Sun</Text>
         </View>
-        <View className="px-2 py-0.5 rounded-full bg-[#4D4A3B] mr-1">
-          <Text className="text-[11px] font-bold text-[#F4EBC4]">Pro</Text>
+        <View className="px-2 py-0.5 rounded-full bg-white/50 border border-white/70 mr-1">
+          <Text className="text-[11px] font-bold text-[#6B5B2E]">Pro</Text>
         </View>
-        <MIcon name="chevron-right" size={24} color="#4D4A3B" />
+        <MIcon name="chevron-right" size={24} color="#6B5B2E" />
       </LinearGradient>
     </TouchableOpacity>
   );

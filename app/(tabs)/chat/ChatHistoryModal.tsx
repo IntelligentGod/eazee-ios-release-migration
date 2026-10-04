@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ChatSessionListItem } from './types';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type ChatHistoryModalProps = {
   visible: boolean;
@@ -487,7 +488,7 @@ export function ChatHistoryModal({
               )}
             </View>
           )}
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollViewWithBar keyboardShouldPersistTaps="handled">
             {sessions.length === 0 && (
               <Text style={{ color: '#BEE7E1', textAlign: 'center', marginTop: 24 }}>No chats yet</Text>
             )}
@@ -508,7 +509,7 @@ export function ChatHistoryModal({
                 onTogglePin={onTogglePin}
               />
             ))}
-          </ScrollView>
+          </ScrollViewWithBar>
         </View>
         {pendingDeleteSession && (
           <DeleteChatConfirm

@@ -1,7 +1,8 @@
 import { Platform } from 'react-native';
 
 export const GOOGLE_IOS_CLIENT_ID = '66318687320-4nm86m63fits0ph84p1hg6tghg04jf4c.apps.googleusercontent.com';
-export const GOOGLE_ANDROID_CLIENT_ID = '730804993815-rhbuq7784d1se4ktf5hig7fpscgadbkd.apps.googleusercontent.com';
+// The eazee-app project's Android client (google-services.json), registered for com.eazee.ai and the debug keystore's SHA-1.
+export const GOOGLE_ANDROID_CLIENT_ID = '66318687320-mdc52qtvtauidu10dt1ml14na923ffuh.apps.googleusercontent.com';
 export const GOOGLE_WEB_CLIENT_ID = '66318687320-t4kcjaqjmmi6pgctleub3ca7bhfhlmvv.apps.googleusercontent.com';
 export const FIREBASE_GOOGLE_IOS_CLIENT_ID = GOOGLE_IOS_CLIENT_ID;
 export const FIREBASE_GOOGLE_WEB_CLIENT_ID = GOOGLE_WEB_CLIENT_ID;

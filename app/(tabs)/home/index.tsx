@@ -22,6 +22,7 @@ import TaskGuideModel from '../../../database/models/TaskGuideModel';
 import AIInputBox from '@/components/AIInputBox';
 import HomeBlob, { BLOB_APPEARANCE_PRESETS, type BlobAppearancePresetId } from '@/components/blob/HomeBlob';
 import FixMyLifeButton from '@/components/FixMyLifeButton';
+import ProRequiredDialog from '@/components/ProRequiredDialog';
 import { checkAiFeatureAccess } from '@/lib/subscriptionUsage';
 import type { MoodState } from '@/components/blob/BlobFace';
 import LifeGraphSettingsModal from '@/components/blob/LifeGraphSettingsModal';
@@ -113,6 +114,7 @@ import { computeBehaviorMetrics } from '@/core/blob/BehaviorMetrics';
 import { computeBlobVisualMeaning } from '@/src/blob/blobMeaning';
 import { blobMeaningFromBehaviorMetrics } from '@/src/blob/blobMeaningFromSignals';
 import { BLOB_SCENARIOS } from '@/src/blob/blobScenarioPresets';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type GoogleEvent = HomeGoogleEvent;
 
@@ -2400,6 +2402,7 @@ export default function HomePage() {
   };
 
   const [isCheckingFixMyLifeAccess, setIsCheckingFixMyLifeAccess] = useState(false);
+  const [isFixMyLifeProDialogVisible, setIsFixMyLifeProDialogVisible] = useState(false);
   const handleFixMyLife = useCallback(async () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
@@ -2413,11 +2416,9 @@ export default function HomePage() {
     const access = await checkAiFeatureAccess(user.uid, 'dayPlanning', user.email).finally(() => {
       setIsCheckingFixMyLifeAccess(false);
     });
+    // Fix my life is Pro-only: a free user gets a short notice and stays on Home.
     if (!access.allowed) {
-      router.replace({
-        pathname: '/(tabs)/home',
-        params: { settings: 'true', settingsPanel: 'paywall', settingsNonce: String(Date.now()) },
-      });
+      setIsFixMyLifeProDialogVisible(true);
       return;
     }
 
@@ -2627,12 +2628,11 @@ export default function HomePage() {
       <View style={{ flex: 1, zIndex: 2, elevation: 2 }}>
         {isFocused && <StatusBar style="dark" backgroundColor="transparent" translucent />}
 
-        <ScrollView
+        <ScrollViewWithBar
           ref={homeScrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: homeContentBottomPadding }}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
         >
             <ScreenHeader
               title="Home"
@@ -2781,6 +2781,11 @@ export default function HomePage() {
               {motivationalQuote}
             </Text>
             <FixMyLifeButton onPress={() => void handleFixMyLife()} disabled={isCheckingFixMyLifeAccess} />
+            <ProRequiredDialog
+              visible={isFixMyLifeProDialogVisible}
+              message="Fix my life plans your whole week, Mon to Sun. It's part of Eazee Pro."
+              onClose={() => setIsFixMyLifeProDialogVisible(false)}
+            />
 
             {homePersonalization.order.map((cardId) => {
               if (cardId === 'suggestions') {
@@ -3001,7 +3006,7 @@ export default function HomePage() {
                 </View>
               );
             })}
-        </ScrollView>
+        </ScrollViewWithBar>
 
       </View>
     </LinearGradient>

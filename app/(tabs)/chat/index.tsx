@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, RefreshControl, StyleSheet, type ScrollViewProps, Text, TouchableOpacity, View } from 'react-native';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Audio } from 'expo-av';
@@ -11,6 +11,7 @@ import { database } from '../../../database/database';
 import ChatSessionModel from '../../../database/models/ChatSessionModel';
 import TodoModel from '../../../database/models/TodoModel';
 import { executeToolCall } from './tools/engine';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 import { appendCreatedTodoItems, getCreatedCalendarItems, getCreatedTodoItems, getLastDayPlan, getLastQueryItems, getLastCalendarItems, resetToolMemory, setLastCalendarItems, setLastDayPlan, setLastQueryItems } from './tools/memory';
 import { StatusBar } from 'expo-status-bar';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
@@ -906,6 +907,9 @@ function isDayPlanSaveConfirmation(text: string) {
 
   return /^(?:(?:yes|yeah|yep|sure|ok|okay)\s+)?(?:looks good|looks great|sounds good|save|save it|save the plan|confirm|confirmed|go ahead|do it|add it|put it in my calendar and todos)$/.test(clean);
 }
+
+/** The chat list scrolls inside the app's scroll bar instead of the system one. */
+const renderChatScrollComponent = (props: ScrollViewProps) => <ScrollViewWithBar {...props} />;
 
 function setLastDayPlanFromCard(card: DayPlanCardValue) {
   if (!card || card.type !== 'dayPlan') return;
@@ -5290,6 +5294,7 @@ export default function ChatScreen() {
                   }}
                   scrollEventThrottle={16}
                   showsVerticalScrollIndicator={false}
+                  renderScrollComponent={renderChatScrollComponent}
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode="on-drag"
                   refreshControl={(

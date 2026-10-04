@@ -77,7 +77,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   tabSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    backgroundColor: 'rgba(190, 240, 226, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   label: {
     color: 'rgba(255, 255, 255, 0.86)',

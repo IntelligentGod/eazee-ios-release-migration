@@ -9,7 +9,6 @@ import {
   Image,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -65,6 +64,8 @@ import {
   type EventReminderMinutes,
 } from '@/lib/eventNotifications';
 import { ensureNotificationPermission } from '@/lib/todoNotifications';
+import { cancelInactivityNudge, readInactivityNudgeEnabled, scheduleInactivityNudge, writeInactivityNudgeEnabled } from '@/lib/inactivityNudge';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type HomeSettingsSheetProps = {
   bottomInset: number;
@@ -241,6 +242,46 @@ function EventReminderPicker() {
         );
       })}
     </View>
+  );
+}
+
+/** The 2-day "come back" notification; turning it on asks for notification permission if needed. */
+function CheckInReminderRow() {
+  const [enabled, setEnabled] = React.useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readInactivityNudgeEnabled().then((value) => {
+      if (!cancelled) setEnabled(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggle = async () => {
+    const next = !enabled;
+    if (next) {
+      const permission = await ensureNotificationPermission();
+      if (!permission.granted) {
+        Alert.alert('Notifications are off', 'Allow notifications for Eazee in your phone settings to get check-in reminders.');
+        return;
+      }
+    }
+    setEnabled(next);
+    await writeInactivityNudgeEnabled(next);
+    void (next ? scheduleInactivityNudge() : cancelInactivityNudge()).catch(() => {});
+  };
+
+  return (
+    <SettingsRow
+      icon={<Text allowFontScaling={false} style={styles.rowEmoji}>👋</Text>}
+      label="Check-in Reminders"
+      onPress={() => void handleToggle()}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: enabled }}
+      right={<LeftHandedToggle enabled={enabled} />}
+    />
   );
 }
 
@@ -437,8 +478,7 @@ function AiPersonalizationPanel({
         )}
       />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <ScrollViewWithBar
         style={styles.personalizationScroll}
         contentContainerStyle={styles.personalizationContent}
       >
@@ -475,7 +515,7 @@ function AiPersonalizationPanel({
             {isSaving ? 'Saving' : hasChanges ? 'Save' : 'Saved'}
           </Text>
         </Pressable>
-      </ScrollView>
+      </ScrollViewWithBar>
     </View>
   );
 }
@@ -924,6 +964,7 @@ export default function HomeSettingsSheet({
           label="Event Reminders"
           right={<EventReminderPicker />}
         />
+        <CheckInReminderRow />
         <SettingsRow
           icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🙈</Text>}
           label="Guided Access Mode"

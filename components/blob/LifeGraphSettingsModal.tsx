@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  Animated,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -9,10 +11,11 @@ import {
   Switch,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 import {
@@ -88,13 +91,7 @@ function NodeEditor({
           style={styles.nameInput}
           accessibilityLabel="Node name"
         />
-        <Switch
-          value={node.enabled}
-          onValueChange={(enabled) => onChange({ enabled })}
-          trackColor={SWITCH_TRACK_COLORS}
-          thumbColor={node.enabled ? '#4D4A3B' : '#F6F2E3'}
-          accessibilityLabel={`Show ${node.name || 'node'} on the Droplet`}
-        />
+        {!node.enabled && <Text style={styles.offLabel}>Off</Text>}
       </View>
       <TextInput
         value={node.keywordsText}
@@ -120,83 +117,156 @@ function NodeEditor({
   );
 }
 
+/** A round cream tick that pops when it changes. */
+function NodeTick({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const handlePress = () => {
+    scale.setValue(0.75);
+    Animated.spring(scale, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }).start();
+    onToggle();
+  };
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={`Show ${label} on the Droplet`}
+      hitSlop={4}
+      onPress={handlePress}
+      style={styles.tickRow}
+    >
+      <Animated.View style={[styles.tick, checked ? styles.tickOn : styles.tickOff, { transform: [{ scale }] }]}>
+        {checked && <MaterialCommunityIcons name="check-bold" size={14} color="#4D4A3B" />}
+      </Animated.View>
+      <Text style={[styles.tickLabel, !checked && styles.tickLabelOff]} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const toDraftNodes = (settings: LifeGraphSettings): DraftNode[] =>
+  settings.nodes.map(({ keywords, ...node }) => ({ ...node, keywordsText: keywords.join(', ') }));
+
+/** Face and node on/off apply right away, like the Home settings; names, keywords and targets save with Save. */
 function LifeGraphSettingsForm({
   settings,
   progress,
   onSave,
-  onClose,
 }: {
   settings: LifeGraphSettings;
   progress: Record<LifeGraphNodeId, LifeGraphNodeProgress>;
   onSave: (settings: LifeGraphSettings) => void;
-  onClose: () => void;
 }) {
-  const [faceVisible, setFaceVisible] = useState(settings.faceVisible);
-  const [draftNodes, setDraftNodes] = useState<DraftNode[]>(() =>
-    settings.nodes.map(({ keywords, ...node }) => ({ ...node, keywordsText: keywords.join(', ') }))
-  );
+  const [current, setCurrent] = useState(settings);
+  const [draftNodes, setDraftNodes] = useState<DraftNode[] | null>(null);
 
-  const updateNode = (id: LifeGraphNodeId, patch: Partial<DraftNode>) => {
-    setDraftNodes((nodes) => nodes.map((node) => (node.id === id ? { ...node, ...patch } : node)));
+  const apply = (next: LifeGraphSettings) => {
+    setCurrent(next);
+    onSave(next);
   };
 
-  const handleSave = () => {
-    onSave({
-      faceVisible,
+  const toggleNode = (id: LifeGraphNodeId) => {
+    apply({ ...current, nodes: current.nodes.map((node) => (node.id === id ? { ...node, enabled: !node.enabled } : node)) });
+  };
+
+  const updateDraft = (id: LifeGraphNodeId, patch: Partial<DraftNode>) => {
+    setDraftNodes((nodes) => nodes && nodes.map((node) => (node.id === id ? { ...node, ...patch } : node)));
+  };
+
+  const saveDraft = () => {
+    if (!draftNodes) return;
+    apply({
+      ...current,
       nodes: draftNodes.map(({ keywordsText, ...node }, index) => ({
         ...node,
-        name: node.name.trim() || settings.nodes[index].name,
+        name: node.name.trim() || current.nodes[index].name,
         keywords: parseLifeGraphKeywords(keywordsText),
       })),
     });
-    onClose();
+    setDraftNodes(null);
   };
 
-  return (
-    <LinearGradient colors={['#8C8268', '#4D4A3B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Life graph</Text>
+  if (draftNodes) {
+    return (
+      <LinearGradient colors={PANEL_COLORS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.card, styles.editCard]}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Droplet settings"
+            hitSlop={8}
+            onPress={() => setDraftNodes(null)}
+            style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
+          </Pressable>
+          <Text style={[styles.title, styles.editTitle]}>Edit nodes</Text>
+          <View style={styles.closeButton} />
+        </View>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <Text style={styles.hint}>
+            Each node grows as you complete tasks that mention its name or keywords. Growth resets every week.
+          </Text>
+          {draftNodes.map((node) => (
+            <NodeEditor
+              key={node.id}
+              node={node}
+              completedCount={progress[node.id].completedCount}
+              onChange={(patch) => updateDraft(node.id, patch)}
+            />
+          ))}
+        </ScrollView>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close life graph settings"
-          hitSlop={8}
-          onPress={onClose}
-          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+          onPress={saveDraft}
+          style={({ pressed }) => [styles.saveButton, pressed && styles.saveButtonPressed]}
         >
-          <MaterialCommunityIcons name="close" size={20} color="#FFFFFF" />
+          <Text style={styles.saveButtonText}>Save</Text>
         </Pressable>
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <LinearGradient colors={PANEL_COLORS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
+      <View style={styles.dropletRow}>
+        <View style={styles.dropletFrame}>
+          <Image source={require('@/assets/images/blob-gold-shiny.png')} style={styles.dropletImage} resizeMode="cover" />
+        </View>
+        <View style={styles.dropletInfo}>
+          <Text style={styles.dropletTitle}>Droplet Settings</Text>
+          <View style={styles.faceRow}>
+            <Text style={styles.faceLabel}>Face On/Off</Text>
+            <Switch
+              value={current.faceVisible}
+              onValueChange={(faceVisible) => apply({ ...current, faceVisible })}
+              trackColor={SWITCH_TRACK_COLORS}
+              thumbColor={current.faceVisible ? '#4D4A3B' : '#F6F2E3'}
+              accessibilityLabel="Show Droplet face"
+            />
+          </View>
+        </View>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.faceRow}>
-          <Text style={styles.faceLabel}>Show face</Text>
-          <Switch
-            value={faceVisible}
-            onValueChange={setFaceVisible}
-            trackColor={SWITCH_TRACK_COLORS}
-            thumbColor={faceVisible ? '#4D4A3B' : '#F6F2E3'}
-            accessibilityLabel="Show Droplet face"
-          />
+      {/* Centred as one block; the two columns are sized to their names, so they sit close together. */}
+      <View style={styles.nodesBlock}>
+        <Text style={styles.sectionLabel}>Nodes</Text>
+        <View style={styles.tickGrid}>
+          {[0, 1].map((column) => (
+            <View key={column} style={styles.tickColumn}>
+              {current.nodes.filter((_, index) => index % 2 === column).map((node) => (
+                <NodeTick key={node.id} label={node.name} checked={node.enabled} onToggle={() => toggleNode(node.id)} />
+              ))}
+            </View>
+          ))}
         </View>
-        <Text style={styles.hint}>
-          Each node grows as you complete tasks that mention its name or keywords. Growth resets every week.
-        </Text>
-        {draftNodes.map((node) => (
-          <NodeEditor
-            key={node.id}
-            node={node}
-            completedCount={progress[node.id].completedCount}
-            onChange={(patch) => updateNode(node.id, patch)}
-          />
-        ))}
-      </ScrollView>
+      </View>
 
       <Pressable
         accessibilityRole="button"
-        onPress={handleSave}
-        style={({ pressed }) => [styles.saveButton, pressed && styles.saveButtonPressed]}
+        onPress={() => setDraftNodes(toDraftNodes(current))}
+        hitSlop={6}
+        style={({ pressed }) => [styles.editLink, pressed && styles.saveButtonPressed]}
       >
-        <Text style={styles.saveButtonText}>Save</Text>
+        <Text style={styles.editLinkText}>Edit nodes</Text>
+        <MaterialCommunityIcons name="chevron-right" size={18} color="#F6F2E3" />
       </Pressable>
     </LinearGradient>
   );
@@ -215,31 +285,139 @@ export default function LifeGraphSettingsModal({
   onSave: (settings: LifeGraphSettings) => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={StyleSheet.absoluteFillObject} />
-        </TouchableWithoutFeedback>
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose} statusBarTranslucent>
+      {/* The rest of the page stays in view, blurred; tapping it closes the panel. */}
+      <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+      <Pressable accessibilityLabel="Close Droplet settings" onPress={onClose} style={[StyleSheet.absoluteFill, styles.dim]} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none"
+        style={[styles.overlay, { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 }]}
+      >
         {/* Mounted only while open, so each opening starts from the saved settings. */}
-        {visible && <LifeGraphSettingsForm settings={settings} progress={progress} onSave={onSave} onClose={onClose} />}
+        {visible && <LifeGraphSettingsForm settings={settings} progress={progress} onSave={onSave} />}
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
+const PANEL_COLORS = ['rgba(140, 130, 104, 0.94)', 'rgba(77, 74, 59, 0.94)'] as const;
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  dim: {
+    backgroundColor: 'rgba(46, 45, 34, 0.18)',
+  },
+  editCard: {
+    maxHeight: '100%',
+  },
+  editTitle: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  dropletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  dropletFrame: {
+    width: 108,
+    height: 108,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  // The picture has a wide margin around the Droplet; zooming in fills the frame with it.
+  dropletImage: {
+    width: '100%',
+    height: '100%',
+    transform: [{ scale: 1.3 }],
+  },
+  dropletInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  sectionLabel: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  dropletTitle: {
+    color: '#E9C766',
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '900',
+  },
+  nodesBlock: {
+    alignSelf: 'center',
+  },
+  tickGrid: {
+    flexDirection: 'row',
+    gap: 28,
+    paddingHorizontal: 4,
+  },
+  tickColumn: {
+    gap: 10,
+  },
+  tickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingRight: 8,
+  },
+  tick: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(46, 45, 34, 0.62)',
-    padding: 20,
+  },
+  tickOn: {
+    backgroundColor: '#F6F2E3',
+  },
+  tickOff: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(246, 242, 227, 0.7)',
+  },
+  tickLabel: {
+    flexShrink: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tickLabelOff: {
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  editLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    marginTop: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  editLinkText: {
+    color: '#F6F2E3',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  offLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    fontWeight: '800',
   },
   card: {
     width: '100%',
     maxWidth: 400,
-    maxHeight: '88%',
     borderRadius: 30,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.34)',

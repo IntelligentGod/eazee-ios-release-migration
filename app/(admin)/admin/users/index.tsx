@@ -7,7 +7,7 @@ import RoleBadge from '@/components/admin/RoleBadge';
 import { adminApi, type AdminUser } from '@/lib/adminApi';
 import { formatSubscriptionDate } from '@/lib/subscriptionStatusText';
 import { usePagedServerData } from '@/lib/usePagedServerData';
-import { ROLE_LABELS, type UserRole } from '@/lib/userRole';
+import { ROLE_LABELS, isStaffRole, type UserRole } from '@/lib/userRole';
 
 /** The Super Admin is not listed in Users, so it is not a filter either. */
 const ROLE_OPTIONS: ChipOption<'admin' | 'customer'>[] = (['admin', 'customer'] as const)
@@ -24,7 +24,9 @@ const STATE_LABELS: Record<AdminUser['subscription']['state'], string> = {
 
 function UserRow({ user }: { user: AdminUser }) {
   const { subscription } = user;
-  const plan = subscription.isUnlimitedAccount
+  const plan = isStaffRole(user.role)
+    ? 'Pro (staff)'
+    : subscription.isUnlimitedAccount
     ? 'Unlimited (test)'
     : subscription.isPro && subscription.plan ? `Pro ${subscription.plan}` : 'Free';
   return (

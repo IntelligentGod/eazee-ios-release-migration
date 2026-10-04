@@ -9,6 +9,7 @@ import { useAuthSession } from '@/app/context/AuthSessionContext';
 import { useRoleSession } from '@/app/context/RoleSessionContext';
 import { adminApi, type AdminUserDetail } from '@/lib/adminApi';
 import { formatSubscriptionDate } from '@/lib/subscriptionStatusText';
+import { isStaffRole } from '@/lib/userRole';
 import { useServerData } from '@/lib/useServerData';
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -35,7 +36,9 @@ function ProfileSection({ detail }: { detail: AdminUserDetail }) {
       {auth?.disabled && <Field label="Account" value="Disabled" />}
       <Field
         label="Plan"
-        value={subscription?.isUnlimitedAccount
+        value={isStaffRole(auth?.role ?? user?.role)
+          ? 'Pro (staff)'
+          : subscription?.isUnlimitedAccount
           ? 'Unlimited (test account)'
           : subscription?.isPro && subscription.plan ? `Pro ${subscription.plan}` : 'Free'}
       />

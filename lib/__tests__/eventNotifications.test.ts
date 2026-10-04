@@ -7,7 +7,7 @@ jest.mock('@/app/context/TokenContext', () => ({ getAccessTokenStatic: jest.fn()
 jest.mock('@/database/database', () => ({ database: {} }));
 jest.mock('@/lib/todoNotifications', () => ({ configureTodoNotifications: jest.fn() }));
 
-import { planEventReminders } from '@/lib/eventNotifications';
+import { planEventReminders, selectEventsForReminders, type TodoCalendarCopy } from '@/lib/eventNotifications';
 import { buildInactivityNudgeContent } from '@/lib/inactivityNudge';
 
 const now = new Date(2026, 8, 30, 9, 0);
@@ -56,5 +56,26 @@ describe('buildInactivityNudgeContent', () => {
     expect(buildInactivityNudgeContent(3).title).toBe('3 tasks are waiting for you');
     expect(buildInactivityNudgeContent(1).title).toBe('1 task is waiting for you');
     expect(buildInactivityNudgeContent(0).title).toBe('Your day is a blank page');
+  });
+});
+
+describe('selectEventsForReminders', () => {
+  const copy = (overrides: Partial<TodoCalendarCopy>): TodoCalendarCopy => ({
+    id: 'local-1', localId: 'local-1', sourceTodoId: 'todo-1', title: 'Study', startDate: at(14), isAllDay: false, ...overrides,
+  });
+
+  it('gives a todo calendar copy no Event Reminder when the todo has its own reminder', () => {
+    const synced = copy({ id: 'g-1', googleEventId: 'g-1' });
+    const events = [{ id: 'g-1', title: 'Study', startDate: at(14), isAllDay: false }, { id: 'e-2', title: 'Lunch', startDate: at(12), isAllDay: false }];
+    expect(selectEventsForReminders(events, [synced], () => true).map((event) => event.id)).toEqual(['e-2']);
+  });
+
+  it('gives a todo calendar copy the Event Reminder when the todo has no reminder, without duplicating it', () => {
+    const synced = copy({ id: 'g-1', googleEventId: 'g-1' });
+    const localOnly = copy({ id: 'local-2', localId: 'local-2', sourceTodoId: 'todo-2', title: 'Read', startDate: at(16) });
+    const events = [{ id: 'g-1', title: 'Study', startDate: at(14), isAllDay: false }];
+    const selected = selectEventsForReminders(events, [synced, localOnly], () => false);
+    expect(selected.map((event) => event.id)).toEqual(['g-1', 'local-2']);
+    expect(selected[1]).toMatchObject({ title: 'Read', startDate: at(16) });
   });
 });

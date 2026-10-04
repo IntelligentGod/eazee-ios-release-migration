@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Linking } from 'react-native';
+import { presentDisclosure } from '@/lib/appDisclosure';
 import { PRIVACY_POLICY_URL } from '@/lib/legalLinks';
 
 const AI_DATA_SHARING_CONSENT_KEY_PREFIX = 'aiDataSharingConsent:v2:';
@@ -30,11 +31,17 @@ const notifyAiDataSharingConsentAccepted = (userId: string) => {
   });
 };
 
-const showAiDataSharingConsent = () =>
+export const AI_DATA_SHARING_CONSENT_COPY = {
+  title: 'AI data sharing',
+  message:
+    'Eazee sends the text you enter and relevant chat, task, goal, calendar, note, and voice transcript content directly to OpenAI to provide AI features, including web search. OpenAI does not use API data to train its models unless Eazee explicitly opts in. Google Calendar content is sent only after you connect Google and allow AI features.',
+};
+
+const showSystemAiDataSharingConsent = () =>
   new Promise<boolean>((resolve) => {
     Alert.alert(
-      'AI data sharing',
-      'Eazee sends the text you enter and relevant chat, task, goal, calendar, note, and voice transcript content directly to OpenAI to provide AI features, including web search. OpenAI does not use API data to train its models unless Eazee explicitly opts in. Google Calendar content is sent only after you connect Google and allow AI features.',
+      AI_DATA_SHARING_CONSENT_COPY.title,
+      AI_DATA_SHARING_CONSENT_COPY.message,
       [
         {
           text: 'Privacy Policy',
@@ -49,6 +56,10 @@ const showAiDataSharingConsent = () =>
       { cancelable: false }
     );
   });
+
+const showAiDataSharingConsent = () =>
+  presentDisclosure({ ...AI_DATA_SHARING_CONSENT_COPY, confirmLabel: 'Allow AI features', cancelLabel: 'Not now' })
+  ?? showSystemAiDataSharingConsent();
 
 export async function requestAiDataSharingConsent(userId: string) {
   const normalizedUserId = userId.trim();

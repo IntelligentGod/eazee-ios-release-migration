@@ -55,6 +55,7 @@ import { getAccountDeletionReauthenticationProvider } from '@/lib/accountDeletio
 import { requestGoogleCalendarDisclosure } from '@/lib/googleCalendarDisclosure';
 import { PasswordInput } from './PasswordInput';
 import { reauthenticateWithAppleAccount, reauthenticateWithGoogleAccount } from './socialAuth';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type ManageAccountSheetProps = {
   bottomInset: number;
@@ -752,10 +753,9 @@ export default function ManageAccountSheet({ bottomInset, swipeBandHeight, visib
             label="Home settings"
             style={styles.shell}
           >
-            <ScrollView
+            <ScrollViewWithBar
               ref={scrollViewRef}
               bounces={false}
-              showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollContent}
             >
                 <VisibleGuidedTarget enabled={visible} targetId={getHomeAccountGuidanceTargetId('profile')} label="Profile" localHighlightRadius={18} localHighlightShape="rect">
@@ -883,7 +883,7 @@ export default function ManageAccountSheet({ bottomInset, swipeBandHeight, visib
                   isDeleting={isDeletingAccount}
                   onDelete={handleDeleteAccount}
                 />
-            </ScrollView>
+            </ScrollViewWithBar>
           </VisibleGuidedTarget>
         </Animated.View>
       </View>

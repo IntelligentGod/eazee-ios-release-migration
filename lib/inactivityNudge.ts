@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Q } from '@nozbe/watermelondb';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -11,7 +12,19 @@ const INACTIVITY_NUDGE_ID = 'inactivity-nudge';
 const INACTIVITY_NUDGE_CHANNEL_ID = 'inactivity-nudge';
 export const INACTIVITY_NUDGE_DELAY_MS = 2 * 24 * 60 * 60_000;
 
+const INACTIVITY_NUDGE_ENABLED_KEY = 'inactivityNudge:enabled:v1';
+
 export type InactivityNudgeContent = { title: string; body: string };
+
+/** The Settings switch for the 2-day check-in; on unless the user turned it off. */
+export async function readInactivityNudgeEnabled() {
+  const stored = await AsyncStorage.getItem(INACTIVITY_NUDGE_ENABLED_KEY).catch(() => null);
+  return stored !== '0';
+}
+
+export async function writeInactivityNudgeEnabled(enabled: boolean) {
+  await AsyncStorage.setItem(INACTIVITY_NUDGE_ENABLED_KEY, enabled ? '1' : '0').catch(() => {});
+}
 
 export function buildInactivityNudgeContent(dueTaskCount: number): InactivityNudgeContent {
   if (dueTaskCount === 0) {
@@ -53,6 +66,7 @@ export async function scheduleInactivityNudge() {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
 
   await cancelInactivityNudge();
+  if (!(await readInactivityNudgeEnabled())) return;
 
   const permissions = await Notifications.getPermissionsAsync();
   if (!permissions.granted) return;

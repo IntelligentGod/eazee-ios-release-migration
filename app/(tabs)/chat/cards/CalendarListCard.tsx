@@ -1,4 +1,4 @@
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { format } from 'date-fns';
 import type { Router } from 'expo-router';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
@@ -7,6 +7,7 @@ import { useGuidance } from '@/components/guidance/GuidanceProvider';
 import { type GuidanceTarget } from '@/lib/navigationHelp';
 import { useNavigationHelpMode } from '@/lib/useNavigationHelpMode';
 import { handleNavigationHelpTarget } from '@/lib/handleNavigationHelpTarget';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type CalendarItem = {
   id: string;
@@ -64,8 +65,7 @@ export function CalendarListCard({ items, router }: Props) {
           <Text style={{ color: CHAT_DOMAIN_COLORS.calendar.text, opacity: 0.85, fontSize: 12 }}>{items.length}</Text>
         )}
       </View>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <ScrollViewWithBar
         style={{ maxHeight: 280 }}
         contentContainerStyle={{ paddingBottom: 2 }}
       >
@@ -98,7 +98,7 @@ export function CalendarListCard({ items, router }: Props) {
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </ScrollViewWithBar>
     </View>
   );
 }

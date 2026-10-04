@@ -26,6 +26,8 @@ import {
   type RenderItemParams,
 } from 'react-native-draggable-flatlist';
 import WorkspaceScrollArea from '@/components/WorkspaceScrollArea';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
+import { syncEventReminders } from '@/lib/eventNotifications';
 import { useRouter, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import PagerView from 'react-native-pager-view';
@@ -6532,6 +6534,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           event.sourceTodoId = todoForCalendar.id;
         });
       });
+      // Without its own reminder, the task's new event gets the Event Reminder.
+      void syncEventReminders();
 
       if (selectedTodoForDetails?.id === todoForCalendar.id && isDetailsModalVisible) {
         resetDetailsModalStateRef.current();
@@ -13828,9 +13832,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                       },
                     ]}
                   >
-                    <ScrollView
+                    <ScrollViewWithBar
                       ref={detailsScrollRef}
-                      showsVerticalScrollIndicator={false}
                       contentContainerStyle={styles.detailsModalScrollContainer}
                     >
                       <View style={styles.detailsModalScrollContent}>
@@ -14162,7 +14165,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                         </View>
                       )}
                       </View>
-                    </ScrollView>
+                    </ScrollViewWithBar>
                   </Animated.View>
                 </View>
               </Animated.View>
@@ -14316,9 +14319,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               <View style={styles.recipeWishlistModalCard}>
                 <Text style={styles.recipeWishlistModalTitle}>Add to Wishlist</Text>
                 <Text style={styles.recipeWishlistModalSubtitle}>Unchecked ingredients are selected.</Text>
-                <ScrollView
+                <ScrollViewWithBar
                   style={styles.recipeWishlistModalList}
-                  showsVerticalScrollIndicator={false}
                 >
                   {(recipeGuide?.ingredients || []).map((ingredient, index) => {
                     const ingredientKey = getRecipeIngredientKey(recipeGuide?.todoId || 'recipe', ingredient, index);
@@ -14346,7 +14348,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </ScrollViewWithBar>
                 <View style={styles.recipeWishlistModalActions}>
                   <TouchableOpacity
                     style={styles.recipeWishlistCancelButton}

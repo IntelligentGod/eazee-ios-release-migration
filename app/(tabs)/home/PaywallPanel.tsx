@@ -3,7 +3,6 @@ import {
   Alert,
   Image,
   Linking,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -45,6 +44,7 @@ import {
 } from '@/lib/subscriptionProducts';
 import type { ProductDisplaySettings } from '@/lib/subscriptionApi';
 import CurrentPlanCard from '@/components/subscription/CurrentPlanCard';
+import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 const ACCENT = '#1FF5EF';
 const HEADLINE_ACCENT = '#74FEFE';
@@ -325,9 +325,8 @@ export default function PaywallPanel({
           )}
         />
 
-        <ScrollView
+        <ScrollViewWithBar
           contentContainerStyle={[styles.content, { paddingBottom: bottomInset + 28 }]}
-          showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
             <View style={styles.heroCopy}>
@@ -426,7 +425,7 @@ export default function PaywallPanel({
             </Text>
             .
           </Text>
-        </ScrollView>
+        </ScrollViewWithBar>
       </View>
     </View>
   );
