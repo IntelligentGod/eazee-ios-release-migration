@@ -21,15 +21,19 @@ type CurrentPlanCardProps = {
 function SwitchPlanButton({
   status,
   product,
+  currentProduct,
   savingsLabel,
   disabled,
   onPress,
+  onKeepCurrent,
 }: {
   status: SubscriptionStatus;
   product: StoreProduct;
+  currentProduct?: StoreProduct;
   savingsLabel: string | null;
   disabled: boolean;
   onPress: () => void;
+  onKeepCurrent: () => void;
 }) {
   const upgrading = !!status.planId && isUpgrade(status.planId, product.planId);
   const isAlreadyPending = status.pendingPlanId === product.planId;
@@ -37,20 +41,39 @@ function SwitchPlanButton({
     ? [savingsLabel, 'starts now, unused time is credited'].filter(Boolean).join(' · ')
     : 'starts at your next renewal';
 
+  // A switch waiting for renewal can only be undone in Apple's subscription screen
+  // (choosing the current plan there), so the button opens it.
+  if (isAlreadyPending) {
+    return (
+      <TouchableOpacity
+        accessibilityRole="button"
+        activeOpacity={0.85}
+        disabled={disabled}
+        onPress={onKeepCurrent}
+        className={`mt-3 rounded-2xl border border-[#1FF5EF] px-4 py-3 ${disabled ? 'opacity-60' : ''}`}
+      >
+        <Text className="text-base font-bold text-white">
+          {currentProduct ? `Keep ${currentProduct.title} instead` : 'Keep your current plan instead'}
+        </Text>
+        <Text className="mt-1 text-xs text-[#74FEFE]">
+          {`${product.title} starts at your next renewal. Tap, then choose ${currentProduct?.title ?? 'your current plan'} to cancel the switch.`}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       accessibilityRole="button"
       activeOpacity={0.85}
-      disabled={disabled || isAlreadyPending}
+      disabled={disabled}
       onPress={onPress}
-      className={`mt-3 rounded-2xl border border-[#1FF5EF] px-4 py-3 ${disabled || isAlreadyPending ? 'opacity-60' : ''}`}
+      className={`mt-3 rounded-2xl border border-[#1FF5EF] px-4 py-3 ${disabled ? 'opacity-60' : ''}`}
     >
       <Text className="text-base font-bold text-white">
-        {isAlreadyPending
-          ? `Switching to ${product.title} at renewal`
-          : `${upgrading ? 'Upgrade' : 'Switch'} to ${product.title} · ${product.displayPrice} ${formatPeriodLabel(product)}`}
+        {`${upgrading ? 'Upgrade' : 'Switch'} to ${product.title} · ${product.displayPrice} ${formatPeriodLabel(product)}`}
       </Text>
-      {!isAlreadyPending && <Text className="mt-1 text-xs text-[#74FEFE]">{detail}</Text>}
+      <Text className="mt-1 text-xs text-[#74FEFE]">{detail}</Text>
     </TouchableOpacity>
   );
 }
@@ -84,13 +107,16 @@ export default function CurrentPlanCard({
         </View>
       </View>
 
-      {!isSandboxAccount && switchProduct && status.state !== 'expired' && status.state !== 'refunded' && (
+      {!isSandboxAccount && switchProduct && status.state !== 'expired' && status.state !== 'refunded'
+        && (isUpgrade(status.planId ?? switchProduct.planId, switchProduct.planId) || status.pendingPlanId === switchProduct.planId) && (
         <SwitchPlanButton
           status={status}
           product={switchProduct}
+          currentProduct={currentProduct}
           savingsLabel={savingsLabel}
           disabled={isProcessing}
           onPress={() => onSwitchPlan(switchProduct)}
+          onKeepCurrent={onManage}
         />
       )}
 

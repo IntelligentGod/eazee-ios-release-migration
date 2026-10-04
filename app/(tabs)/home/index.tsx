@@ -114,7 +114,6 @@ import { computeBehaviorMetrics } from '@/core/blob/BehaviorMetrics';
 import { computeBlobVisualMeaning } from '@/src/blob/blobMeaning';
 import { blobMeaningFromBehaviorMetrics } from '@/src/blob/blobMeaningFromSignals';
 import { BLOB_SCENARIOS } from '@/src/blob/blobScenarioPresets';
-import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type GoogleEvent = HomeGoogleEvent;
 
@@ -2628,7 +2627,8 @@ export default function HomePage() {
       <View style={{ flex: 1, zIndex: 2, elevation: 2 }}>
         {isFocused && <StatusBar style="dark" backgroundColor="transparent" translucent />}
 
-        <ScrollViewWithBar
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           ref={homeScrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: homeContentBottomPadding }}
@@ -3006,7 +3006,7 @@ export default function HomePage() {
                 </View>
               );
             })}
-        </ScrollViewWithBar>
+        </ScrollView>
 
       </View>
     </LinearGradient>

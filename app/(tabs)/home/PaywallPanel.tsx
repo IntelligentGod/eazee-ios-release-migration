@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   Linking,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,6 +12,7 @@ import {
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import ScreenHeader from '@/components/ScreenHeader';
+import AiReplyLoadingOverlay from '@/components/AiReplyLoadingOverlay';
 import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import { useTabContext } from '@/app/context/TabContext';
@@ -44,7 +46,6 @@ import {
 } from '@/lib/subscriptionProducts';
 import type { ProductDisplaySettings } from '@/lib/subscriptionApi';
 import CurrentPlanCard from '@/components/subscription/CurrentPlanCard';
-import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 const ACCENT = '#1FF5EF';
 const HEADLINE_ACCENT = '#74FEFE';
@@ -172,6 +173,8 @@ export default function PaywallPanel({
     DEFAULT_SUBSCRIPTION_PLAN_ID
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  /** Covers the screen while the App Store or the server works, so nothing can be tapped meanwhile. */
+  const [blockingLabel, setBlockingLabel] = useState<string | null>(null);
   const [products, setProducts] = useState<StoreProduct[]>(FALLBACK_STORE_PRODUCTS);
   const [productDisplay, setProductDisplay] = useState<ProductDisplaySettings>(DEFAULT_PRODUCT_DISPLAY);
   const { setTabBarTheme } = useTabContext();
@@ -205,12 +208,14 @@ export default function PaywallPanel({
 
   const handleContinue = useCallback(async () => {
     setIsProcessing(true);
+    setBlockingLabel('Starting Eazee Pro...');
     try {
       const outcome = await purchaseSubscription(selectedPlanId);
       refresh();
+      setBlockingLabel(null);
 
+      // Stays here: the page switches to the subscriber view of the new plan.
       if (outcome.status === 'success') {
-        onBack();
         return;
       }
 
@@ -223,14 +228,17 @@ export default function PaywallPanel({
       }
     } finally {
       setIsProcessing(false);
+      setBlockingLabel(null);
     }
-  }, [onBack, refresh, selectedPlanId]);
+  }, [refresh, selectedPlanId]);
 
   const handleSwitchPlan = useCallback(async (product: StoreProduct) => {
     setIsProcessing(true);
+    setBlockingLabel(`Switching to ${product.title}...`);
     try {
       const outcome = await changeSubscriptionPlan(status.planId, product.planId);
       refresh();
+      setBlockingLabel(null);
       if (outcome.status === 'success' || outcome.status === 'pending') {
         const upgrading = !!status.planId && isUpgrade(status.planId, product.planId);
         Alert.alert(
@@ -245,6 +253,7 @@ export default function PaywallPanel({
       }
     } finally {
       setIsProcessing(false);
+      setBlockingLabel(null);
     }
   }, [refresh, status.planId]);
 
@@ -252,18 +261,22 @@ export default function PaywallPanel({
     if (!userId) return;
     setIsProcessing(true);
     try {
-      await openManageSubscriptions(userId);
+      // Apple's screen is on top while it is open; the cover starts once the user is back.
+      await openManageSubscriptions(userId, { onSheetClosed: () => setBlockingLabel('Updating your subscription...') });
       refresh();
     } finally {
       setIsProcessing(false);
+      setBlockingLabel(null);
     }
   }, [refresh, userId]);
 
   const handleRestore = useCallback(async () => {
     setIsProcessing(true);
+    setBlockingLabel('Restoring purchases...');
     try {
       const outcome = await restorePurchases();
       refresh();
+      setBlockingLabel(null);
 
       if (outcome.status === 'success') {
         Alert.alert('Eazee Pro', 'Your subscription has been restored.');
@@ -275,6 +288,7 @@ export default function PaywallPanel({
       }
     } finally {
       setIsProcessing(false);
+      setBlockingLabel(null);
     }
   }, [refresh]);
 
@@ -325,7 +339,8 @@ export default function PaywallPanel({
           )}
         />
 
-        <ScrollViewWithBar
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.content, { paddingBottom: bottomInset + 28 }]}
         >
           <View style={styles.hero}>
@@ -425,8 +440,13 @@ export default function PaywallPanel({
             </Text>
             .
           </Text>
-        </ScrollViewWithBar>
+        </ScrollView>
       </View>
+      <AiReplyLoadingOverlay
+        visible={!!blockingLabel}
+        title={blockingLabel ?? ''}
+        subtitle="Confirming with the App Store. This can take a few seconds."
+      />
     </View>
   );
 }

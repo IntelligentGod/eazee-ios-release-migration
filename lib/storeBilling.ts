@@ -328,7 +328,11 @@ export function listenForStoreTransactions(onTransaction: () => void) {
  * back to the App Store's subscriptions page when the sheet is unavailable.
  * Once it closes, StoreKit's new state is sent to the server and cached.
  */
-export async function openManageSubscriptions(userId: string): Promise<SubscriptionStatus> {
+/** onSheetClosed runs once the user is back in the app, before the (slower) status check. */
+export async function openManageSubscriptions(
+  userId: string,
+  options?: { onSheetClosed?: () => void }
+): Promise<SubscriptionStatus> {
   const cached = await readCachedSubscriptionStatus(userId);
   if (isBillingConfigured()) {
     try {
@@ -341,6 +345,7 @@ export async function openManageSubscriptions(userId: string): Promise<Subscript
   } else {
     await Linking.openURL(getManageSubscriptionUrl(cached.planId)).catch(() => {});
   }
+  options?.onSheetClosed?.();
   await syncStoreSubscriptionStatus(userId);
   return readCachedSubscriptionStatus(userId);
 }
