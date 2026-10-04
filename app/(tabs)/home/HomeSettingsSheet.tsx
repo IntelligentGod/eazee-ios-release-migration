@@ -782,12 +782,10 @@ export default function HomeSettingsSheet({
   const { role } = useRoleSession();
 
   // Admins and the super admin can return to the admin panel from the user app without signing out.
+  // Settings stays open underneath, so going back from Admin Info lands straight on it.
   const handleOpenAdminPanel = useCallback(() => {
-    handleClose();
-    requestAnimationFrame(() => {
-      router.push('/admin');
-    });
-  }, [handleClose]);
+    router.push('/admin');
+  }, []);
 
   const handleOpenPaywall = useCallback(() => {
     setActivePanel('paywall');
@@ -931,7 +929,7 @@ export default function HomeSettingsSheet({
         {isStaffRole(role) && (
           <SettingsRow
             icon={<MaterialCommunityIcons name="shield-crown-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
-            label="Admin panel"
+            label="Admin Info"
             accessibilityRole="button"
             onPress={handleOpenAdminPanel}
             right={<MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.78)" />}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, RefreshControl, StyleSheet, type ScrollViewProps, Text, TouchableOpacity, View } from 'react-native';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,6 +12,7 @@ import ChatSessionModel from '../../../database/models/ChatSessionModel';
 import TodoModel from '../../../database/models/TodoModel';
 import { executeToolCall } from './tools/engine';
 import ScrollViewWithBar from '@/components/ScrollViewWithBar';
+import AppToast from '@/components/AppToast';
 import { appendCreatedTodoItems, getCreatedCalendarItems, getCreatedTodoItems, getLastDayPlan, getLastQueryItems, getLastCalendarItems, resetToolMemory, setLastCalendarItems, setLastDayPlan, setLastQueryItems } from './tools/memory';
 import { StatusBar } from 'expo-status-bar';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
@@ -29,7 +30,7 @@ import { parseCalendarDateValue } from '@/utils/calendarDates';
 import SSEEventSource from 'react-native-sse';
 import { buildChatSystemMessages } from './prompt';
 import { ChatHistoryModal } from './ChatHistoryModal';
-import { appendChatMessagesToSession, deleteChatSessionById, ensureChatSession, isMeaningfulChatMessage, listChatSessions, loadChatSession, normalizeChatSessionTitle, updateChatSessionPin, updateChatSessionTitle, updateRecipeTodoOfferCardState, updateDayPlanCardState, updateChatMessageDeliveryState } from './history';
+import { FIX_MY_LIFE_PROMPT, appendChatMessagesToSession, deleteChatSessionById, ensureChatSession, isMeaningfulChatMessage, listChatSessions, loadChatSession, normalizeChatSessionTitle, updateChatSessionPin, updateChatSessionTitle, updateRecipeTodoOfferCardState, updateDayPlanCardState, updateChatMessageDeliveryState } from './history';
 import type { ChatSessionListItem, ChatUIMessage } from './types';
 import type { DayPlanCardValue } from './dayPlan';
 import type { CompactAiChatHandoff } from '@/lib/useCompactTabAI';
@@ -1750,6 +1751,10 @@ export default function ChatScreen() {
   /** Fix my life week context; stays attached to every request in the chat it started. */
   const weekPlanContextRef = useRef<{ sessionId: string | null; content: string } | null>(null);
   const [fixMyLifeRequestKey, setFixMyLifeRequestKey] = useState('');
+  const [toast, setToast] = useState<{ message: string; nonce: number } | null>(null);
+  const showToast = useCallback((message: string) => setToast({ message, nonce: Date.now() }), []);
+  /** Set by the header +, so the new Fix my life chat announces itself. */
+  const fixMyLifeFromNewChatRef = useRef(false);
   /** Bumped by pull-to-refresh to tear down and reopen the live reply stream. */
   const [streamConnectionKey, setStreamConnectionKey] = useState(0);
   const [isRefreshingChat, setIsRefreshingChat] = useState(false);
@@ -2298,6 +2303,12 @@ export default function ChatScreen() {
   const activeChatSession = activeSessionId
     ? chatSessions.find((session) => session.id === activeSessionId)
     : null;
+  // Fix my life and normal AI chats each keep their own history.
+  const isFixMyLifeChat = chatMessages.find((message) => message.role === 'user')?.content?.trim() === FIX_MY_LIFE_PROMPT;
+  const historySessions = useMemo(
+    () => chatSessions.filter((session) => session.isFixMyLife === isFixMyLifeChat),
+    [chatSessions, isFixMyLifeChat]
+  );
   const visibleChatTitle =
     (activeChatSession?.titleGeneratedAt || activeChatSession?.titleManuallySet) &&
     activeChatSession.title &&
@@ -2336,12 +2347,18 @@ export default function ChatScreen() {
     if (!meaningful.some((message) => message.role === 'assistant')) return;
 
     const substantiveUserMessageCount = meaningful.filter(isSubstantiveTitleUserMessage).length;
-    if (substantiveUserMessageCount < 1 || substantiveUserMessageCount > AUTO_TITLE_MAX_USER_MESSAGES) return;
+    // A Fix my life chat always opens the same way, so it is named after the user's
+    // answer (the week's goal), which is their second message.
+    const isFixMyLife = meaningful.find((message) => message.role === 'user')?.content?.trim() === FIX_MY_LIFE_PROMPT;
+    const titleAtUserMessage = isFixMyLife ? 2 : AUTO_TITLE_MAX_USER_MESSAGES;
+    if (substantiveUserMessageCount < titleAtUserMessage || substantiveUserMessageCount > titleAtUserMessage + (isFixMyLife ? 2 : 0)) return;
 
     titleGenerationSessionIdsRef.current.add(sessionId);
     try {
       const session = await database.collections.get<ChatSessionModel>('chat_sessions').find(sessionId);
-      if (session.titleManuallySet || session.titleGeneratedAt) return;
+      // Fix my life chats named before this rule all read "Plan Whole Week"; those are renamed too.
+      const hasGenericFixMyLifeTitle = isFixMyLife && /^plan (?:my )?whole week$/i.test(String(session.title || '').trim());
+      if (session.titleManuallySet || (session.titleGeneratedAt && !hasGenericFixMyLifeTitle)) return;
 
       const recent = getTitleContextMessages(meaningful);
       if (!recent.length) return;
@@ -2352,6 +2369,10 @@ export default function ChatScreen() {
         body: JSON.stringify({
           clientId: clientIdRef.current || undefined,
           messages: [
+            ...(isFixMyLife ? [{
+              role: 'system',
+              content: 'This chat plans the week around one goal. Name it after that goal, as "Week: <goal>", e.g. "Week: Learn English" or "Week: Run 10k". Use the goal the user gave, not the opening request.',
+            }] : []),
             {
               role: 'system',
               content: 'Create a concise, specific title for this chat session. Respond only as JSON with key: title. Do not call tools. Ignore greetings and small talk. Base the title on the user request and the useful assistant answer, not the assistant greeting. Prefer a compact noun phrase over copying a question verbatim. Include the key object or service, so never cut off after words like my, your, the, a, an, to, for, with, or about. Use 2 to 5 words. Never exceed 5 words. Examples: "Where do I connect my Google account?" -> "Connect Google Account"; "How can I reply to Sarah?" -> "Reply To Sarah".',
@@ -2368,7 +2389,7 @@ export default function ChatScreen() {
 
       await database.write(async () => {
         const fresh = await database.collections.get<ChatSessionModel>('chat_sessions').find(sessionId);
-        if (fresh.titleManuallySet || fresh.titleGeneratedAt) return;
+        if (fresh.titleManuallySet || (fresh.titleGeneratedAt && !hasGenericFixMyLifeTitle)) return;
         await fresh.update((record) => {
           record.title = nextTitle;
           record.titleGeneratedAt = Date.now();
@@ -4703,6 +4724,7 @@ export default function ChatScreen() {
       const user = auth.currentUser;
       const access = user ? await checkAiFeatureAccess(user.uid, 'dayPlanning', user.email) : null;
       if (!access?.allowed) {
+        fixMyLifeFromNewChatRef.current = false;
         Alert.alert('Eazee Pro feature', 'Fix my life plans your whole week. Upgrade to Eazee Pro in Settings to use it.');
         return;
       }
@@ -4714,7 +4736,8 @@ export default function ChatScreen() {
         const content = await loadWeekPlanContext(user?.uid);
         weekPlanContextRef.current = { sessionId: null, content };
         setFixMyLifeWaitPhase('sent');
-        await sendTextMessage('Fix my life: plan my whole week.', {
+        if (fixMyLifeFromNewChatRef.current) showToast('Opened a new Fix my life chat');
+        await sendTextMessage(FIX_MY_LIFE_PROMPT, {
           onRequestStarted: () => setIsBootstrappingCompactHandoff(false),
         });
       } catch (error) {
@@ -4722,12 +4745,13 @@ export default function ChatScreen() {
         setFixMyLifeWaitPhase(null);
         Alert.alert('Error', 'Could not start planning your week. Please try again.');
       } finally {
+        fixMyLifeFromNewChatRef.current = false;
         setIsBootstrappingCompactHandoff(false);
       }
     };
 
     void run();
-  }, [fixMyLifeRequestKey, handleNewChat, sendTextMessage]);
+  }, [fixMyLifeRequestKey, handleNewChat, sendTextMessage, showToast]);
 
   const handleSend = useCallback(() => {
     const text = (inputValueRef.current || '').trim();
@@ -5140,7 +5164,14 @@ export default function ChatScreen() {
           onPress={() => {
             if (isChatDayPlanTutorialPending) return;
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            void handleNewChat();
+            // In a Fix my life chat, + starts a fresh week plan instead of a plain chat.
+            const firstUserText = chatMessages.find((message) => message.role === 'user')?.content;
+            if (typeof firstUserText === 'string' && firstUserText.trim() === FIX_MY_LIFE_PROMPT) {
+              fixMyLifeFromNewChatRef.current = true;
+              setFixMyLifeRequestKey(`new-chat-${Date.now()}`);
+            } else {
+              void handleNewChat().then(() => showToast('Opened a new chat'));
+            }
             completeChatGuidanceAction('new');
           }}
         >
@@ -5462,6 +5493,7 @@ export default function ChatScreen() {
             </Animated.View>
           </LowerSwipeGesture>
         </View>
+        <AppToast message={toast?.message ?? null} nonce={toast?.nonce ?? 0} top={insets.top + 120} />
         <AiReplyLoadingOverlay
           visible={isAwaitingFixMyLifeReply}
           title="Planning your week..."
@@ -5469,7 +5501,8 @@ export default function ChatScreen() {
         />
         <ChatHistoryModal
           visible={isHistoryModalVisible}
-          sessions={chatSessions}
+          title={isFixMyLifeChat ? 'Fix my life chats' : 'Chats'}
+          sessions={historySessions}
           activeSessionId={activeSessionId}
           showSummaries={isSummaryTestMode}
           isLeftHanded={isLeftHanded}

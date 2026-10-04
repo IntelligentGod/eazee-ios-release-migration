@@ -13684,7 +13684,11 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             left: 0,
             right: 0,
             bottom: 0,
-            height: todoSwipeBandHeight,
+            // Tall only while a notice card or the keyboard needs it; otherwise it would
+            // sit over the list's Create button and swallow its taps.
+            height: aiNotice || isAiComposerActive || isKeyboardVisible
+              ? todoSwipeBandHeight
+              : todoDetailsSwipeBandHeight,
             zIndex: 70,
             elevation: 70,
           }}

@@ -567,6 +567,54 @@ describe('plan_my_day', () => {
     ]);
   });
 
+  it('lays out a week day as its main goal plus a timeline of at most 5 items', async () => {
+    const items = Array.from({ length: 7 }, (_, index) => ({
+      type: 'task',
+      text: `Step ${index + 1}`,
+      details: 'not shown',
+      start: `2026-03-18T${String(9 + index).padStart(2, '0')}:00:00`,
+      durationMinutes: 30,
+      timeSource: 'ai',
+    }));
+    const result = await executeToolCall(
+      { name: 'plan_my_week', arguments: { days: [{ date: '2026-03-18', mainGoal: 'Step 1', items }] } },
+      { serverUrl: 'http://localhost' }
+    );
+
+    expect(result.success).toBe(true);
+    const card = result.messages[1]?.card;
+    expect(card?.mainGoal).toBe('Step 1');
+    const tasks = card?.timelineItems?.filter((item: any) => item.kind === 'task' && item.source === 'draft');
+    expect(tasks.map((item: any) => item.title)).toEqual(['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5']);
+    expect(tasks.every((item: any) => item.details === undefined && item.hasDueTime)).toBe(true);
+  });
+
+  it('saves the week goal as a This Week goal when it is new, and only then', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { guidanceToolHandlers } = require('../guidance');
+    const goalCreate = jest.spyOn(guidanceToolHandlers, 'goal_create').mockResolvedValue({ created: 1, createdItems: [] });
+    const day = { date: '2026-03-18', mainGoal: 'Spanish basics' };
+
+    const fresh = await executeToolCall(
+      { name: 'plan_my_week', arguments: { weekGoal: 'Study four languages', days: [day] } },
+      { serverUrl: 'http://localhost' }
+    );
+    expect(goalCreate).toHaveBeenCalledWith({ title: 'Study four languages', timeframe: 'thisWeek' });
+    expect(fresh.messages[0]?.content).toContain('Added "Study four languages" to your goals for this week.');
+
+    goalCreate.mockClear();
+    database.collections.get.mockImplementation(() => ({
+      query: jest.fn(() => ({ fetch: jest.fn(async () => [{ text: 'study four LANGUAGES', workspace: 'Goals' }]) })),
+    }));
+    const existing = await executeToolCall(
+      { name: 'plan_my_week', arguments: { weekGoal: 'Study four languages', days: [day] } },
+      { serverUrl: 'http://localhost' }
+    );
+    expect(goalCreate).not.toHaveBeenCalled();
+    expect(existing.messages[0]?.content).not.toContain('Added');
+    goalCreate.mockRestore();
+  });
+
   it('saves a confirmed plan before classifying todos in the background', async () => {
     jest.useFakeTimers();
     try {

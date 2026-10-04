@@ -294,7 +294,7 @@ export default function LifeGraphSettingsModal({
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         pointerEvents="box-none"
-        style={[styles.overlay, { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 }]}
+        style={[styles.overlay, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}
       >
         {/* Mounted only while open, so each opening starts from the saved settings. */}
         {visible && <LifeGraphSettingsForm settings={settings} progress={progress} onSave={onSave} />}
@@ -309,6 +309,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 20,
   },
   dim: {

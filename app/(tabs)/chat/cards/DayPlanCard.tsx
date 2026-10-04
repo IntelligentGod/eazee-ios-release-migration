@@ -360,7 +360,7 @@ export function DayPlanCard({
           )}
         </View>
 
-        {mainGoal ? (
+        {!!mainGoal && (
           <View
             style={{
               backgroundColor: 'rgba(43, 165, 145, 0.85)',
@@ -372,7 +372,9 @@ export function DayPlanCard({
             <Text style={[sectionTitleStyle, { color: 'rgba(255, 255, 255, 0.75)' }]}>Main goal</Text>
             <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 4 }}>{mainGoal}</Text>
           </View>
-        ) : visibleItems.length > 0 ? (
+        )}
+
+        {mainGoal && visibleItems.length <= 1 && visibleItems[0]?.title === mainGoal ? null : visibleItems.length > 0 ? (
           <View style={{ gap: 6 }}>
             <Text style={[sectionTitleStyle, { color: '#A3CFCF' }]}>Timeline</Text>
             <FlatList

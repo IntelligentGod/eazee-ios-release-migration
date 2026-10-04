@@ -38,7 +38,7 @@ describe('buildWeekPlanContext', () => {
 
   it('asks questions first, then plans each remaining day, then asks about gaps', () => {
     expect(context).toContain('Do not call any tool yet');
-    expect(context).toContain('Call plan_my_week exactly once, with one entry in days for EACH of these dates, in order: 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04');
+    expect(context).toContain("Call plan_my_week exactly once, with weekGoal set to the week's goal and one entry in days for EACH of these dates, in order: 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04");
     expect(context).toContain('point out any remaining gaps');
   });
 
@@ -82,8 +82,9 @@ describe('buildWeekPlanContext around the week goal', () => {
     expect(context).toContain('- Easy 3k run (daily, light, current step)');
     expect(context).toContain('- Long 8k run (once, heavy)');
     expect(context).not.toContain('Buy running shoes (');
-    expect(context).toContain('Each day has exactly ONE plan: its mainGoal');
-    expect(context).toContain('No timeline, no times, no extra tasks and no details');
+    expect(context).toContain("mainGoal: the day's main goal");
+    expect(context).toContain("items: the day's timeline, at most 5 items");
+    expect(context).toContain('Short titles only; never details');
   });
 
   it('asks for the week goal when there is none and saves it with goal_create', () => {

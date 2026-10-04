@@ -11,6 +11,8 @@ export type ChatUIMessage = {
 };
 
 export type ChatSessionListItem = {
+  /** A Fix my life chat; those have their own history. */
+  isFixMyLife: boolean;
   id: string;
   title: string;
   summary?: string;

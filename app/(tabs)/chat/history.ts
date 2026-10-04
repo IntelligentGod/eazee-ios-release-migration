@@ -166,9 +166,13 @@ function getStoredVoiceMessageAudioUri(cardJson?: string) {
   return audioUri || null;
 }
 
-function mapSession(row: ChatSessionModel, lastMessageAt?: number): ChatSessionListItem {
+/** The opening message of every Fix my life chat; it also marks a chat as one. */
+export const FIX_MY_LIFE_PROMPT = 'Fix my life: plan my whole week.';
+
+function mapSession(row: ChatSessionModel, lastMessageAt?: number, isFixMyLife = false): ChatSessionListItem {
   return {
     id: row.id,
+    isFixMyLife,
     title: row.title || 'New Chat',
     summary: row.summary || '',
     titleManuallySet: !!row.titleManuallySet,
@@ -208,7 +212,14 @@ export async function listChatSessions() {
     });
   }
 
-  return sortChatSessions(rows.map((row) => mapSession(row, backfilledLastMessageAt.get(row.id))));
+  // Fix my life chats all open with the same message, which tells the two histories apart.
+  const fixMyLifeOpeners = await database.collections
+    .get<ChatMessageModel>('chat_messages')
+    .query(Q.where('role', 'user'), Q.where('content', FIX_MY_LIFE_PROMPT))
+    .fetch();
+  const fixMyLifeSessionIds = new Set(fixMyLifeOpeners.map((message) => message.sessionId));
+
+  return sortChatSessions(rows.map((row) => mapSession(row, backfilledLastMessageAt.get(row.id), fixMyLifeSessionIds.has(row.id))));
 }
 
 export async function loadChatSession(sessionId: string) {

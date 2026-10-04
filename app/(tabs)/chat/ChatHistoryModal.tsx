@@ -7,6 +7,8 @@ import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 type ChatHistoryModalProps = {
   visible: boolean;
+  /** Header text; Fix my life shows its own history. */
+  title?: string;
   sessions: ChatSessionListItem[];
   activeSessionId: string | null;
   showSummaries?: boolean;
@@ -338,6 +340,7 @@ function DeleteChatConfirm({
 
 export function ChatHistoryModal({
   visible,
+  title = 'Chats',
   sessions,
   activeSessionId,
   showSummaries = false,
@@ -429,7 +432,7 @@ export function ChatHistoryModal({
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 14, minHeight: 34 }}>
             <Text style={{ color: '#3DC5B5', fontSize: 28, fontWeight: '700' }}>
-              {showSummaries ? 'Chats TST' : 'Chats'}
+              {showSummaries ? `${title} TST` : title}
             </Text>
             <View
               style={{

@@ -26,12 +26,20 @@ const SECTIONS: Section[] = [
 
 export default function AdminHomeScreen() {
   const { role } = useRoleSession();
-  const backToApp = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/home'));
+  // Staff reach Admin Info from Settings, which stays open underneath, so going
+  // back returns straight to it. Opened some other way, it reopens Settings.
+  const backToApp = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace({ pathname: '/(tabs)/home', params: { settings: 'true', settingsNonce: String(Date.now()) } });
+  };
   const sections = SECTIONS.filter((section) => !section.superAdminOnly || isSuperAdminRole(role));
 
   return (
     <SimpleScreen
-      title="Admin panel"
+      title="Admin Info"
       onBack={backToApp}
       right={role ? <View className="pr-2"><RoleBadge role={role} /></View> : null}
     >
