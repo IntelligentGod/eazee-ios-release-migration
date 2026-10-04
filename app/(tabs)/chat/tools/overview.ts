@@ -541,79 +541,6 @@ const plan_my_day: ToolHandler = async (args: any) => {
   return buildDayPlanCardValue(date, plannedTimeline, draftId);
 };
 
-const MAX_WEEK_PLAN_DAYS = 7;
-
-const normalizeGoalTitleKey = (title: string) => title.trim().toLowerCase().replace(/\s+/g, ' ');
-
-/**
- * The goal a Fix my life week is planned around becomes a This Week goal, unless
- * an open goal with that title already exists. Saved the same way as goal_create.
- */
-async function saveWeekGoalIfNew(title: string) {
-  if (!title) return null;
-  const existing = await database.collections
-    .get<TodoModel>('todos')
-    .query(Q.where('completed', false), Q.where('workspace', 'Goals'))
-    .fetch()
-    .catch(() => [] as TodoModel[]);
-  if (existing.some((todo) => normalizeGoalTitleKey(String(todo.text || '')) === normalizeGoalTitleKey(title))) {
-    return { title, created: false };
-  }
-  const result = await guidanceToolHandlers.goal_create({ title, timeframe: 'thisWeek' }).catch(() => null);
-  return { title, created: !!result?.created };
-}
-const MAX_WEEK_PLAN_ITEMS_PER_DAY = 5;
-
-/**
- * Fix my life: one call drafts every day, because a client tool call ends the model's turn.
- * Each day has its main goal and a timeline of at most 5 items, laid out like plan_my_day
- * (around existing events). A day sent without items gets its main goal as its only task.
- */
-const plan_my_week: ToolHandler = async (args: any) => {
-  const seenDates = new Set<string>();
-  const openTodoIdsByTitle = await fetchOpenTodoIdsByTitle();
-  const days = (Array.isArray(args?.days) ? args.days : [])
-    .map((day: any) => ({
-      date: normalizePlanDate(day?.date),
-      mainGoal: normalizeText(day?.mainGoal),
-      // Titles only on the timeline; details stay out of the day cards.
-      items: (Array.isArray(day?.items) ? day.items : [])
-        .slice(0, MAX_WEEK_PLAN_ITEMS_PER_DAY)
-        .map(({ details: _details, ...item }: any) => item),
-    }))
-    .filter((day: { date: string; mainGoal: string }) => day.mainGoal && !seenDates.has(day.date) && !!seenDates.add(day.date))
-    .sort((left: { date: string }, right: { date: string }) => left.date.localeCompare(right.date))
-    .slice(0, MAX_WEEK_PLAN_DAYS);
-  if (!days.length) throw new Error('NO_WEEK_PLAN_DAYS');
-
-  const weekGoal = await saveWeekGoalIfNew(normalizeText(args?.weekGoal));
-
-  const stamp = Date.now().toString(36);
-  const plans = [];
-  for (const { date, mainGoal, items } of days as { date: string; mainGoal: string; items: any[] }[]) {
-    if (items.length) {
-      const plan = await plan_my_day({ date, items });
-      plans.push({ ...plan, mainGoal });
-      continue;
-    }
-    const goalItem: DayPlanTimelineItem = {
-      id: `draft-goal-${date}`,
-      kind: 'task',
-      source: 'draft',
-      title: mainGoal,
-      dueDate: date,
-      hasDueTime: false,
-      durationMinutes: 45,
-      timeSource: 'none',
-      priority: 'high',
-      starred: true,
-      existingTodoId: openTodoIdsByTitle.get(normalizeTodoTitleKey(mainGoal)),
-    };
-    plans.push({ ...buildDayPlanCardValue(date, [goalItem], `week-plan-${date}-${stamp}`), mainGoal });
-  }
-  return { days: plans, weekGoal };
-};
-
 const save_day_plan: ToolHandler = async () => {
   const plan = getLastDayPlan();
   if (!plan) {
@@ -986,6 +913,80 @@ const daily_overview: ToolHandler = async (args: any) => {
     todos,
     calendar,
   };
+};
+
+const MAX_WEEK_PLAN_DAYS = 7;
+
+const normalizeGoalTitleKey = (title: string) => title.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * The goal a Fix my life week is planned around becomes a This Week goal, unless
+ * an open goal with that title already exists. Saved the same way as goal_create.
+ */
+async function saveWeekGoalIfNew(title: string) {
+  if (!title) return null;
+  const existing = await database.collections
+    .get<TodoModel>('todos')
+    .query(Q.where('completed', false), Q.where('workspace', 'Goals'))
+    .fetch()
+    .catch(() => [] as TodoModel[]);
+  if (existing.some((todo) => normalizeGoalTitleKey(String(todo.text || '')) === normalizeGoalTitleKey(title))) {
+    return { title, created: false };
+  }
+  const result = await guidanceToolHandlers.goal_create({ title, timeframe: 'thisWeek' }).catch(() => null);
+  return { title, created: !!result?.created };
+}
+const MAX_WEEK_PLAN_ITEMS_PER_DAY = 5;
+
+/**
+ * Fix my life: one call drafts every day, because a client tool call ends the model's turn.
+ * Each day has its main goal and a timeline of at most 5 items, laid out like plan_my_day
+ * (around existing events). A day sent without items gets its main goal as its only task.
+ */
+const plan_my_week: ToolHandler = async (args: any) => {
+  const seenDates = new Set<string>();
+  const openTodoIdsByTitle = await fetchOpenTodoIdsByTitle();
+  const days = (Array.isArray(args?.days) ? args.days : [])
+    .map((day: any) => ({
+      date: normalizePlanDate(day?.date),
+      mainGoal: normalizeText(day?.mainGoal),
+      // Titles only on the timeline; details stay out of the day cards.
+      items: (Array.isArray(day?.items) ? day.items : [])
+        .slice(0, MAX_WEEK_PLAN_ITEMS_PER_DAY)
+        .map(({ details: _details, ...item }: any) => item),
+    }))
+    .filter((day: { date: string; mainGoal: string }) => day.mainGoal && !seenDates.has(day.date) && !!seenDates.add(day.date))
+    .sort((left: { date: string }, right: { date: string }) => left.date.localeCompare(right.date))
+    .slice(0, MAX_WEEK_PLAN_DAYS);
+  if (!days.length) throw new Error('NO_WEEK_PLAN_DAYS');
+
+  const weekGoal = await saveWeekGoalIfNew(normalizeText(args?.weekGoal));
+
+  const stamp = Date.now().toString(36);
+  const plans = [];
+  for (const { date, mainGoal, items } of days as { date: string; mainGoal: string; items: any[] }[]) {
+    if (items.length) {
+      const plan = await plan_my_day({ date, items });
+      plans.push({ ...plan, mainGoal });
+      continue;
+    }
+    const goalItem: DayPlanTimelineItem = {
+      id: `draft-goal-${date}`,
+      kind: 'task',
+      source: 'draft',
+      title: mainGoal,
+      dueDate: date,
+      hasDueTime: false,
+      durationMinutes: 45,
+      timeSource: 'none',
+      priority: 'high',
+      starred: true,
+      existingTodoId: openTodoIdsByTitle.get(normalizeTodoTitleKey(mainGoal)),
+    };
+    plans.push({ ...buildDayPlanCardValue(date, [goalItem], `week-plan-${date}-${stamp}`), mainGoal });
+  }
+  // Nothing reaches To Do until the user approves a day with its Save button.
+  return { days: plans, weekGoal };
 };
 
 export const overviewToolHandlers: Record<string, ToolHandler> = {

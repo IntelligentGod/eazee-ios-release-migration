@@ -126,7 +126,7 @@ export function buildWeekPlanContext(input: WeekPlanInput) {
   const hasWeekGoal = input.goals.length > 0;
 
   const firstStep = hasWeekGoal
-    ? '1. FIRST reply, before planning anything: in one short message, name this week\'s goal(s) below and briefly say what you see (busiest day, overdue tasks, life areas behind). Ask whether the goal is still their focus this week, plus 1-2 short questions about commitments missing from the calendar and anything else that must happen. Do not call any tool yet.'
+    ? '1. FIRST reply: the week\'s goal is already set (This Week goals below), so plan the week right away with plan_my_week (step 3), with weekGoal set to that goal. Say in one sentence which goal the week is built around and that the user can ask for changes.'
     : '1. FIRST reply, before planning anything: the user has no goal for this week yet, and the week is planned around one. In one short message, briefly say what you see, then ask what they want to achieve this week. Offer 1-2 concrete suggestions drawn from their longer goals, wishlist or life areas behind, and ask about commitments missing from the calendar. Do not call any tool yet.';
 
   const sections = [
@@ -136,14 +136,14 @@ export function buildWeekPlanContext(input: WeekPlanInput) {
     '',
     'Follow these steps across the conversation:',
     firstStep,
-    '2. As soon as the user names a goal for this week that is not already in the This Week goals below, call goal_create with timeframe thisWeek and a short title in that same response, even if you still ask a follow-up question. If they confirmed an existing goal, keep it. Do not create duplicate goals. Then plan the whole week in ONE response.',
+    '2. As soon as the week\'s goal is clear (a new goal the user named, or an existing This Week goal they confirmed), plan the whole week right away with plan_my_week. Do not ask more questions first, and do not call goal_create: plan_my_week saves a new goal itself through weekGoal. The user adds each day to their To Do by tapping its Save button.',
     `3. Call plan_my_week exactly once, with weekGoal set to the week's goal and one entry in days for EACH of these dates, in order: ${planDates.join(', ')}. Today is included. Never plan only one day, and never use plan_my_day for this.`,
     '   - mainGoal: the day\'s main goal, a concrete step toward the week goal in a few words, such as "Record pronunciation baseline".',
-    '   - items: the day\'s timeline, at most 5 items, each with a start time (ISO, the user\'s timezone), durationMinutes and timeSource ai. The first item is the main goal step at a good-energy time. Then fit the To Do tasks below and anything the user mentioned around it. Short titles only; never details.',
+    '   - items: the day\'s timeline, at most 5 items, each type task with a start time (ISO, the user\'s timezone), durationMinutes and timeSource ai. The first item is the main goal step at a good-energy time. Then fit the To Do tasks below and anything the user mentioned around it. Short titles only; never details.',
     '   - Calendar events and timed tasks already on that day are added automatically as blockers. Do not include them as items, and do not schedule over them.',
     '   - Follow the goal\'s plan steps in order (one-off steps once, daily steps can repeat, heavier steps on days with fewer calendar events). If a goal has no steps, break it into small daily steps yourself, building up across the week.',
     '   - On a lighter day, the main goal can be an overdue To Do task below or a "Buy <item>" for a wishlist item that supports the week goal, but only when it moves the goal forward. Leave unrelated tasks and wishlist items out.',
-    '4. The app shows one card per day: its main goal and timeline. When the user replies after that, point out any remaining gaps (goal steps not scheduled, life areas still behind) if they ask, and remind them to tap Save on the days they want.',
+    '4. The app shows one card per day (its main goal and timeline) with a Save button that adds that day to their To Do. When the user replies after that, point out any remaining gaps (goal steps not scheduled, life areas still behind) if they ask, and remind them to tap Save on the days they want.',
     'If the user asks for changes to one day, call plan_my_week again with only that date, its main goal and its updated items. If they ask to replan the week, call plan_my_week again with every remaining date.',
     '',
     `This Week goals (${input.goals.length}):`,

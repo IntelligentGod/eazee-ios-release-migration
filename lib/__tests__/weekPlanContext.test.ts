@@ -36,8 +36,8 @@ describe('buildWeekPlanContext', () => {
     ),
   });
 
-  it('asks questions first, then plans each remaining day, then asks about gaps', () => {
-    expect(context).toContain('Do not call any tool yet');
+  it('plans every remaining day right away when a week goal is set, then points out gaps', () => {
+    expect(context).toContain('plan the week right away with plan_my_week');
     expect(context).toContain("Call plan_my_week exactly once, with weekGoal set to the week's goal and one entry in days for EACH of these dates, in order: 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04");
     expect(context).toContain('point out any remaining gaps');
   });
@@ -61,7 +61,7 @@ describe('buildWeekPlanContext around the week goal', () => {
     lifeGraphProgress: computeLifeGraphProgress(DEFAULT_LIFE_GRAPH_SETTINGS, [], weekStart),
   };
 
-  it('confirms an existing This Week goal and lists its remaining plan steps in order', () => {
+  it('plans around an existing This Week goal and lists its remaining plan steps in order', () => {
     const context = buildWeekPlanContext({
       ...base,
       goals: [{
@@ -75,7 +75,7 @@ describe('buildWeekPlanContext around the week goal', () => {
         ],
       }],
     });
-    expect(context).toContain('name this week\'s goal(s) below');
+    expect(context).toContain("the week's goal is already set");
     expect(context).toContain('- "Run 10k" (deadline Sun Oct 4)');
     expect(context).toContain('Details: Race on Sunday');
     expect(context).toContain('Plan steps (2 of 3 left, in order):');
@@ -87,7 +87,7 @@ describe('buildWeekPlanContext around the week goal', () => {
     expect(context).toContain('Short titles only; never details');
   });
 
-  it('asks for the week goal when there is none and saves it with goal_create', () => {
+  it('asks for the week goal when there is none, then saves it through plan_my_week', () => {
     const context = buildWeekPlanContext({
       ...base,
       goals: [],
@@ -95,7 +95,8 @@ describe('buildWeekPlanContext around the week goal', () => {
     });
     expect(context).toContain('the user has no goal for this week yet');
     expect(context).toContain('ask what they want to achieve this week');
-    expect(context).toContain('call goal_create with timeframe thisWeek');
+    expect(context).toContain('Do not call any tool yet');
+    expect(context).toContain('plan_my_week saves a new goal itself through weekGoal');
     expect(context).toContain('- none yet: ask the user for one (step 1)');
     expect(context).toContain('- "Learn Spanish" (this year)');
   });

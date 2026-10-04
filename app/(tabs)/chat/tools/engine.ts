@@ -127,7 +127,8 @@ export async function executeToolCall(
             role: 'assistant',
             content: [
               result?.weekGoal?.created ? `Added "${result.weekGoal.title}" to your goals for this week.` : '',
-              `Here's your week: ${cards.length} ${cards.length === 1 ? 'day' : 'days'}, each with its main goal and plan. Tap Save on each day you want, or reply with changes.`,
+              `Here's your week: ${cards.length} ${cards.length === 1 ? 'day' : 'days'}, each with its main goal and timeline.`,
+              'Tap Save plan on a day to add it to your To Do, or reply with changes.',
             ].filter(Boolean).join(' '),
           },
           ...cards.map((card) => ({ role: 'assistant' as const, content: '', card })),

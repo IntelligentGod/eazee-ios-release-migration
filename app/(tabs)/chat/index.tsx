@@ -3951,6 +3951,15 @@ export default function ChatScreen() {
       if (msgs.length) {
         await appendMessagesToSession(sessionId || null, msgs, { showInVisibleChat: sessionId === activeSessionIdRef.current });
       }
+      // In Fix my life, saving the week's goal must lead to the week's plan. A client
+      // tool ends the AI's turn, so if it saved the goal on its own, ask it to go on.
+      const isFixMyLifeSession = chatMessagesRef.current.find((message) => message.role === 'user')?.content?.trim() === FIX_MY_LIFE_PROMPT;
+      if (res?.success && name === 'goal_create' && isFixMyLifeSession && sessionId === activeSessionIdRef.current) {
+        void sendTextMessageRef.current?.(
+          'The goal is saved. Now plan my whole week around it with plan_my_week.',
+          { showUserMessage: false }
+        );
+      }
       if (
         res?.success &&
         isChatDayPlanTutorialPendingRef.current &&

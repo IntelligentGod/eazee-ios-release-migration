@@ -615,6 +615,26 @@ describe('plan_my_day', () => {
     goalCreate.mockRestore();
   });
 
+  it('adds nothing to To Do until the user saves a day', async () => {
+    const result = await executeToolCall(
+      {
+        name: 'plan_my_week',
+        arguments: {
+          days: [
+            { date: '2026-03-18', mainGoal: 'French basics', items: [{ type: 'task', text: 'French basics', start: '2026-03-18T09:00:00', durationMinutes: 30, timeSource: 'ai' }] },
+            { date: '2026-03-19', mainGoal: 'French verbs', items: [{ type: 'task', text: 'French verbs', start: '2026-03-19T10:00:00', durationMinutes: 30, timeSource: 'ai' }] },
+          ],
+        },
+      },
+      { serverUrl: 'http://localhost' }
+    );
+
+    expect(result.success).toBe(true);
+    expect(createTodos).not.toHaveBeenCalled();
+    expect(result.messages.slice(1).every((message: any) => message.card?.saved !== true)).toBe(true);
+    expect(result.messages[0]?.content).toContain('Tap Save plan on a day to add it to your To Do');
+  });
+
   it('saves a confirmed plan before classifying todos in the background', async () => {
     jest.useFakeTimers();
     try {
