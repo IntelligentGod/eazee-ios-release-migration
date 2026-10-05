@@ -1343,7 +1343,11 @@ function GuidanceBlurBackdrop({
   const swipeRx = swipeRect ? swipeRect.width / 2 : 1;
   const swipeRy = swipeRect ? swipeRect.height / 2 : 1;
 
+  // A plain View owns the "no touches" rule: on Android the native MaskedView and
+  // BlurView ignore pointerEvents, and would swallow taps meant for the highlighted
+  // target (e.g. "Tap Home in the bottom bar").
   return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
     <MaskedView
       pointerEvents="none"
       style={StyleSheet.absoluteFill}
@@ -1380,6 +1384,7 @@ function GuidanceBlurBackdrop({
         <View pointerEvents="none" style={styles.backdropDim} />
       </BlurView>
     </MaskedView>
+    </View>
   );
 }
 
@@ -1439,7 +1444,21 @@ function GuidanceOverlay({
     isGoalTutorialCardTarget ||
     isTodoAcceptPlanTutorialCardTarget;
   const fixedCardBottom = 160;
-  const cardTop = Math.max(58, windowHeight - (usesFixedBottomCard ? fixedCardBottom + cardHeight : isTodoTab ? 402 : 354));
+  const defaultCardTop = Math.max(58, windowHeight - (usesFixedBottomCard ? fixedCardBottom + cardHeight : isTodoTab ? 402 : 354));
+  // The card must never cover what it asks the user to tap: when it would, it
+  // moves above the target, or below it when there is no room above.
+  const cardTop = (() => {
+    if (!rect) return defaultCardTop;
+    const gap = 16;
+    const targetTop = rect.y - gap;
+    const targetBottom = rect.y + rect.height + gap;
+    const overlaps = defaultCardTop < targetBottom && defaultCardTop + cardHeight > targetTop;
+    if (!overlaps) return defaultCardTop;
+    const above = targetTop - cardHeight;
+    if (above >= 58) return above;
+    return Math.min(targetBottom, windowHeight - cardHeight - 24);
+  })();
+  const movedAwayFromTarget = cardTop !== defaultCardTop;
   const cardRadius = isTodoTab && !isTabTarget && !isTodoMainCardTarget && !isGoalTutorialCardTarget ? 20 : 30;
   const animatedCardTop = useAnimatedCardTop(!!step, cardTop);
 
@@ -1565,7 +1584,7 @@ function GuidanceOverlay({
           pointerEvents="auto"
           style={[
             styles.instructionCard,
-            usesFixedBottomCard
+            usesFixedBottomCard && !movedAwayFromTarget
               ? { bottom: fixedCardBottom, minHeight: cardHeight, borderRadius: cardRadius }
               : { top: animatedCardTop, minHeight: cardHeight, borderRadius: cardRadius },
           ]}
