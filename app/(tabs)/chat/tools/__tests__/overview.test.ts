@@ -553,9 +553,11 @@ describe('plan_my_day', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.messages).toHaveLength(3);
+    expect(result.messages).toHaveLength(4);
+    expect(result.messages[3]?.card).toMatchObject({ type: 'weekPlanSaveAll', draftIds: expect.any(Array) });
+    expect(result.messages[3]?.card?.draftIds).toHaveLength(2);
     expect(result.messages[0]?.content).toContain('2 days');
-    expect(result.messages.slice(1).map((message: any) => [message.card?.date, message.card?.mainGoal])).toEqual([
+    expect(result.messages.slice(1, 3).map((message: any) => [message.card?.date, message.card?.mainGoal])).toEqual([
       ['2026-03-18', 'Record pronunciation baseline'],
       ['2026-03-19', 'Practice vowel sounds'],
     ]);
@@ -631,8 +633,8 @@ describe('plan_my_day', () => {
 
     expect(result.success).toBe(true);
     expect(createTodos).not.toHaveBeenCalled();
-    expect(result.messages.slice(1).every((message: any) => message.card?.saved !== true)).toBe(true);
-    expect(result.messages[0]?.content).toContain('Tap Save plan on a day to add it to your To Do');
+    expect(result.messages.slice(1, -1).every((message: any) => message.card?.type === 'dayPlan' && message.card?.saved !== true)).toBe(true);
+    expect(result.messages[0]?.content).toContain('Save all');
   });
 
   it('saves a confirmed plan before classifying todos in the background', async () => {

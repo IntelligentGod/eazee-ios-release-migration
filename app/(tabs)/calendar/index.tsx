@@ -137,6 +137,14 @@ type StoredPendingGoogleCreateSync = Omit<PendingGoogleCreateSync, 'startDate' |
 
 type CalendarTutorialStage = 'create' | 'waiting-event' | 'created';
 
+const isGuestEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+/** The guest list plus any valid email still in the input, without duplicates. */
+const withPendingGuest = (guests: string[], pendingText: string) => {
+  const pending = pendingText.split(/[\s,]+/).map((email) => email.trim()).filter(isGuestEmail);
+  return [...new Set([...guests, ...pending])];
+};
+
 const getGoogleEventIdForLocalEvent = (localEventId: string) => {
   let hash = 2166136261;
   for (let index = 0; index < localEventId.length; index += 1) {
@@ -2809,7 +2817,7 @@ const CalendarScreen: React.FC = () => {
             };
 
         const response = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`,
           {
             method: 'PATCH',
             headers: {
@@ -3285,7 +3293,7 @@ const CalendarScreen: React.FC = () => {
     try {
       // console.log('Sending request to Google Calendar API');
       const response = await fetch(
-        'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1',
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all',
         {
           method: 'POST',
           headers: {
@@ -4006,7 +4014,7 @@ const CalendarScreen: React.FC = () => {
         title: eventTitle,
         details: eventDetailsText.trim(),
         location,
-        guests: [...guests],
+        guests: withPendingGuest(guests, newGuest),
         startDate,
         endDate,
       };
@@ -4151,7 +4159,7 @@ const CalendarScreen: React.FC = () => {
               end: { dateTime: currentEnd.toISOString(), timeZone: tz },
             };
         const response = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`,
           {
             method: 'PATCH',
             headers: {
@@ -4161,7 +4169,7 @@ const CalendarScreen: React.FC = () => {
             body: JSON.stringify({
               summary: editTitle,
               description: editDetails.trim(),
-              attendees: editGuests.map(email => ({ email })),
+              attendees: withPendingGuest(editGuests, newGuest).map(email => ({ email })),
               ...timeBody,
             }),
           }
@@ -4488,10 +4496,13 @@ const CalendarScreen: React.FC = () => {
             </ScrollView>
             <BottomSheetTextInput
               style={styles.guestInput}
-              placeholder={(isEditMode ? editGuests : guests).length === 0 ? "Add guests" : ""}
+              placeholder={(isEditMode ? editGuests : guests).length === 0 ? "Add the user's email here" : ""}
               placeholderTextColor={CREATE_SHEET_MUTED_TEXT_COLOR}
               value={newGuest}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              returnKeyType="done"
               onChangeText={(text) => {
                 setNewGuest(text);
                 if (text.includes(' ') || text.includes(',')) {

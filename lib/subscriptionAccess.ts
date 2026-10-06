@@ -43,6 +43,12 @@ export const createSubscriptionRequiredError = (
   limits?: SubscriptionLimits
 ) => new SubscriptionRequiredError(decision.reason, feature, limits);
 
+/** Whether a stored error message says the feature needs Eazee Pro (app or server wording). */
+export const isProRequiredMessage = (message: unknown) => {
+  const text = typeof message === 'string' ? message.trim() : '';
+  return text === getSubscriptionRequiredMessage('proOnly') || text === 'Eazee Pro required';
+};
+
 export const isSubscriptionRequiredError = (error: unknown): error is SubscriptionRequiredError =>
   error instanceof SubscriptionRequiredError
   || (error as any)?.name === 'SubscriptionRequiredError';

@@ -27,6 +27,7 @@ import {
 } from 'react-native-draggable-flatlist';
 import WorkspaceScrollArea from '@/components/WorkspaceScrollArea';
 import ScrollViewWithBar from '@/components/ScrollViewWithBar';
+import { isProRequiredMessage } from '@/lib/subscriptionAccess';
 import { syncEventReminders } from '@/lib/eventNotifications';
 import { useRouter, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -12260,13 +12261,30 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             </Text>
           )}
 
-          {!!guide?.errorMessage && guide.status === 'error' && (
+          {!!guide?.errorMessage && guide.status === 'error' && !isProRequiredMessage(guide.errorMessage) && (
             <Text style={[styles.goalGuidanceNotice, styles.goalGuidanceErrorText]}>
               {guide.errorMessage}
             </Text>
           )}
 
-          {isEmptyErrorView && (
+          {/* Free plan: say plainly that it is Pro, and offer Pro, instead of "try again". */}
+          {isEmptyErrorView && isProRequiredMessage(guide?.errorMessage) && (
+            <View style={styles.recipeQuestionStack}>
+              <GuidanceMarkdown>Video guides are part of **Eazee Pro**. You can still plan this with an Actions plan.</GuidanceMarkdown>
+              <TouchableOpacity
+                style={styles.goalGuidanceButton}
+                onPress={() => router.replace({
+                  pathname: '/(tabs)/home',
+                  params: { settings: 'true', settingsPanel: 'paywall', settingsNonce: String(Date.now()) },
+                })}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.goalGuidanceButtonText}>See Eazee Pro</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {isEmptyErrorView && !isProRequiredMessage(guide?.errorMessage) && (
             <View style={styles.recipeQuestionStack}>
               <GuidanceMarkdown>Try again with a more specific title or details.</GuidanceMarkdown>
               <TouchableOpacity

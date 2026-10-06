@@ -132,7 +132,11 @@ export function DayPlanCard({
     [calendarItems, timelineItems, todoItems]
   );
   const selectedPickerItem = pickerTarget ? items.find((item) => item.id === pickerTarget.itemId) : null;
-  const visibleItems = items.filter((item) => item.source === 'draft' && item.hidden !== true);
+  // A week plan day also shows what is already fixed that day (events, timed tasks),
+  // so the card reflects the whole day, not just the new items.
+  const visibleItems = items.filter((item) => (
+    (item.source === 'draft' && item.hidden !== true) || (!!mainGoal && item.kind === 'blocker')
+  ));
   const saveableDraftCount = items.filter((item) => item.source === 'draft' && (item.kind === 'event' || item.kind === 'task')).length;
   const eventCount = calendarItems.length;
   const taskCount = todoItems.length;

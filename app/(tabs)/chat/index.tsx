@@ -780,6 +780,8 @@ function serializeTitleMessage(message: ChatUIMessage) {
   const content = String(message.content || '').trim();
   if (content) return content;
   const cardType = typeof message.card?.type === 'string' ? message.card.type : '';
+  // A plan card says nothing about the topic, and would end up as the title.
+  if (cardType === 'dayPlan' || cardType === 'weekPlanSaveAll') return '';
   return cardType ? `${cardType} card` : '';
 }
 
@@ -890,6 +892,50 @@ function findLatestDraftDayPlanMessage(messages: ChatUIMessage[]) {
   }
 
   return hasDraftPrompt ? planCardMessage : null;
+}
+
+/** "Save all": adds every day of a week plan that is still waiting to To Do. */
+function WeekPlanSaveAllButton({
+  draftIds,
+  pendingDraftIds,
+  onSaveAll,
+}: {
+  draftIds: string[];
+  pendingDraftIds: Set<string>;
+  onSaveAll: (draftIds: string[]) => Promise<void>;
+}) {
+  const [isSaving, setIsSaving] = useState(false);
+  const pendingCount = draftIds.filter((id) => pendingDraftIds.has(id)).length;
+  const isDone = pendingCount === 0;
+  const disabled = isSaving || isDone;
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      activeOpacity={0.86}
+      disabled={disabled}
+      onPress={() => {
+        setIsSaving(true);
+        void onSaveAll(draftIds).finally(() => setIsSaving(false));
+      }}
+      style={{
+        marginTop: 4,
+        marginBottom: 8,
+        minHeight: 48,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 8,
+        backgroundColor: isDone ? 'rgba(0, 0, 0, 0.35)' : '#0F766E',
+        opacity: isSaving ? 0.75 : 1,
+      }}
+    >
+      {isSaving ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>
+        {isSaving ? 'Saving...' : isDone ? 'All days saved' : `Save all (${pendingCount} ${pendingCount === 1 ? 'day' : 'days'})`}
+      </Text>
+    </TouchableOpacity>
+  );
 }
 
 function isDayPlanSaveConfirmation(text: string) {
@@ -1273,6 +1319,8 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   onUpdateDayPlanCard,
   onSaveDayPlanCard,
   onCancelDayPlanCard,
+  onSaveAllDayPlans,
+  weekPlanPendingDraftIds,
   onRetryMessage,
   buyingWishlistTodoId,
   resolvedGoalQuotaPlanIds,
@@ -1291,8 +1339,11 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   onDismissRecipeTodoOffer: (offer: RecipeTodoOfferCardValue) => Promise<void>;
   onBuyWishlistTodo: (item: { id?: string; text: string; workspace?: string }) => Promise<void>;
   onUpdateDayPlanCard: (card: DayPlanCardValue) => Promise<void>;
-  onSaveDayPlanCard: (card: DayPlanCardValue) => Promise<void>;
+  onSaveDayPlanCard: (card: DayPlanCardValue) => Promise<unknown>;
   onCancelDayPlanCard: (card: DayPlanCardValue) => Promise<void>;
+  onSaveAllDayPlans: (draftIds: string[]) => Promise<void>;
+  /** Day plans in this chat not yet saved or cancelled. */
+  weekPlanPendingDraftIds: Set<string>;
   onRetryMessage: (message: ChatUIMessage) => void;
   buyingWishlistTodoId: string | null;
   resolvedGoalQuotaPlanIds: Set<string>;
@@ -1455,10 +1506,17 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
               saved={message.card.saved === true}
               cancelled={message.card.cancelled === true}
               onChange={onUpdateDayPlanCard}
-              onSave={() => onSaveDayPlanCard(message.card as DayPlanCardValue)}
+              onSave={async () => { await onSaveDayPlanCard(message.card as DayPlanCardValue); }}
               onCancel={() => onCancelDayPlanCard(message.card as DayPlanCardValue)}
             />
           </View>
+        )}
+        {message.card?.type === 'weekPlanSaveAll' && (
+          <WeekPlanSaveAllButton
+            draftIds={Array.isArray(message.card.draftIds) ? message.card.draftIds : []}
+            pendingDraftIds={weekPlanPendingDraftIds}
+            onSaveAll={onSaveAllDayPlans}
+          />
         )}
         {message.card?.type === 'navigationShortcut' && (
           <View style={{ marginTop: message.content ? 8 : 0 }}>
@@ -2303,6 +2361,12 @@ export default function ChatScreen() {
   const activeChatSession = activeSessionId
     ? chatSessions.find((session) => session.id === activeSessionId)
     : null;
+  const weekPlanPendingDraftIds = useMemo(() => new Set(
+    chatMessages
+      .map((message) => message?.card)
+      .filter((card) => card?.type === 'dayPlan' && card.saved !== true && card.cancelled !== true)
+      .map((card) => String(card.draftId || ''))
+  ), [chatMessages]);
   // Fix my life and normal AI chats each keep their own history.
   const isFixMyLifeChat = chatMessages.find((message) => message.role === 'user')?.content?.trim() === FIX_MY_LIFE_PROMPT;
   const historySessions = useMemo(
@@ -2357,7 +2421,7 @@ export default function ChatScreen() {
     try {
       const session = await database.collections.get<ChatSessionModel>('chat_sessions').find(sessionId);
       // Fix my life chats named before this rule all read "Plan Whole Week"; those are renamed too.
-      const hasGenericFixMyLifeTitle = isFixMyLife && /^plan (?:my )?whole week$/i.test(String(session.title || '').trim());
+      const hasGenericFixMyLifeTitle = isFixMyLife && /^(?:plan (?:my )?whole week|dayplan card)$/i.test(String(session.title || '').trim());
       if (session.titleManuallySet || (session.titleGeneratedAt && !hasGenericFixMyLifeTitle)) return;
 
       const recent = getTitleContextMessages(meaningful);
@@ -2849,10 +2913,10 @@ export default function ChatScreen() {
     }
   }, []);
 
-  const saveDayPlanCard = useCallback(async (card: DayPlanCardValue) => {
-    if (!card || card.type !== 'dayPlan' || card.saved === true || card.cancelled === true || getDayPlanDraftCount(card) === 0) return;
+  const saveDayPlanCard = useCallback(async (card: DayPlanCardValue, options?: { quiet?: boolean }): Promise<boolean> => {
+    if (!card || card.type !== 'dayPlan' || card.saved === true || card.cancelled === true || getDayPlanDraftCount(card) === 0) return false;
     const sessionId = activeSessionIdRef.current;
-    if (!sessionId) return;
+    if (!sessionId) return false;
 
     setLastDayPlanFromCard(card);
     startAssistantTyping(sessionId);
@@ -2876,13 +2940,13 @@ export default function ChatScreen() {
       }
 
       const saveMessages = Array.isArray(saveResult?.messages) ? saveResult.messages : [];
-      if (saveMessages.length) {
+      if (saveMessages.length && !options?.quiet) {
         await appendMessagesToSession(sessionId, saveMessages, {
           showInVisibleChat: sessionId === activeSessionIdRef.current,
         });
       }
 
-      const saveActions = Array.isArray(saveResult?.uiActions) ? saveResult.uiActions : [];
+      const saveActions = Array.isArray(saveResult?.uiActions) && !options?.quiet ? saveResult.uiActions : [];
       for (const action of saveActions) {
         if (action?.type === 'navigate') {
           try { router.push({ pathname: action.route, params: action.params || {} }); } catch { }
@@ -2911,10 +2975,34 @@ export default function ChatScreen() {
           }
         }
       }
+      return !!saveResult?.success;
     } finally {
       stopAssistantTyping(sessionId);
     }
   }, [appendMessagesToSession, finishChatDayPlanTutorialAndOpenTodo, router, startAssistantTyping, stopAssistantTyping]);
+
+  /** Saves every day of a week plan still waiting, in date order, with one message at the end. */
+  const saveAllDayPlanCards = useCallback(async (draftIds: string[]) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) return;
+    const wanted = new Set(draftIds);
+    const pending = chatMessagesRef.current
+      .map((message) => message?.card)
+      .filter((card): card is DayPlanCardValue => (
+        card?.type === 'dayPlan' && wanted.has(String(card.draftId || '')) && card.saved !== true && card.cancelled !== true
+      ));
+    let savedDays = 0;
+    for (const card of pending) {
+      if (await saveDayPlanCard(card, { quiet: true })) savedDays += 1;
+    }
+    const failedDays = pending.length - savedDays;
+    await appendMessagesToSession(sessionId, [{
+      role: 'assistant',
+      content: failedDays
+        ? `Added ${savedDays} of ${pending.length} days to your To Do. Check the others and tap Save plan on them.`
+        : `Added ${savedDays} ${savedDays === 1 ? 'day' : 'days'} to your To Do.`,
+    }], { showInVisibleChat: sessionId === activeSessionIdRef.current });
+  }, [appendMessagesToSession, saveDayPlanCard]);
 
   const cancelDayPlanCard = useCallback(async (card: DayPlanCardValue) => {
     if (!card || card.type !== 'dayPlan' || card.saved === true || card.cancelled === true) return;
@@ -5049,12 +5137,14 @@ export default function ChatScreen() {
       onBuyWishlistTodo={handleBuyWishlistTodo}
       onUpdateDayPlanCard={persistDayPlanCardState}
       onSaveDayPlanCard={saveDayPlanCard}
+      onSaveAllDayPlans={saveAllDayPlanCards}
+      weekPlanPendingDraftIds={weekPlanPendingDraftIds}
       onCancelDayPlanCard={cancelDayPlanCard}
       onRetryMessage={handleRetryMessage}
       buyingWishlistTodoId={buyingWishlistTodoId}
       resolvedGoalQuotaPlanIds={resolvedGoalQuotaPlanIds}
     />
-  ), [appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
+  ), [saveAllDayPlanCards, weekPlanPendingDraftIds, appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
 
   const renderChatFooter = useCallback(() => {
     const logoBounceStyle = {
@@ -5173,14 +5263,7 @@ export default function ChatScreen() {
           onPress={() => {
             if (isChatDayPlanTutorialPending) return;
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            // In a Fix my life chat, + starts a fresh week plan instead of a plain chat.
-            const firstUserText = chatMessages.find((message) => message.role === 'user')?.content;
-            if (typeof firstUserText === 'string' && firstUserText.trim() === FIX_MY_LIFE_PROMPT) {
-              fixMyLifeFromNewChatRef.current = true;
-              setFixMyLifeRequestKey(`new-chat-${Date.now()}`);
-            } else {
-              void handleNewChat().then(() => showToast('Opened a new chat'));
-            }
+            void handleNewChat().then(() => showToast('Opened a new chat'));
             completeChatGuidanceAction('new');
           }}
         >

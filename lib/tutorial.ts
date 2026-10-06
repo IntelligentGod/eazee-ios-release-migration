@@ -28,6 +28,16 @@ export const TUTORIAL_DEMO_TODO_TITLE = 'Pack for a weekend trip';
 export const TUTORIAL_DEMO_TODO_DETAILS =
   'Check the weather, choose outfits, and pack the essentials.';
 export const TUTORIAL_DEMO_GOAL_TITLE = 'Learn basic guitar';
+
+/**
+ * The walkthrough's own demo task and goal. Guidance on these two works on the
+ * Free plan, so a new user can finish the tutorial; the server applies the
+ * same exception (TUTORIAL_DEMO_TITLES in eazee-server/src/usage/usageLimits.ts).
+ */
+export const isTutorialDemoTitle = (title: unknown) => {
+  const normalized = typeof title === 'string' ? title.trim().toLowerCase() : '';
+  return normalized === TUTORIAL_DEMO_TODO_TITLE.toLowerCase() || normalized === TUTORIAL_DEMO_GOAL_TITLE.toLowerCase();
+};
 export const TUTORIAL_DEMO_GOAL_DETAILS =
   'Build a beginner practice routine for chords, strumming, and simple songs.';
 export const TUTORIAL_GOAL_GUIDANCE_REPLY =

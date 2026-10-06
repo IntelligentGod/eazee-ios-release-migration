@@ -126,24 +126,25 @@ export function buildWeekPlanContext(input: WeekPlanInput) {
   const hasWeekGoal = input.goals.length > 0;
 
   const firstStep = hasWeekGoal
-    ? '1. FIRST reply: the week\'s goal is already set (This Week goals below), so plan the week right away with plan_my_week (step 3), with weekGoal set to that goal. Say in one sentence which goal the week is built around and that the user can ask for changes.'
-    : '1. FIRST reply, before planning anything: the user has no goal for this week yet, and the week is planned around one. In one short message, briefly say what you see, then ask what they want to achieve this week. Offer 1-2 concrete suggestions drawn from their longer goals, wishlist or life areas behind, and ask about commitments missing from the calendar. Do not call any tool yet.';
+    ? '1. FIRST reply: the week\'s goal is already set (This Week goals below), so plan the week right away with plan_my_week (step 3), with weekGoal set to that goal. In one or two sentences, say how many To Do tasks the week holds (and any overdue), which goal it is built around, and that the user can ask for changes.'
+    : '1. FIRST reply, before planning anything: in one short message, summarise the user\'s week from their To Do tasks below (how many, which days are busiest, anything overdue) and their calendar. Then ask what they want to achieve this week on top of those tasks, offering 1-2 concrete suggestions drawn from their tasks, longer goals or wishlist. Do not call any tool yet.';
 
   const sections = [
     'FIX MY LIFE WEEK PLAN MODE.',
     `The user tapped "Fix my life" to plan their week of ${format(input.weekStart, 'EEE MMM d')} to ${format(weekEnd, 'EEE MMM d')}. Today is ${format(input.now, 'EEEE MMM d')}.`,
-    'The whole week is built around the user\'s goal for this week. Their To Do tasks, calendar, Goals and Wishlist below all feed the plan.',
+    'The week is made mostly of the user\'s own To Do tasks below: every one of them must be scheduled on a day. The week\'s goal adds one step a day on top. Calendar, Goals and Wishlist fill in the rest.',
     '',
     'Follow these steps across the conversation:',
     firstStep,
     '2. As soon as the week\'s goal is clear (a new goal the user named, or an existing This Week goal they confirmed), plan the whole week right away with plan_my_week. Do not ask more questions first, and do not call goal_create: plan_my_week saves a new goal itself through weekGoal. The user adds each day to their To Do by tapping its Save button.',
     `3. Call plan_my_week exactly once, with weekGoal set to the week's goal and one entry in days for EACH of these dates, in order: ${planDates.join(', ')}. Today is included. Never plan only one day, and never use plan_my_day for this.`,
-    '   - mainGoal: the day\'s main goal, a concrete step toward the week goal in a few words, such as "Record pronunciation baseline".',
-    '   - items: the day\'s timeline, at most 5 items, each type task with a start time (ISO, the user\'s timezone), durationMinutes and timeSource ai. The first item is the main goal step at a good-energy time. Then fit the To Do tasks below and anything the user mentioned around it. Short titles only; never details.',
-    '   - Calendar events and timed tasks already on that day are added automatically as blockers. Do not include them as items, and do not schedule over them.',
-    '   - Follow the goal\'s plan steps in order (one-off steps once, daily steps can repeat, heavier steps on days with fewer calendar events). If a goal has no steps, break it into small daily steps yourself, building up across the week.',
-    '   - On a lighter day, the main goal can be an overdue To Do task below or a "Buy <item>" for a wishlist item that supports the week goal, but only when it moves the goal forward. Leave unrelated tasks and wishlist items out.',
-    '4. The app shows one card per day (its main goal and timeline) with a Save button that adds that day to their To Do. When the user replies after that, point out any remaining gaps (goal steps not scheduled, life areas still behind) if they ask, and remind them to tap Save on the days they want.',
+    '   - Schedule EVERY To Do task below. A task due on a given day goes on that day. Overdue and undated tasks are spread over the coming days, starred and overdue ones first, on lighter days. Use each task\'s exact title so saving reschedules it instead of creating a duplicate.',
+    '   - Then add one item for the day\'s goal step. Follow the goal\'s plan steps in order (one-off steps once, daily steps can repeat). If the goal has no steps, break it into small daily steps yourself.',
+    '   - items: at most 5 per day, each type task with a start time (ISO, the user\'s timezone), durationMinutes and timeSource ai, at sensible times. Short titles only; never details. If a day has more tasks than fit, move the least urgent undated ones to a lighter day.',
+    '   - mainGoal: the day\'s main focus in a few words: the goal step, or the most important task when that day is mostly tasks.',
+    '   - Calendar events and timed tasks already on that day are fixed: the app shows them on the card and plans around them. Do not include them as items, and do not schedule over them.',
+    '   - A wishlist item becomes "Buy <item>" only if it supports the goal or the user asks for it.',
+    '4. The app shows one card per day (its main focus, the fixed items and the new timeline) with a Save button that adds that day to their To Do. When the user replies after that, point out anything left unscheduled if they ask, and remind them to tap Save on the days they want.',
     'If the user asks for changes to one day, call plan_my_week again with only that date, its main goal and its updated items. If they ask to replan the week, call plan_my_week again with every remaining date.',
     '',
     `This Week goals (${input.goals.length}):`,

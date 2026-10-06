@@ -39,7 +39,8 @@ describe('buildWeekPlanContext', () => {
   it('plans every remaining day right away when a week goal is set, then points out gaps', () => {
     expect(context).toContain('plan the week right away with plan_my_week');
     expect(context).toContain("Call plan_my_week exactly once, with weekGoal set to the week's goal and one entry in days for EACH of these dates, in order: 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04");
-    expect(context).toContain('point out any remaining gaps');
+    expect(context).toContain('point out anything left unscheduled');
+    expect(context).toContain('Schedule EVERY To Do task below');
   });
 
   it('includes events, tasks with their exact titles, goals, and life areas', () => {
@@ -82,8 +83,8 @@ describe('buildWeekPlanContext around the week goal', () => {
     expect(context).toContain('- Easy 3k run (daily, light, current step)');
     expect(context).toContain('- Long 8k run (once, heavy)');
     expect(context).not.toContain('Buy running shoes (');
-    expect(context).toContain("mainGoal: the day's main goal");
-    expect(context).toContain("items: the day's timeline, at most 5 items");
+    expect(context).toContain("mainGoal: the day's main focus");
+    expect(context).toContain('items: at most 5 per day');
     expect(context).toContain('Short titles only; never details');
   });
 
@@ -93,7 +94,7 @@ describe('buildWeekPlanContext around the week goal', () => {
       goals: [],
       longerGoals: [{ title: 'Learn Spanish', timeframe: 'thisYear' }],
     });
-    expect(context).toContain('the user has no goal for this week yet');
+    expect(context).toContain("summarise the user's week from their To Do tasks");
     expect(context).toContain('ask what they want to achieve this week');
     expect(context).toContain('Do not call any tool yet');
     expect(context).toContain('plan_my_week saves a new goal itself through weekGoal');
@@ -109,7 +110,7 @@ describe('buildWeekPlanContext around the week goal', () => {
     });
     expect(context).toContain('Wishlist (1; things the user wants to buy):');
     expect(context).toContain('- "Running watch": GPS');
-    expect(context).toContain('Leave unrelated tasks and wishlist items out');
+    expect(context).toContain('only if it supports the goal or the user asks for it');
   });
 });
 

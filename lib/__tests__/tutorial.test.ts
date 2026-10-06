@@ -10,6 +10,7 @@ import {
   completeTutorialStep,
   getTutorialReadingTimeMs,
   getTutorialProgress,
+  isTutorialDemoTitle,
   isActiveTutorialStepPending,
   isTutorialDemoTodoReusable,
   isTutorialSessionActive,
@@ -135,5 +136,14 @@ describe('tutorial progress', () => {
     expect(getTutorialReadingTimeMs('Read this.')).toBe(2800);
     expect(getTutorialReadingTimeMs('This message has enough words to take noticeably longer to read.')).toBeGreaterThan(2800);
     expect(getTutorialReadingTimeMs(Array.from({ length: 60 }, () => 'word').join(' '))).toBe(10000);
+  });
+});
+
+describe('isTutorialDemoTitle', () => {
+  it('matches only the walkthrough demo task and goal', () => {
+    expect(isTutorialDemoTitle('Pack for a weekend trip')).toBe(true);
+    expect(isTutorialDemoTitle('  learn BASIC guitar ')).toBe(true);
+    expect(isTutorialDemoTitle('Learn piano')).toBe(false);
+    expect(isTutorialDemoTitle(undefined)).toBe(false);
   });
 });

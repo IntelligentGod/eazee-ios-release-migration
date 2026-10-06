@@ -6,6 +6,7 @@ import { createSubscriptionRequiredError } from '@/lib/subscriptionAccess';
 import { checkAiFeatureAccess, recordAiAction } from '@/lib/subscriptionUsage';
 import { readCachedSubscriptionLimits } from '@/lib/subscriptionLimits';
 import { isChatMeteredFeature, type AiFeatureKey } from '@/lib/subscription';
+import { isTutorialDemoTitle } from '@/lib/tutorial';
 
 /**
  * Every server-backed AI call funnels through here, so this is where the plan
@@ -16,7 +17,10 @@ import { isChatMeteredFeature, type AiFeatureKey } from '@/lib/subscription';
  * modified. The backend must verify entitlement against the Firebase UID in the
  * ID token below before doing any paid work.
  */
-export const getAiRequestHeaders = async (feature: AiFeatureKey = 'aiChat') => {
+export const getAiRequestHeaders = async (
+  feature: AiFeatureKey = 'aiChat',
+  options?: { guidanceTitle?: string }
+) => {
   const user = auth.currentUser;
   if (!user?.uid) {
     throw createAiAuthRequiredError();
@@ -24,7 +28,9 @@ export const getAiRequestHeaders = async (feature: AiFeatureKey = 'aiChat') => {
 
   await requireAiDataSharingConsent(user.uid);
 
-  const decision = await checkAiFeatureAccess(user.uid, feature, user.email);
+  // The tutorial's demo task and goal get guidance on every plan.
+  const isTutorialDemo = isTutorialDemoTitle(options?.guidanceTitle);
+  const decision = isTutorialDemo ? { allowed: true as const } : await checkAiFeatureAccess(user.uid, feature, user.email);
   if (!decision.allowed) {
     throw createSubscriptionRequiredError(decision, feature, await readCachedSubscriptionLimits(user.uid));
   }
