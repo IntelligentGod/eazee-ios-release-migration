@@ -1,19 +1,15 @@
 import type { GuidanceFeature, PlanLimits, SubscriptionLimits } from '@/lib/subscriptionLimits';
 
-export type LimitField = 'chatMessagesPerDay' | 'voiceMinutesPerDay' | GuidanceFeature;
+/** AI chat and voice input are unlimited on every plan, so only guidance limits are set here. */
+export type LimitField = GuidanceFeature;
 export type LimitsForm = Record<'free' | 'pro', Record<LimitField, string>>;
 
 export const LIMIT_FIELDS: { field: LimitField; label: string; unit: string }[] = [
-  { field: 'chatMessagesPerDay', label: 'AI chat messages', unit: 'per day' },
-  { field: 'voiceMinutesPerDay', label: 'Voice input', unit: 'minutes per day' },
   { field: 'goalGuidance', label: 'Goal guidance', unit: 'plans per day' },
   { field: 'taskGuidance', label: 'Task guidance', unit: 'guides per day' },
   { field: 'recipeSkillGuide', label: 'Recipe and skill guides', unit: 'guides per day' },
   { field: 'guidanceQuestions', label: 'Questions about a guide', unit: 'per day' },
 ];
-
-const GUIDANCE_FIELDS: GuidanceFeature[] = ['goalGuidance', 'taskGuidance', 'recipeSkillGuide', 'guidanceQuestions'];
-const isGuidance = (field: LimitField): field is GuidanceFeature => (GUIDANCE_FIELDS as string[]).includes(field);
 
 const MAX_LIMIT = 100_000;
 
@@ -23,7 +19,7 @@ const toText = (value: number | null) => (value === null ? '' : String(value));
 export function limitsToForm(limits: SubscriptionLimits): LimitsForm {
   const plan = (limits: PlanLimits) => Object.fromEntries(LIMIT_FIELDS.map(({ field }) => [
     field,
-    toText(isGuidance(field) ? limits.guidance[field] : limits[field]),
+    toText(limits.guidance[field]),
   ])) as Record<LimitField, string>;
   return { free: plan(limits.free), pro: plan(limits.pro) };
 }
@@ -45,8 +41,8 @@ export function formToLimits(form: LimitsForm): { limits: SubscriptionLimits } |
       values[field] = Number(text);
     }
     result[tier] = {
-      chatMessagesPerDay: values.chatMessagesPerDay ?? null,
-      voiceMinutesPerDay: values.voiceMinutesPerDay ?? null,
+      chatMessagesPerDay: null,
+      voiceMinutesPerDay: null,
       guidance: {
         goalGuidance: values.goalGuidance ?? null,
         taskGuidance: values.taskGuidance ?? null,

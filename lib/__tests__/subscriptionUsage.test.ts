@@ -22,8 +22,9 @@ import {
   type PlanLimits,
 } from '@/lib/subscriptionLimits';
 
-const FREE_DAILY_AI_ACTIONS = DEFAULT_SUBSCRIPTION_LIMITS.free.chatMessagesPerDay!;
-const FREE_DAILY_VOICE_SECONDS = DEFAULT_SUBSCRIPTION_LIMITS.free.voiceMinutesPerDay! * 60;
+// AI chat and voice input are unlimited on every plan; these stand for a heavy day of use.
+const FREE_DAILY_AI_ACTIONS = 500;
+const FREE_DAILY_VOICE_SECONDS = 600 * 60;
 
 jest.mock('@react-native-async-storage/async-storage', () => {
   let store: Record<string, string> = {};
@@ -55,33 +56,14 @@ const SUGGESTION_DAY = new Date(2026, 8, 20);
 
 describe('plan entitlements', () => {
   describe('free tier', () => {
-    it('allows chat until the daily allowance is spent', () => {
-      expect(decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: 0 }))).toEqual({
-        allowed: true,
-      });
-      expect(
-        decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: FREE_DAILY_AI_ACTIONS - 1 }))
-      ).toEqual({ allowed: true });
-      expect(
-        decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: FREE_DAILY_AI_ACTIONS }))
-      ).toEqual({ allowed: false, reason: 'aiActionsExhausted' });
+    it('never runs out of AI chat', () => {
+      expect(decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: 0 }))).toEqual({ allowed: true });
+      expect(decideAiFeatureAccess('free', 'aiChat', usage({ aiActions: FREE_DAILY_AI_ACTIONS }))).toEqual({ allowed: true });
     });
 
-    it('allows voice until the daily minutes are spent', () => {
-      expect(
-        decideAiFeatureAccess(
-          'free',
-          'voiceInput',
-          usage({ voiceSeconds: FREE_DAILY_VOICE_SECONDS - 1 })
-        )
-      ).toEqual({ allowed: true });
-      expect(
-        decideAiFeatureAccess(
-          'free',
-          'voiceInput',
-          usage({ voiceSeconds: FREE_DAILY_VOICE_SECONDS })
-        )
-      ).toEqual({ allowed: false, reason: 'voiceExhausted' });
+    it('never runs out of voice input', () => {
+      expect(decideAiFeatureAccess('free', 'voiceInput', usage({ voiceSeconds: FREE_DAILY_VOICE_SECONDS })))
+        .toEqual({ allowed: true });
     });
 
     it('meters voice separately from chat actions', () => {
@@ -185,15 +167,12 @@ describe('usage accounting', () => {
     await expect(readDailyUsage('user-1', '1999-01-01')).resolves.toEqual(EMPTY_DAILY_USAGE);
   });
 
-  it('blocks a free user once the daily allowance is spent', async () => {
-    for (let i = 0; i < FREE_DAILY_AI_ACTIONS; i += 1) {
+  it('never blocks AI chat for a free user, however much they use', async () => {
+    for (let i = 0; i < 50; i += 1) {
       await recordAiAction('user-1');
     }
 
-    await expect(checkAiFeatureAccess('user-1', 'aiChat')).resolves.toEqual({
-      allowed: false,
-      reason: 'aiActionsExhausted',
-    });
+    await expect(checkAiFeatureAccess('user-1', 'aiChat')).resolves.toEqual({ allowed: true });
   });
 
   it('unblocks the same user once they are on pro', async () => {
@@ -211,19 +190,12 @@ describe('usage accounting', () => {
   });
 
   it('treats only the developer sandbox account as pro without a purchase', async () => {
-    for (let i = 0; i < FREE_DAILY_AI_ACTIONS; i += 1) {
-      await recordAiAction('user-1');
-    }
-
     await expect(
-      checkAiFeatureAccess('user-1', 'aiChat', ' Developer_Sandbox@eazee.ai ')
+      checkAiFeatureAccess('user-1', 'guidance', ' Developer_Sandbox@eazee.ai ')
     ).resolves.toEqual({ allowed: true });
-    await expect(
-      checkAiFeatureAccess('user-1', 'guidance', 'developer_sandbox@eazee.ai')
-    ).resolves.toEqual({ allowed: true });
-    await expect(checkAiFeatureAccess('user-1', 'aiChat', 'someone@eazee.ai')).resolves.toEqual({
+    await expect(checkAiFeatureAccess('user-1', 'guidance', 'someone@eazee.ai')).resolves.toEqual({
       allowed: false,
-      reason: 'aiActionsExhausted',
+      reason: 'proOnly',
     });
   });
 });
@@ -264,17 +236,16 @@ describe('limits from the server', () => {
       .toEqual({ allowed: false, reason: 'proOnly' });
   });
 
-  it('reads the cached limits when checking access', async () => {
+  it('reads the cached limits when checking access, ignoring an old chat limit', async () => {
     await writeCachedSubscriptionLimits('user-1', {
       ...DEFAULT_SUBSCRIPTION_LIMITS,
-      free: freeLimits({ chatMessagesPerDay: 1 }),
+      free: freeLimits({ chatMessagesPerDay: 1, guidance: { ...DEFAULT_SUBSCRIPTION_LIMITS.free.guidance, goalGuidance: 1 } }),
     });
     await recordAiAction('user-1');
+    await recordAiAction('user-1');
 
-    await expect(checkAiFeatureAccess('user-1', 'aiChat')).resolves.toEqual({
-      allowed: false,
-      reason: 'aiActionsExhausted',
-    });
+    await expect(checkAiFeatureAccess('user-1', 'aiChat')).resolves.toEqual({ allowed: true });
+    await expect(checkAiFeatureAccess('user-1', 'guidance')).resolves.toEqual({ allowed: true });
   });
 
   it('takes the server count when it is higher than the local one', async () => {

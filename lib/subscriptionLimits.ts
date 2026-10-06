@@ -19,8 +19,8 @@ export type SubscriptionLimits = { free: PlanLimits; pro: PlanLimits };
  */
 export const DEFAULT_SUBSCRIPTION_LIMITS: SubscriptionLimits = {
   free: {
-    chatMessagesPerDay: 5,
-    voiceMinutesPerDay: 2,
+    chatMessagesPerDay: null,
+    voiceMinutesPerDay: null,
     guidance: { goalGuidance: 0, taskGuidance: 0, recipeSkillGuide: 0, guidanceQuestions: 0 },
   },
   pro: {
@@ -46,9 +46,10 @@ function parsePlanLimits(value: unknown): PlanLimits | null {
   if (!plan || !isLimit(plan.chatMessagesPerDay) || !isLimit(plan.voiceMinutesPerDay) || !guidance) return null;
   const features: GuidanceFeature[] = ['goalGuidance', 'taskGuidance', 'recipeSkillGuide', 'guidanceQuestions'];
   if (!features.every((feature) => isLimit(guidance[feature]))) return null;
+  // AI chat and voice input are unlimited on every plan, even in limits saved before that.
   return {
-    chatMessagesPerDay: plan.chatMessagesPerDay,
-    voiceMinutesPerDay: plan.voiceMinutesPerDay,
+    chatMessagesPerDay: null,
+    voiceMinutesPerDay: null,
     guidance: Object.fromEntries(features.map((feature) => [feature, guidance[feature]])) as PlanLimits['guidance'],
   };
 }

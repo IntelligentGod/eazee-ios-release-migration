@@ -219,11 +219,11 @@ describe('restorePurchases and status sync', () => {
   });
 
   it('caches what the server reports, including the limits', async () => {
-    const limits = { ...DEFAULT_SUBSCRIPTION_LIMITS, free: { ...DEFAULT_SUBSCRIPTION_LIMITS.free, chatMessagesPerDay: 9 } };
+    const limits = { ...DEFAULT_SUBSCRIPTION_LIMITS, free: { ...DEFAULT_SUBSCRIPTION_LIMITS.free, guidance: { ...DEFAULT_SUBSCRIPTION_LIMITS.free.guidance, taskGuidance: 9 } } };
     statusReply = overview(subscription(), limits);
     await syncStoreSubscriptionStatus('user-1');
     expect(await readCachedSubscriptionStatus('user-1')).toMatchObject({ isPro: true, planId: 'yearly', state: 'active' });
-    expect((await readCachedSubscriptionLimits('user-1')).free.chatMessagesPerDay).toBe(9);
+    expect((await readCachedSubscriptionLimits('user-1')).free.guidance.taskGuidance).toBe(9);
 
     statusReply = overview(subscription({ isPro: false, state: 'expired', expiresAt: Date.now() - 1 }));
     await syncStoreSubscriptionStatus('user-1');

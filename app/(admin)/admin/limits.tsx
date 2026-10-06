@@ -70,8 +70,6 @@ function LimitsEditor({ config, onSaved }: { config: AdminConfig; onSaved: (conf
     }
   };
 
-  const chatAndVoice = LIMIT_FIELDS.slice(0, 2);
-  const guidance = LIMIT_FIELDS.slice(2);
   const rows = (fields: typeof LIMIT_FIELDS) => fields.map(({ field, label, unit }) => (
     <LimitRow key={field} label={label} unit={unit} free={form.free[field]} pro={form.pro[field]} onChange={setField(field)} />
   ));
@@ -86,10 +84,9 @@ function LimitsEditor({ config, onSaved }: { config: AdminConfig; onSaved: (conf
         <Text className="w-24 text-center text-xs font-bold uppercase text-gray-500">Free</Text>
         <Text className="w-24 text-center text-xs font-bold uppercase text-gray-500">Pro</Text>
       </View>
-      <SectionTitle>AI chat and voice</SectionTitle>
-      {rows(chatAndVoice)}
+      {/* AI chat and voice input are unlimited on every plan, so only guidance has limits. */}
       <SectionTitle>Guidance</SectionTitle>
-      {rows(guidance)}
+      {rows(LIMIT_FIELDS)}
       <Text className="px-4 pt-2 text-xs text-gray-500">
         Recipe and skill video search needs a guide left but is not counted; generating the guide is.
       </Text>
