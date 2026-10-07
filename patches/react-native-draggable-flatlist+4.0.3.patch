@@ -17,7 +17,7 @@ index eef7cac..21498ce 100644
  //# sourceMappingURL=NestableDraggableFlatList.js.map
 \ No newline at end of file
 diff --git a/node_modules/react-native-draggable-flatlist/lib/module/components/DraggableFlatList.js b/node_modules/react-native-draggable-flatlist/lib/module/components/DraggableFlatList.js
-index 80185d0..b106a67 100644
+index 80185d0..5c24b64 100644
 --- a/node_modules/react-native-draggable-flatlist/lib/module/components/DraggableFlatList.js
 +++ b/node_modules/react-native-draggable-flatlist/lib/module/components/DraggableFlatList.js
 @@ -184,6 +184,7 @@ function DraggableFlatListInner(props) {
@@ -29,7 +29,7 @@ index 80185d0..b106a67 100644
    });
    const onDragEnd = useStableCallback(_ref3 => {
 diff --git a/node_modules/react-native-draggable-flatlist/lib/module/components/NestableDraggableFlatList.js b/node_modules/react-native-draggable-flatlist/lib/module/components/NestableDraggableFlatList.js
-index 3bf1f43..a4734ad 100644
+index 3bf1f43..827f949 100644
 --- a/node_modules/react-native-draggable-flatlist/lib/module/components/NestableDraggableFlatList.js
 +++ b/node_modules/react-native-draggable-flatlist/lib/module/components/NestableDraggableFlatList.js
 @@ -63,6 +63,12 @@ function NestableDraggableFlatListInner(props, ref) {
@@ -54,10 +54,80 @@ index 3bf1f43..a4734ad 100644
      onAnimValInit: onAnimValInit
    }));
 diff --git a/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx b/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx
-index 7c88afc..0e98714 100644
+index 7c88afc..df21156 100644
 --- a/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx
 +++ b/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx
-@@ -215,6 +215,7 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -40,6 +40,10 @@ import { useStableCallback } from "../hooks/useStableCallback";
+ import ScrollOffsetListener from "./ScrollOffsetListener";
+ import { typedMemo } from "../utils";
+ 
++// How long after the finger lifts to wait before releasing a cell that was armed by a
++// long press but never dragged (see onContainerTouchEnd).
++const ARMED_CELL_RELEASE_DELAY_MS = 250;
++
+ type RNGHFlatListProps<T> = Animated.AnimateProps<
+   FlatListProps<T> & {
+     ref: React.Ref<FlatList<T>>;
+@@ -144,8 +148,17 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+     });
+   }, [props.data, keyExtractor, keyToIndexRef]);
+ 
++  // Each long press that arms a cell starts a drag session, so the release fallback in
++  // onContainerTouchEnd can tell an armed-but-never-moved cell from a real drag.
++  const dragSessionRef = useRef(0);
++  const panStartedSessionRef = useRef(0);
++  const endedSessionRef = useRef(0);
++
+   const drag = useStableCallback((activeKey: string) => {
+     if (disabled.value) return;
++    // The long press can land after the finger already lifted; arming then would leave
++    // the cell active with nothing left to release it.
++    if (!isTouchActiveNative.value) return;
+     const index = keyToIndexRef.current.get(activeKey);
+     const cellData = cellDataRef.current.get(activeKey);
+     if (cellData) {
+@@ -155,6 +168,7 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+ 
+     const { onDragBegin } = propsRef.current;
+     if (index !== undefined) {
++      dragSessionRef.current += 1;
+       spacerIndexAnim.value = index;
+       activeIndexAnim.value = index;
+       setActiveKey(activeKey);
+@@ -182,8 +196,32 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+     return false;
+   };
+ 
++  const markPanStarted = useStableCallback(() => {
++    panStartedSessionRef.current = dragSessionRef.current;
++  });
++
++  /**
++   * The finger lifted. Normally the reaction below releases a cell that was armed but not
++   * moved; if it misses (the pan failed before the long press landed, or a stale translation
++   * looked like movement), the cell stayed active and the list stayed frozen with scrolling
++   * off. This releases it once the drag clearly never started.
++   */
+   const onContainerTouchEnd = () => {
+     isTouchActiveNative.value = false;
++    const session = dragSessionRef.current;
++    setTimeout(() => {
++      const isArmedButNeverDragged =
++        session > 0 &&
++        session === dragSessionRef.current &&
++        endedSessionRef.current !== session &&
++        panStartedSessionRef.current !== session &&
++        activeIndexAnim.value >= 0 &&
++        !disabled.value;
++      if (!isArmedButNeverDragged) return;
++      const index = activeIndexAnim.value;
++      onRelease(index);
++      onDragEnd({ from: index, to: index });
++    }, ARMED_CELL_RELEASE_DELAY_MS);
+   };
+ 
+   const extraData = useMemo(
+@@ -215,12 +253,14 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
    );
  
    const onRelease = useStableCallback((index: number) => {
@@ -65,6 +135,48 @@ index 7c88afc..0e98714 100644
      props.onRelease?.(index);
    });
  
+   const onDragEnd = useStableCallback(
+     ({ from, to }: { from: number; to: number }) => {
+       const { onDragEnd, data } = props;
++      endedSessionRef.current = dragSessionRef.current;
+ 
+       const newData = [...data];
+       if (from !== to) {
+@@ -231,6 +271,13 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+       onDragEnd?.({ from, to, data: newData });
+ 
+       setActiveKey(null);
++      // Nothing moved, so the data will not change and reset() will not run: clear the
++      // active cell here, or the next pan anywhere in the list acts on this stale cell.
++      if (from === to) {
++        activeIndexAnim.value = -1;
++        spacerIndexAnim.value = -1;
++        touchTranslate.value = 0;
++      }
+     }
+   );
+ 
+@@ -273,6 +320,9 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+   const gestureDisabled = useSharedValue(false);
+ 
+   const panGesture = Gesture.Pan()
++    .onStart(() => {
++      runOnJS(markPanStarted)();
++    })
+     .onBegin((evt) => {
+       gestureDisabled.value = disabled.value;
+       if (gestureDisabled.value) return;
+@@ -321,6 +371,10 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+       // Turning this into a worklet causes timing issues. We want it to run
+       // just after the finger lifts.
+       runOnJS(onContainerTouchEnd)();
++    })
++    .onFinalize(() => {
++      // A pan that failed early gets no onTouchesUp; still treat its end as the finger lifting.
++      runOnJS(onContainerTouchEnd)();
+     });
+ 
+   if (dragHitSlop) panGesture.hitSlop(dragHitSlop);
 diff --git a/node_modules/react-native-draggable-flatlist/src/components/NestableDraggableFlatList.tsx b/node_modules/react-native-draggable-flatlist/src/components/NestableDraggableFlatList.tsx
 index 1559352..4089808 100644
 --- a/node_modules/react-native-draggable-flatlist/src/components/NestableDraggableFlatList.tsx

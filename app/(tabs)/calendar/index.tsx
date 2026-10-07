@@ -70,6 +70,8 @@ import {
 import ScrollViewWithBar from '@/components/ScrollViewWithBar';
 
 const HOUR_HEIGHT = 60;
+/** How long after the finger lifts to wait for a drag to start before releasing a long-press lock. */
+const ARMED_DRAG_RELEASE_DELAY_MS = 250;
 const INITIAL_SCALE = 1;
 const ANDROID_CALENDAR_KEYBOARD_GAP = 10;
 const MIN_SCALE = 0.5;
@@ -866,6 +868,8 @@ const CalendarScreen: React.FC = () => {
 
   // drag-to-move state
   const [draggingEvent, setDraggingEvent] = useState<EventModel | null>(null);
+  const draggingEventRef = useRef<EventModel | null>(null);
+  draggingEventRef.current = draggingEvent;
   const [dragPreviewRect, setDragPreviewRect] = useState<{
     eventId: string;
     left: number;
@@ -885,6 +889,9 @@ const CalendarScreen: React.FC = () => {
   const createSlotPreviewTop = useRef(new Animated.Value(0)).current;
   const createSlotPreviewHeight = useRef(new Animated.Value(0)).current;
   const [dragReadyEventId, setDragReadyEventId] = useState<string | null>(null);
+  const dragReadyEventIdRef = useRef<string | null>(null);
+  dragReadyEventIdRef.current = dragReadyEventId;
+  const eventPanActiveRef = useRef(false);
 
   // Active quarter highlight during drag: updates only when snapped quarter changes
   const dragHighlightRef = useRef<{ hour: number; minute: number } | null>(null);
@@ -1022,6 +1029,19 @@ const CalendarScreen: React.FC = () => {
       snappedDragY.setValue(0);
     });
   }, [autoScrollOffsetY, clearDragHighlight, snappedDragX, snappedDragY, stopAutoScroll]);
+
+  /**
+   * A long press arms an event for dragging, which locks scrolling and taps. If the finger
+   * lifts without the drag ever starting, the drag handler can miss it (its release may
+   * arrive before the long press), leaving the calendar locked. This releases it.
+   */
+  const releaseArmedEventDrag = useCallback((eventId: string) => {
+    setTimeout(() => {
+      if (eventPanActiveRef.current || dropInProgressRef.current) return;
+      if (dragReadyEventIdRef.current !== eventId && String(draggingEventRef.current?.id || '') !== eventId) return;
+      resetDrag();
+    }, ARMED_DRAG_RELEASE_DELAY_MS);
+  }, [resetDrag]);
 
   const commitDragPreviewAtTarget = useCallback((daysDelta: number, minutesDelta: number) => {
     const currentPreview = dragPreviewRectRef.current || dragPreviewRect;
@@ -2482,6 +2502,7 @@ const CalendarScreen: React.FC = () => {
           createOnCreateSlotResizeStateChange,
           createOnEventDragStateChange,
           isDragCommitInProgress: () => dropInProgressRef.current,
+          releaseArmedEventDrag,
           isEventMovable,
           getDisplayedEventRange,
           setDragReadyEventId,
@@ -2889,6 +2910,9 @@ const CalendarScreen: React.FC = () => {
   }, [fetchEventsForWeek, getAccessToken, getGoogleCalendarEvent, weekStart]);
 
   const createOnEventDragStateChange = (event: EventModel) => async (e: any) => {
+    if (e.nativeEvent.state === State.ACTIVE) eventPanActiveRef.current = true;
+    if (e.nativeEvent.oldState === State.ACTIVE) eventPanActiveRef.current = false;
+
     if (e.nativeEvent.state === State.BEGAN) {
       // Only start dragging if user held long enough
       if (dragReadyEventId === event.id) {

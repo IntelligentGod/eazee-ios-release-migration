@@ -96,6 +96,7 @@ export type CalendarGestureHandlers = {
   createOnCreateSlotResizeStateChange: (edge: CreateSlotResizeEdge) => (event: any) => void;
   createOnEventDragStateChange: (event: CalendarEventLike) => (event: any) => void;
   isDragCommitInProgress: () => boolean;
+  releaseArmedEventDrag: (eventId: string) => void;
   isEventMovable: (event: CalendarEventLike) => boolean;
   getDisplayedEventRange: (event: CalendarEventLike) => { startDate: Date; endDate: Date };
   setDragReadyEventId: (eventId: string | null) => void;
@@ -367,6 +368,7 @@ function CalendarTimeGrid(props: CalendarWeekPanelProps) {
     createOnCreateSlotResizeStateChange,
     createOnEventDragStateChange,
     isDragCommitInProgress,
+    releaseArmedEventDrag,
     isEventMovable,
     getDisplayedEventRange,
     setDragReadyEventId,
@@ -826,6 +828,7 @@ function CalendarTimeGrid(props: CalendarWeekPanelProps) {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
                     } catch {}
                   }}
+                  onPressOut={() => releaseArmedEventDrag(String(eventForSlot.event.id))}
                   onPress={() => {
                     if (draggingEvent) return;
                     interactions.onEventPress(eventForSlot.event);
