@@ -33,6 +33,9 @@ export default class EventModel extends Model {
   @field('latitude') latitude?: number;
   // @ts-ignore
   @field('longitude') longitude?: number;
+  /** Set on each occurrence of a weekly repeating event (see lib/eventSeries.ts). */
+  // @ts-ignore
+  @field('series_id') seriesId?: string | null;
   // @ts-ignore
   @field('attendees') attendees?: Array<{ email: string; responseStatus?: string }>;
 

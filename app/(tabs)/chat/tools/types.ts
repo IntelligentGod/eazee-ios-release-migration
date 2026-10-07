@@ -58,6 +58,7 @@ export type ToolMemory = {
   lastDayPlan: {
     draftId?: string;
     date: string;
+    repeatWeekly?: boolean;
     calendarItems: Array<{
       title: string;
       start?: string;

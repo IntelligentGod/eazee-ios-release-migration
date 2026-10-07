@@ -3,6 +3,7 @@ import { Q } from '@nozbe/watermelondb';
 import { getAccessTokenStatic } from '@/app/context/TokenContext';
 import { database } from '@/database/database';
 import EventModel from '@/database/models/EventModel';
+import { extendEventSeries } from '@/lib/eventSeries';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { WAVE_EVENT_DESCRIPTION_SENTINEL } from '@/utils/calendarDetails';
 
@@ -17,6 +18,7 @@ export type RangeCalendarEvent = {
 
 /** Local events starting in [start, end); events mirrored from a todo are left out. */
 export async function fetchLocalCalendarEvents(start: Date, end: Date): Promise<RangeCalendarEvent[]> {
+  await extendEventSeries(end).catch(() => {});
   const rows = await database.collections
     .get<EventModel>('events')
     .query(Q.where('start_date', Q.gte(start.getTime())), Q.where('start_date', Q.lt(end.getTime())))

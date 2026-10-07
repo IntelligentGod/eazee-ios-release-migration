@@ -36,11 +36,33 @@ describe('buildWeekPlanContext', () => {
     ),
   });
 
-  it('plans every remaining day right away when a week goal is set, then points out gaps', () => {
-    expect(context).toContain('plan the week right away with plan_my_week');
-    expect(context).toContain("Call plan_my_week exactly once, with weekGoal set to the week's goal and one entry in days for EACH of these dates, in order: 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04");
+  it('plans every remaining day right away as calendar blocks, then points out gaps', () => {
+    expect(context).toContain('plan the whole week right away with plan_my_week. Do not ask questions first.');
+    expect(context).toContain('Call plan_my_week exactly once, with one entry in days for EACH of these dates, in order: 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04');
     expect(context).toContain('point out anything left unscheduled');
-    expect(context).toContain('Schedule EVERY To Do task below');
+    expect(context).toContain('Give EVERY To Do task below a time block');
+    expect(context).toContain('each type event with a start time');
+    expect(context).toContain('Repeat weekly switch');
+  });
+
+  it('marks timed tasks as already fixed so they are not scheduled twice', () => {
+    const timed = buildWeekPlanContext({
+      now,
+      weekStart,
+      events: [],
+      tasks: [{ title: 'Guitar practice', dueDate: new Date(2026, 9, 1, 20), hasDueTime: true, isOverdue: false, starred: false }],
+      goals: [],
+      lifeGraph: DEFAULT_LIFE_GRAPH_SETTINGS,
+      lifeGraphProgress: computeLifeGraphProgress(DEFAULT_LIFE_GRAPH_SETTINGS, [], weekStart),
+    });
+    expect(timed).toContain('"Guitar practice" (fixed at Thu Oct 1 8:00 PM: already on that day, do not add it)');
+    expect(timed).toContain('except the ones marked fixed');
+  });
+
+  it('never creates tasks or goals', () => {
+    expect(context).toContain('never create, edit or complete tasks or goals');
+    expect(context).toContain('nothing is saved from it');
+    expect(context).not.toContain('goal_create:');
   });
 
   it('includes events, tasks with their exact titles, goals, and life areas', () => {
@@ -76,7 +98,7 @@ describe('buildWeekPlanContext around the week goal', () => {
         ],
       }],
     });
-    expect(context).toContain("the week's goal is already set");
+    expect(context).toContain("weekGoal: the week's focus in a few words: the This Week goal below");
     expect(context).toContain('- "Run 10k" (deadline Sun Oct 4)');
     expect(context).toContain('Details: Race on Sunday');
     expect(context).toContain('Plan steps (2 of 3 left, in order):');
@@ -88,17 +110,15 @@ describe('buildWeekPlanContext around the week goal', () => {
     expect(context).toContain('Short titles only; never details');
   });
 
-  it('asks for the week goal when there is none, then saves it through plan_my_week', () => {
+  it("builds the week around the user's tasks when there is no week goal, without asking for one", () => {
     const context = buildWeekPlanContext({
       ...base,
       goals: [],
       longerGoals: [{ title: 'Learn Spanish', timeframe: 'thisYear' }],
     });
-    expect(context).toContain("summarise the user's week from their To Do tasks");
-    expect(context).toContain('ask what they want to achieve this week');
-    expect(context).toContain('Do not call any tool yet');
-    expect(context).toContain('plan_my_week saves a new goal itself through weekGoal');
-    expect(context).toContain('- none yet: ask the user for one (step 1)');
+    expect(context).toContain("the most important goal or theme in the user's tasks");
+    expect(context).toContain("- none: build the week around the user's tasks");
+    expect(context).not.toContain('ask what they want to achieve');
     expect(context).toContain('- "Learn Spanish" (this year)');
   });
 
@@ -110,7 +130,7 @@ describe('buildWeekPlanContext around the week goal', () => {
     });
     expect(context).toContain('Wishlist (1; things the user wants to buy):');
     expect(context).toContain('- "Running watch": GPS');
-    expect(context).toContain('only if it supports the goal or the user asks for it');
+    expect(context).toContain("only if it supports the week's goal or the user asks for it");
   });
 });
 

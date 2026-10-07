@@ -115,6 +115,7 @@ export async function executeToolCall(
           draftId: typeof day?.draftId === 'string' ? day.draftId : undefined,
           date: String(day?.date || ''),
           mainGoal: typeof day?.mainGoal === 'string' ? day.mainGoal : undefined,
+          repeatWeekly: false,
           calendarItems: Array.isArray(day?.calendarItems) ? day.calendarItems : [],
           todoItems: Array.isArray(day?.todoItems) ? day.todoItems : [],
           timelineItems: Array.isArray(day?.timelineItems) ? day.timelineItems : undefined,
@@ -126,10 +127,9 @@ export async function executeToolCall(
           {
             role: 'assistant',
             content: [
-              result?.weekGoal?.created ? `Added "${result.weekGoal.title}" to your goals for this week.` : '',
-              `Here's your week: ${cards.length} ${cards.length === 1 ? 'day' : 'days'}, each with its main goal and timeline.`,
-              'Tap Save plan on a day, or Save all at the end, to add it to your To Do. Reply with any changes.',
-            ].filter(Boolean).join(' '),
+              `Here's your week: ${cards.length} ${cards.length === 1 ? 'day' : 'days'}, each with its main focus and schedule.`,
+              "Tap Save plan on a day, or Save all at the end, to add it to your calendar. Turn on Repeat weekly to keep a day's schedule every week. Reply with any changes.",
+            ].join(' '),
           },
           ...cards.map((card) => ({ role: 'assistant' as const, content: '', card })),
           ...(cards.length > 1
@@ -147,7 +147,7 @@ export async function executeToolCall(
         messages = [
           {
             role: 'assistant',
-            content: 'Added to your schedule.',
+            content: result?.repeatWeekly ? 'Added to your calendar, repeating every week.' : 'Added to your schedule.',
           },
           ...(shouldShowHomeShortcut
             ? [{

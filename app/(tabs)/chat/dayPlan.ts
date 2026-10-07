@@ -51,6 +51,8 @@ export type DayPlanCardValue = {
   saveBlockedReason?: string;
   /** The day's main goal, set when the day was drafted as part of a week plan. */
   mainGoal?: string;
+  /** A week plan day saved as calendar events that repeat every week. */
+  repeatWeekly?: boolean;
   saved?: boolean;
   cancelled?: boolean;
 };

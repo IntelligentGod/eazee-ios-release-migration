@@ -7,6 +7,7 @@ import migrations from './migrations';
 import NoteModel from './models/NoteModel';
 import FolderModel from './models/FolderModel';
 import EventModel from './models/EventModel';
+import EventSeriesModel from './models/EventSeriesModel';
 import HomeEventCompletionModel from './models/HomeEventCompletionModel';
 import AppSettingsModel from './models/AppSettingsModel';
 import TokenModel from './models/TokenModel';
@@ -24,7 +25,7 @@ import SkillGuideModel from './models/SkillGuideModel';
 
 export const DEFAULT_DATABASE_NAME = 'NotesApp';
 
-const modelClasses = [NoteModel, FolderModel, EventModel, HomeEventCompletionModel, AppSettingsModel, TokenModel, AccountModel, TodoModel, TodoRecurrenceSeriesModel, UserPreferenceModel, EmailModel, ChatSessionModel, ChatMessageModel, GoalGuidancePlanModel, RecipeGuideModel, TaskGuideModel, SkillGuideModel];
+const modelClasses = [NoteModel, FolderModel, EventModel, EventSeriesModel, HomeEventCompletionModel, AppSettingsModel, TokenModel, AccountModel, TodoModel, TodoRecurrenceSeriesModel, UserPreferenceModel, EmailModel, ChatSessionModel, ChatMessageModel, GoalGuidancePlanModel, RecipeGuideModel, TaskGuideModel, SkillGuideModel];
 const databases = new Map<string, Database>();
 
 const createDatabase = (dbName: string) => {

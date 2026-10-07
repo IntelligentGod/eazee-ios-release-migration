@@ -111,6 +111,7 @@ import type {
   Task as BlobTask,
 } from '@/core/blob/BehaviorMetrics';
 import { computeBehaviorMetrics } from '@/core/blob/BehaviorMetrics';
+import { extendEventSeries } from '@/lib/eventSeries';
 import { computeBlobVisualMeaning } from '@/src/blob/blobMeaning';
 import { blobMeaningFromBehaviorMetrics } from '@/src/blob/blobMeaningFromSignals';
 import { BLOB_SCENARIOS } from '@/src/blob/blobScenarioPresets';
@@ -899,6 +900,7 @@ export default function HomePage() {
 
   const loadLocalHomeSnapshot = useCallback(async () => {
     await refreshGoalGuidancePlansForToday();
+    await extendEventSeries(homeSuggestionRange.endExclusive).catch(() => {});
 
     const [localEvents, suggestionLocalEvents, todos, goalGuidancePlans, goalTodos, taskGuides, skillGuides] = await Promise.all([
       database.collections

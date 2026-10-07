@@ -6,6 +6,7 @@ import { getAccessTokenStatic } from '@/app/context/TokenContext';
 import type { ToolHandler } from './todo';
 import { classifyCreatedTodoItemsInBackground, createTodoItems } from './todo';
 import { createCalendarEvent } from './calendar';
+import { createWeeklyEventSeries, extendEventSeries } from '@/lib/eventSeries';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { getTodoHasDueTime, parseTodoInput } from '@/utils/todoDates';
 import { updateTodo } from '@/lib/todoMutations';
@@ -13,7 +14,6 @@ import { isSupportedTodoWorkspaceKey } from '@/lib/todoWorkspaces';
 import { SERVER_URL } from '@/config/backend';
 import { getAiRequestHeaders } from '@/lib/aiRequest';
 import { appendCreatedCalendarItems, appendCreatedTodoItems, getLastDayPlan, setLastCalendarItems, setLastQueryItems } from './memory';
-import { guidanceToolHandlers } from './guidance';
 import {
   buildDayPlanCardValue,
   getTimelineDurationMinutes,
@@ -370,6 +370,10 @@ const plan_my_day: ToolHandler = async (args: any) => {
     durationMinutes?: number;
   }[] = [];
   const blockerItems = await withFallbackTimeout(fetchDayPlanCalendarBlockers(date), DAY_PLAN_BLOCKER_TIMEOUT_MS, []);
+  // In a week schedule, an event or timed task already on that day is shown as fixed; never add it twice.
+  const fixedTitleKeys = args?.asSchedule === true
+    ? new Set(blockerItems.map((blocker) => normalizeTodoTitleKey(String(blocker.title || ''))))
+    : null;
   let timelineItems: DayPlanTimelineItem[] = [];
 
   rawItems.forEach((item: any, index: number) => {
@@ -381,10 +385,13 @@ const plan_my_day: ToolHandler = async (args: any) => {
     const daypartWindow = getStructuredDaypartWindow(item?.daypart) || getStructuredDaypartWindow(item?.timeWindow) || getPlanDaypartWindow(rawTimeText);
     const daypartHasExactTime = hasExplicitClockTime(rawTimeText);
     const cleanedText = daypartWindow ? cleanDaypartText(text) || text : text;
+    if (fixedTitleKeys?.has(normalizeTodoTitleKey(cleanedText))) return;
     const start = parseIsoInput(item?.start);
     const end = parseIsoInput(item?.end);
     const location = normalizeText(item?.location) || undefined;
-    const explicitType = item?.type === 'event' || item?.type === 'task' || item?.type === 'buffer' ? item.type : undefined;
+    const requestedType = item?.type === 'event' || item?.type === 'task' || item?.type === 'buffer' ? item.type : undefined;
+    // A week schedule (Fix my life) only ever adds calendar blocks, never tasks.
+    const explicitType = args?.asSchedule === true && requestedType !== 'buffer' ? 'event' : requestedType;
 
     if (explicitType === 'buffer') {
       const durationMinutes = getTimelineDurationMinutes(item, 'task', start, end);
@@ -411,7 +418,11 @@ const plan_my_day: ToolHandler = async (args: any) => {
         : (!!start || !!end) || EVENT_LIKE_RE.test(combinedText);
 
     if (isCalendarItem) {
-      const calendarItem = resolvePlanCalendarItem({ date, item, text: cleanedText, details, start, end, location });
+      // A schedule block lasts as long as the plan says, not the default event hour.
+      const scheduleEnd = !end && start && args?.asSchedule === true
+        ? new Date(new Date(start).getTime() + getTimelineDurationMinutes(item, 'task') * 60_000).toISOString()
+        : end;
+      const calendarItem = resolvePlanCalendarItem({ date, item, text: cleanedText, details, start, end: scheduleEnd, location });
       const originalTimeSource = normalizePlanTimeSource(item?.timeSource);
       const shouldApplyDaypart = !!daypartWindow && !daypartHasExactTime && (!calendarItem.start || !isInDaypartWindow(calendarItem.start, daypartWindow));
       if (daypartWindow && shouldApplyDaypart) {
@@ -561,7 +572,26 @@ const save_day_plan: ToolHandler = async () => {
     }
   }
 
+  const repeatWeekly = plan.repeatWeekly === true;
   const calendarSavePromise = Promise.all(rawCalendarItems.map(async (item) => {
+    if (repeatWeekly) {
+      const series = await createWeeklyEventSeries({
+        title: item.title,
+        start: item.start!,
+        end: item.end!,
+        location: item.location,
+        details: item.details,
+      });
+      return {
+        id: series.firstEventId,
+        title: item.title,
+        startDate: String(item.start),
+        endDate: item.end,
+        source: 'local' as const,
+        location: item.location,
+        details: item.details,
+      };
+    }
     const result = await createCalendarEvent({
       title: item.title,
       start: item.start,
@@ -639,6 +669,7 @@ const save_day_plan: ToolHandler = async () => {
   return {
     saved: true,
     date: normalizedPlan.date,
+    repeatWeekly,
     calendarItems: createdCalendarItems.map((item) => ({
       title: item.title,
       start: item.startDate,
@@ -665,6 +696,7 @@ async function fetchDayPlanCalendarBlockers(date: string): Promise<DayPlanTimeli
   const dayEndExclusive = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1, 0, 0, 0);
   const dayEnd = new Date(dayEndExclusive.getTime() - 1);
 
+  await extendEventSeries(dayEndExclusive).catch(() => {});
   const localPromise = database.collections
     .get<EventModel>('events')
     .query(
@@ -917,35 +949,17 @@ const daily_overview: ToolHandler = async (args: any) => {
 
 const MAX_WEEK_PLAN_DAYS = 7;
 
-const normalizeGoalTitleKey = (title: string) => title.trim().toLowerCase().replace(/\s+/g, ' ');
-
-/**
- * The goal a Fix my life week is planned around becomes a This Week goal, unless
- * an open goal with that title already exists. Saved the same way as goal_create.
- */
-async function saveWeekGoalIfNew(title: string) {
-  if (!title) return null;
-  const existing = await database.collections
-    .get<TodoModel>('todos')
-    .query(Q.where('completed', false), Q.where('workspace', 'Goals'))
-    .fetch()
-    .catch(() => [] as TodoModel[]);
-  if (existing.some((todo) => normalizeGoalTitleKey(String(todo.text || '')) === normalizeGoalTitleKey(title))) {
-    return { title, created: false };
-  }
-  const result = await guidanceToolHandlers.goal_create({ title, timeframe: 'thisWeek' }).catch(() => null);
-  return { title, created: !!result?.created };
-}
 const MAX_WEEK_PLAN_ITEMS_PER_DAY = 5;
 
 /**
  * Fix my life: one call drafts every day, because a client tool call ends the model's turn.
- * Each day has its main goal and a timeline of at most 5 items, laid out like plan_my_day
- * (around existing events). A day sent without items gets its main goal as its only task.
+ * Each day has its main focus and a timeline of at most 5 calendar blocks, laid out like
+ * plan_my_day around what is already fixed that day. It is a schedule only: nothing is
+ * added to To Do or Goals, and saving a day only adds its blocks to the calendar.
+ * A day sent without items gets one block for its main focus.
  */
 const plan_my_week: ToolHandler = async (args: any) => {
   const seenDates = new Set<string>();
-  const openTodoIdsByTitle = await fetchOpenTodoIdsByTitle();
   const days = (Array.isArray(args?.days) ? args.days : [])
     .map((day: any) => ({
       date: normalizePlanDate(day?.date),
@@ -960,33 +974,15 @@ const plan_my_week: ToolHandler = async (args: any) => {
     .slice(0, MAX_WEEK_PLAN_DAYS);
   if (!days.length) throw new Error('NO_WEEK_PLAN_DAYS');
 
-  const weekGoal = await saveWeekGoalIfNew(normalizeText(args?.weekGoal));
-
-  const stamp = Date.now().toString(36);
   const plans = [];
   for (const { date, mainGoal, items } of days as { date: string; mainGoal: string; items: any[] }[]) {
-    if (items.length) {
-      const plan = await plan_my_day({ date, items });
-      plans.push({ ...plan, mainGoal });
-      continue;
-    }
-    const goalItem: DayPlanTimelineItem = {
-      id: `draft-goal-${date}`,
-      kind: 'task',
-      source: 'draft',
-      title: mainGoal,
-      dueDate: date,
-      hasDueTime: false,
-      durationMinutes: 45,
-      timeSource: 'none',
-      priority: 'high',
-      starred: true,
-      existingTodoId: openTodoIdsByTitle.get(normalizeTodoTitleKey(mainGoal)),
-    };
-    plans.push({ ...buildDayPlanCardValue(date, [goalItem], `week-plan-${date}-${stamp}`), mainGoal });
+    const dayItems = items.length ? items : [{ text: mainGoal, durationMinutes: 45, timeSource: 'ai' }];
+    const plan = await plan_my_day({ date, items: dayItems, asSchedule: true });
+    plans.push({ ...plan, mainGoal });
   }
-  // Nothing reaches To Do until the user approves a day with its Save button.
-  return { days: plans, weekGoal };
+  const weekGoal = normalizeText(args?.weekGoal);
+  // Nothing reaches the calendar until the user approves a day with its Save button.
+  return { days: plans, weekGoal: weekGoal ? { title: weekGoal } : null };
 };
 
 export const overviewToolHandlers: Record<string, ToolHandler> = {

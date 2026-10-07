@@ -26,7 +26,7 @@ const SECTIONS: Section[] = [
 
 export default function AdminHomeScreen() {
   const { role } = useRoleSession();
-  // Staff reach Admin Info from Settings, which stays open underneath, so going
+  // Staff reach Admin from Settings, which stays open underneath, so going
   // back returns straight to it. Opened some other way, it reopens Settings.
   const backToApp = () => {
     if (router.canGoBack()) {
@@ -39,7 +39,7 @@ export default function AdminHomeScreen() {
 
   return (
     <SimpleScreen
-      title="Admin Info"
+      title="Admin"
       onBack={backToApp}
       right={role ? <View className="pr-2"><RoleBadge role={role} /></View> : null}
     >

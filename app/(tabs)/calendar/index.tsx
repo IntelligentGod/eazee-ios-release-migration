@@ -5,6 +5,7 @@ import { State } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetModal, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { database } from '../../../database/database';
 import EventModel from '../../../database/models/EventModel';
+import { stopEventSeriesFrom } from '@/lib/eventSeries';
 import { Q } from '@nozbe/watermelondb';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -3521,6 +3522,95 @@ const CalendarScreen: React.FC = () => {
         return false;
       }
     };
+    const deleteThisEvent = async () => {
+      try {
+        // Close the event details sheet immediately for instant UI feedback
+        eventDetailsBottomSheetRef.current?.close();
+
+        let linkedGoogleEventId = event.isGoogleEvent ? String(event.id || '') : String(event.googleEventId || '');
+        if (!event.isGoogleEvent) {
+          const recordId = String((event as any)?.id || (event as any)?._raw?.id || '');
+          if (recordId) {
+            try {
+              const latestLocalEvent = await database.get<EventModel>('events').find(recordId);
+              linkedGoogleEventId = String(latestLocalEvent.googleEventId || linkedGoogleEventId);
+            } catch {}
+          }
+        }
+
+        if (linkedGoogleEventId) {
+          await deleteGoogleCalendarEvent(linkedGoogleEventId);
+        }
+
+        if (!event.isGoogleEvent) {
+          const success = await deleteFromLocal();
+          if (!success) {
+            throw new Error('Failed to delete local event');
+          }
+        }
+
+        // If we get here, the deletion was successful
+        // console.log('Event deleted successfully');
+        eventDetailsBottomSheetRef.current?.close();
+        await fetchEventsForWeek(weekStart);
+      } catch (error) {
+        console.error('Error during deletion:', error);
+        const message = error instanceof Error ? error.message : '';
+        if (message === 'GOOGLE_AUTH_REQUIRED') {
+          Alert.alert('Google account required', 'Reconnect Google Calendar, then try deleting this event again.');
+        } else if (message === 'GOOGLE_DELETE_FORBIDDEN') {
+          Alert.alert('Read-only event', "This Google Calendar event can't be deleted from Eazee.");
+        } else {
+          Alert.alert('Error', 'Failed to delete the event. Please try again.');
+        }
+      }
+    };
+
+    const showDeleteError = (error: unknown) => {
+      const message = error instanceof Error ? error.message : '';
+      if (message === 'GOOGLE_AUTH_REQUIRED') {
+        Alert.alert('Google account required', 'Reconnect Google Calendar, then try deleting this event again.');
+      } else {
+        Alert.alert('Error', 'Failed to delete the event. Please try again.');
+      }
+    };
+
+    const localRecordId = event.isGoogleEvent ? '' : String((event as any)?.id || (event as any)?._raw?.id || '');
+    let seriesId = '';
+    if (localRecordId) {
+      try {
+        seriesId = String((await database.get<EventModel>('events').find(localRecordId)).seriesId || '');
+      } catch {}
+    }
+
+    if (seriesId) {
+      Alert.alert(
+        "Delete repeating event",
+        "This event repeats every week.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "This event only", onPress: () => void deleteThisEvent() },
+          {
+            text: "This and following",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                eventDetailsBottomSheetRef.current?.close();
+                deletedLocalEventIdsRef.current.add(localRecordId);
+                await stopEventSeriesFrom(seriesId, new Date(event.startDate));
+                await fetchEventsForWeek(weekStart);
+              } catch (error) {
+                deletedLocalEventIdsRef.current.delete(localRecordId);
+                console.error('Error deleting repeating event:', error);
+                showDeleteError(error);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       "Delete Event",
       "Are you sure you want to delete this event?",
@@ -3532,49 +3622,7 @@ const CalendarScreen: React.FC = () => {
         {
           text: "Delete",
           style: "destructive",
-          onPress: async () => {
-            try {
-              // Close the event details sheet immediately for instant UI feedback
-              eventDetailsBottomSheetRef.current?.close();
-
-              let linkedGoogleEventId = event.isGoogleEvent ? String(event.id || '') : String(event.googleEventId || '');
-              if (!event.isGoogleEvent) {
-                const recordId = String((event as any)?.id || (event as any)?._raw?.id || '');
-                if (recordId) {
-                  try {
-                    const latestLocalEvent = await database.get<EventModel>('events').find(recordId);
-                    linkedGoogleEventId = String(latestLocalEvent.googleEventId || linkedGoogleEventId);
-                  } catch {}
-                }
-              }
-
-              if (linkedGoogleEventId) {
-                await deleteGoogleCalendarEvent(linkedGoogleEventId);
-              }
-
-              if (!event.isGoogleEvent) {
-                const success = await deleteFromLocal();
-                if (!success) {
-                  throw new Error('Failed to delete local event');
-                }
-              }
-
-              // If we get here, the deletion was successful
-              // console.log('Event deleted successfully');
-              eventDetailsBottomSheetRef.current?.close();
-              await fetchEventsForWeek(weekStart);
-            } catch (error) {
-              console.error('Error during deletion:', error);
-              const message = error instanceof Error ? error.message : '';
-              if (message === 'GOOGLE_AUTH_REQUIRED') {
-                Alert.alert('Google account required', 'Reconnect Google Calendar, then try deleting this event again.');
-              } else if (message === 'GOOGLE_DELETE_FORBIDDEN') {
-                Alert.alert('Read-only event', "This Google Calendar event can't be deleted from Eazee.");
-              } else {
-                Alert.alert('Error', 'Failed to delete the event. Please try again.');
-              }
-            }
-          }
+          onPress: () => void deleteThisEvent(),
         }
       ]
     );

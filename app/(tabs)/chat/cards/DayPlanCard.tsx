@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Switch, Text, TouchableOpacity, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { FlatList } from 'react-native';
@@ -45,6 +45,7 @@ type Props = {
   timelineItems?: DayPlanTimelineItem[];
   saveBlockedReason?: string;
   mainGoal?: string;
+  repeatWeekly?: boolean;
   saved?: boolean;
   cancelled?: boolean;
   onChange?: (nextCard: DayPlanCardValue) => void;
@@ -117,6 +118,7 @@ export function DayPlanCard({
   timelineItems,
   saveBlockedReason,
   mainGoal,
+  repeatWeekly,
   saved,
   cancelled,
   onChange,
@@ -145,7 +147,7 @@ export function DayPlanCard({
   const canCancel = !!onCancel && !isSaving && !isCancelling && !saved && !cancelled;
 
   const emitTimeline = (nextItems: DayPlanTimelineItem[]) => {
-    onChange?.({ ...buildDayPlanCardValue(date, nextItems, draftId), mainGoal });
+    onChange?.({ ...buildDayPlanCardValue(date, nextItems, draftId), mainGoal, repeatWeekly });
   };
 
   const closePicker = () => {
@@ -403,6 +405,15 @@ export function DayPlanCard({
           </View>
         )}
 
+        {mainGoal ? (
+          <RepeatWeeklyRow
+            date={date}
+            value={repeatWeekly === true}
+            disabled={!canEdit}
+            onChange={(nextValue) => onChange?.({ ...buildDayPlanCardValue(date, items, draftId), mainGoal, repeatWeekly: nextValue })}
+          />
+        ) : null}
+
         {saveBlockedReason ? (
           <View style={{ borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: 'rgba(130, 57, 57, 0.3)' }}>
             <Text style={{ color: '#F2C4C4', fontSize: 12, fontWeight: '700' }}>{saveBlockedReason}</Text>
@@ -551,6 +562,48 @@ export function DayPlanCard({
           </View>
         </Modal>
       </View>
+    </View>
+  );
+}
+
+/** A week plan day can be saved as calendar events that repeat every week. */
+function RepeatWeeklyRow({
+  date,
+  value,
+  disabled,
+  onChange,
+}: {
+  date: string;
+  value: boolean;
+  disabled: boolean;
+  onChange: (nextValue: boolean) => void;
+}) {
+  const weekday = format(parseCalendarDateValue(date) || new Date(date), 'EEEE');
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        borderRadius: CHAT_SURFACE_RADIUS,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      }}
+    >
+      <MIcon name="repeat" size={18} color="#A3CFCF" />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>Repeat weekly</Text>
+        <Text style={{ color: '#AFAFAF', fontSize: 12, marginTop: 1 }}>Every {weekday}, same times</Text>
+      </View>
+      <Switch
+        value={value}
+        disabled={disabled}
+        onValueChange={onChange}
+        accessibilityLabel={`Repeat this schedule every ${weekday}`}
+        trackColor={{ false: 'rgba(255, 255, 255, 0.22)', true: '#0F766E' }}
+        thumbColor="#FFFFFF"
+      />
     </View>
   );
 }

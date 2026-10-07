@@ -6,6 +6,7 @@ import { database } from '@/database/database';
 import EventModel from '@/database/models/EventModel';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { normalizeCalendarDetailsText } from '@/utils/calendarDetails';
+import { extendEventSeries } from '@/lib/eventSeries';
 import {
   eventOverlapsCalendarRange,
   getCalendarWeekKey,
@@ -40,6 +41,7 @@ const cloneEventWithRange = (event: EventModel, startDate: Date, endDate: Date) 
   updatedAt: event.updatedAt,
   googleEventId: event.googleEventId,
   sourceTodoId: event.sourceTodoId,
+  seriesId: event.seriesId,
   isGoogleEvent: event.isGoogleEvent,
   isTodo: event.isTodo,
   location: event.location,
@@ -325,6 +327,7 @@ export function useCalendarEvents({
     const end = addDays(normalizedStart, 7);
 
     try {
+      await extendEventSeries(end).catch(() => {});
       const localEvents = await database.collections
         .get('events')
         .query(

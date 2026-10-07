@@ -536,7 +536,7 @@ describe('plan_my_day', () => {
     });
   });
 
-  it('drafts one card per week day holding only its main goal', async () => {
+  it('drafts one card per week day holding a calendar block for its main goal', async () => {
     const result = await executeToolCall(
       {
         name: 'plan_my_week',
@@ -562,14 +562,15 @@ describe('plan_my_day', () => {
       ['2026-03-19', 'Practice vowel sounds'],
     ]);
     const card = result.messages[1]?.card;
-    expect(card?.timelineItems).toHaveLength(1);
-    expect(card?.calendarItems).toEqual([]);
-    expect(card?.todoItems).toEqual([
-      expect.objectContaining({ text: 'Record pronunciation baseline', dueDate: '2026-03-18', hasDueTime: false }),
+    expect(card?.todoItems).toEqual([]);
+    expect(card?.calendarItems).toEqual([
+      expect.objectContaining({ title: 'Record pronunciation baseline', start: expect.any(String), end: expect.any(String) }),
     ]);
+    expect(card?.repeatWeekly).toBe(false);
+    expect(card?.saveBlockedReason).toBeUndefined();
   });
 
-  it('lays out a week day as its main goal plus a timeline of at most 5 items', async () => {
+  it('lays out a week day as at most 5 calendar blocks, never tasks', async () => {
     const items = Array.from({ length: 7 }, (_, index) => ({
       type: 'task',
       text: `Step ${index + 1}`,
@@ -586,38 +587,90 @@ describe('plan_my_day', () => {
     expect(result.success).toBe(true);
     const card = result.messages[1]?.card;
     expect(card?.mainGoal).toBe('Step 1');
-    const tasks = card?.timelineItems?.filter((item: any) => item.kind === 'task' && item.source === 'draft');
-    expect(tasks.map((item: any) => item.title)).toEqual(['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5']);
-    expect(tasks.every((item: any) => item.details === undefined && item.hasDueTime)).toBe(true);
+    const blocks = card?.timelineItems?.filter((item: any) => item.source === 'draft');
+    expect(blocks.map((item: any) => [item.kind, item.title])).toEqual(
+      ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5'].map((title) => ['event', title])
+    );
+    expect(blocks.every((item: any) => item.details === undefined && item.start)).toBe(true);
+    expect(card?.todoItems).toEqual([]);
+    const [firstBlock] = card?.calendarItems ?? [];
+    expect(new Date(firstBlock.end).getTime() - new Date(firstBlock.start).getTime()).toBe(30 * 60_000);
   });
 
-  it('saves the week goal as a This Week goal when it is new, and only then', async () => {
+  it('leaves out a block that repeats something already fixed on that day', async () => {
+    database.collections.get.mockImplementation((table: string) => ({
+      query: jest.fn(() => ({
+        fetch: jest.fn(async () => table === 'events'
+          ? [{ id: 'event-1', title: 'Learning the guitar', startDate: new Date('2026-03-18T20:00:00'), endDate: new Date('2026-03-18T20:45:00') }]
+          : []),
+      })),
+    }));
+
+    const result = await executeToolCall(
+      {
+        name: 'plan_my_week',
+        arguments: {
+          days: [{
+            date: '2026-03-18',
+            mainGoal: 'Practice',
+            items: [
+              { text: 'learning the guitar', start: '2026-03-18T20:30:00', durationMinutes: 45, timeSource: 'ai' },
+              { text: 'Sports app outline', start: '2026-03-18T10:00:00', durationMinutes: 30, timeSource: 'ai' },
+            ],
+          }],
+        },
+      },
+      { serverUrl: 'http://localhost' }
+    );
+
+    const card = result.messages[1]?.card;
+    expect(card?.calendarItems.map((item: any) => item.title)).toEqual(['Sports app outline']);
+    expect(card?.timelineItems.filter((item: any) => item.kind === 'blocker').map((item: any) => item.title)).toEqual(['Learning the guitar']);
+  });
+
+  it('never saves the week goal as a goal', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { guidanceToolHandlers } = require('../guidance');
     const goalCreate = jest.spyOn(guidanceToolHandlers, 'goal_create').mockResolvedValue({ created: 1, createdItems: [] });
-    const day = { date: '2026-03-18', mainGoal: 'Spanish basics' };
 
-    const fresh = await executeToolCall(
-      { name: 'plan_my_week', arguments: { weekGoal: 'Study four languages', days: [day] } },
+    const result = await executeToolCall(
+      { name: 'plan_my_week', arguments: { weekGoal: 'Study four languages', days: [{ date: '2026-03-18', mainGoal: 'Spanish basics' }] } },
       { serverUrl: 'http://localhost' }
     );
-    expect(goalCreate).toHaveBeenCalledWith({ title: 'Study four languages', timeframe: 'thisWeek' });
-    expect(fresh.messages[0]?.content).toContain('Added "Study four languages" to your goals for this week.');
 
-    goalCreate.mockClear();
-    database.collections.get.mockImplementation(() => ({
-      query: jest.fn(() => ({ fetch: jest.fn(async () => [{ text: 'study four LANGUAGES', workspace: 'Goals' }]) })),
-    }));
-    const existing = await executeToolCall(
-      { name: 'plan_my_week', arguments: { weekGoal: 'Study four languages', days: [day] } },
-      { serverUrl: 'http://localhost' }
-    );
+    expect(result.success).toBe(true);
     expect(goalCreate).not.toHaveBeenCalled();
-    expect(existing.messages[0]?.content).not.toContain('Added');
+    expect(result.messages[0]?.content).not.toContain('goals');
+    expect(result.messages[0]?.content).toContain('calendar');
     goalCreate.mockRestore();
   });
 
-  it('adds nothing to To Do until the user saves a day', async () => {
+  it('saves a week plan day as weekly repeating events when Repeat weekly is on', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const eventSeries = require('@/lib/eventSeries');
+    const createSeries = jest.spyOn(eventSeries, 'createWeeklyEventSeries')
+      .mockResolvedValue({ seriesId: 'series-1', firstEventId: 'event-1', googleEventId: null, occurrenceCount: 8 });
+    setLastDayPlan({
+      date: '2026-03-18',
+      repeatWeekly: true,
+      calendarItems: [{ title: 'Gym', start: '2026-03-18T07:00:00.000Z', end: '2026-03-18T08:00:00.000Z' }],
+      todoItems: [],
+    });
+
+    const result = await executeToolCall({ name: 'save_day_plan', arguments: {} }, { serverUrl: 'http://localhost' });
+
+    expect(result.success).toBe(true);
+    expect(createSeries).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Gym',
+      start: '2026-03-18T07:00:00.000Z',
+      end: '2026-03-18T08:00:00.000Z',
+    }));
+    expect(createTodos).not.toHaveBeenCalled();
+    expect(result.messages[0]?.content).toContain('repeating every week');
+    createSeries.mockRestore();
+  });
+
+  it('adds nothing until the user saves a day', async () => {
     const result = await executeToolCall(
       {
         name: 'plan_my_week',

@@ -894,7 +894,7 @@ function findLatestDraftDayPlanMessage(messages: ChatUIMessage[]) {
   return hasDraftPrompt ? planCardMessage : null;
 }
 
-/** "Save all": adds every day of a week plan that is still waiting to To Do. */
+/** "Save all": adds every day of a week plan that is still waiting to the calendar. */
 function WeekPlanSaveAllButton({
   draftIds,
   pendingDraftIds,
@@ -967,6 +967,7 @@ function setLastDayPlanFromCard(card: DayPlanCardValue) {
     todoItems: card.todoItems || [],
     timelineItems: card.timelineItems || [],
     saveBlockedReason: card.saveBlockedReason,
+    repeatWeekly: card.repeatWeekly === true,
   });
 }
 
@@ -1503,6 +1504,7 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
               timelineItems={message.card.timelineItems ?? []}
               saveBlockedReason={message.card.saveBlockedReason}
               mainGoal={message.card.mainGoal}
+              repeatWeekly={message.card.repeatWeekly === true}
               saved={message.card.saved === true}
               cancelled={message.card.cancelled === true}
               onChange={onUpdateDayPlanCard}
@@ -2902,6 +2904,7 @@ export default function ChatScreen() {
       todoItems: card.todoItems || [],
       timelineItems: card.timelineItems || [],
       saveBlockedReason: card.saveBlockedReason,
+      repeatWeekly: card.repeatWeekly === true,
     });
 
     const sessionId = activeSessionIdRef.current;
@@ -2999,8 +3002,8 @@ export default function ChatScreen() {
     await appendMessagesToSession(sessionId, [{
       role: 'assistant',
       content: failedDays
-        ? `Added ${savedDays} of ${pending.length} days to your To Do. Check the others and tap Save plan on them.`
-        : `Added ${savedDays} ${savedDays === 1 ? 'day' : 'days'} to your To Do.`,
+        ? `Added ${savedDays} of ${pending.length} days to your calendar. Check the others and tap Save plan on them.`
+        : `Added ${savedDays} ${savedDays === 1 ? 'day' : 'days'} to your calendar.`,
     }], { showInVisibleChat: sessionId === activeSessionIdRef.current });
   }, [appendMessagesToSession, saveDayPlanCard]);
 
@@ -4038,15 +4041,6 @@ export default function ChatScreen() {
       const msgs = Array.isArray(res?.messages) ? res.messages : [];
       if (msgs.length) {
         await appendMessagesToSession(sessionId || null, msgs, { showInVisibleChat: sessionId === activeSessionIdRef.current });
-      }
-      // In Fix my life, saving the week's goal must lead to the week's plan. A client
-      // tool ends the AI's turn, so if it saved the goal on its own, ask it to go on.
-      const isFixMyLifeSession = chatMessagesRef.current.find((message) => message.role === 'user')?.content?.trim() === FIX_MY_LIFE_PROMPT;
-      if (res?.success && name === 'goal_create' && isFixMyLifeSession && sessionId === activeSessionIdRef.current) {
-        void sendTextMessageRef.current?.(
-          'The goal is saved. Now plan my whole week around it with plan_my_week.',
-          { showUserMessage: false }
-        );
       }
       if (
         res?.success &&

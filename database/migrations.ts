@@ -328,5 +328,31 @@ export default schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 77,
+      steps: [
+        addColumns({
+          table: 'events',
+          columns: [
+            { name: 'series_id', type: 'string', isOptional: true, isIndexed: true },
+          ],
+        }),
+        createTable({
+          name: 'event_series',
+          columns: [
+            { name: 'title', type: 'string' },
+            { name: 'details', type: 'string', isOptional: true },
+            { name: 'location', type: 'string', isOptional: true },
+            { name: 'start_date', type: 'number' },
+            { name: 'end_date', type: 'number' },
+            { name: 'active', type: 'boolean' },
+            { name: 'last_occurrence_start', type: 'number' },
+            { name: 'google_event_id', type: 'string', isOptional: true },
+            { name: 'created_at', type: 'number' },
+            { name: 'updated_at', type: 'number' },
+          ],
+        }),
+      ],
+    },
   ],
 });
