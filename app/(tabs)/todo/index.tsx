@@ -2678,15 +2678,15 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 ? () => showTodoGuidanceTutorialStage('pick-video', [stage, ...forwardStages])
                 : undefined,
         onSkipSegment: () => { void finishTodoGuidanceTutorialRef.current(false); },
+        // Every stage can move on: a user who doesn't pick an option, or whose guidance
+        // fails to load, must never be stuck on this part of the walkthrough.
         onNext: forwardStages.length > 0
           ? () => showTodoGuidanceTutorialStage(forwardStages[0], forwardStages.slice(1))
           : stage === 'actions'
             ? () => showTodoGuidanceTutorialStage('video')
             : stage === 'video'
               ? () => showTodoGuidanceTutorialStage('choice')
-              : stage === 'video-ready'
-                ? () => { void finishTodoGuidanceTutorialRef.current(false); }
-                : undefined,
+              : () => { void finishTodoGuidanceTutorialRef.current(false); },
       }
     );
   }, [startGuidance]);
@@ -7353,7 +7353,11 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 ? () => cancelGuidance()
                 : stage === 'summary'
                   ? () => startCalendarTutorialTarget()
-                  : undefined,
+                  // Moving on without picking Actions plan or sending must stay possible,
+                  // or a failed AI reply leaves the user stuck.
+                  : stage === 'actions' || stage === 'ai-bar'
+                    ? () => { void skipGoalGuidanceTutorialToCalendar(); }
+                    : undefined,
       }
     );
   }, [cancelGuidance, goalGuidanceInputValue, setGoalGuidanceInputValue, skipGoalGuidanceTutorialToCalendar, startCalendarTutorialTarget, startGuidance]);
@@ -10361,6 +10365,40 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     selectedTodoForDetails?.id,
     shouldShowGuidancePathChoice,
     showTodoGuidanceTutorialStage,
+    tutorialTodoId,
+  ]);
+
+  // The guidance-option stages point at buttons inside the demo task. If the user
+  // closes it or opens another item, those buttons are gone, so point back at the
+  // demo task; opening it again restarts these stages above.
+  useEffect(() => {
+    const stage = todoGuidanceTutorialStageRef.current;
+    if (
+      !isFocused ||
+      !isTodoGuidanceTutorialPending ||
+      !tutorialTodoId ||
+      (stage !== 'actions' && stage !== 'video' && stage !== 'choice') ||
+      (isDetailsModalVisible && selectedTodoForDetails?.id === tutorialTodoId)
+    ) {
+      return;
+    }
+
+    todoGuidanceTutorialStageRef.current = null;
+    startGuidance(
+      { type: 'todo', todoId: tutorialTodoId, workspaceKey: 'Personal' },
+      'the demo task. Tap it to open details',
+      {
+        keepLocatedTargetCard: true,
+        useTutorialCardPlacement: true,
+        onSkipSegment: () => { void finishTodoGuidanceTutorialRef.current(false); },
+      }
+    );
+  }, [
+    isDetailsModalVisible,
+    isFocused,
+    isTodoGuidanceTutorialPending,
+    selectedTodoForDetails?.id,
+    startGuidance,
     tutorialTodoId,
   ]);
 
