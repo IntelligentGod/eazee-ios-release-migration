@@ -578,7 +578,6 @@ function RepeatWeeklyRow({
   disabled: boolean;
   onChange: (nextValue: boolean) => void;
 }) {
-  const weekday = format(parseCalendarDateValue(date) || new Date(date), 'EEEE');
   return (
     <View
       style={{
@@ -594,13 +593,13 @@ function RepeatWeeklyRow({
       <MIcon name="repeat" size={18} color="#A3CFCF" />
       <View style={{ flex: 1 }}>
         <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>Repeat weekly</Text>
-        <Text style={{ color: '#AFAFAF', fontSize: 12, marginTop: 1 }}>Every {weekday}, same times</Text>
+        <Text style={{ color: '#AFAFAF', fontSize: 12, marginTop: 1 }}>Every week, same times</Text>
       </View>
       <Switch
         value={value}
         disabled={disabled}
         onValueChange={onChange}
-        accessibilityLabel={`Repeat this schedule every ${weekday}`}
+        accessibilityLabel={`Repeat this schedule every week`}
         trackColor={{ false: 'rgba(255, 255, 255, 0.22)', true: '#0F766E' }}
         thumbColor="#FFFFFF"
       />
