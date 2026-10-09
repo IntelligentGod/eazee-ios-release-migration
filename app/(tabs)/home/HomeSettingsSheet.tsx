@@ -47,6 +47,18 @@ import {
   type AiResponseLength,
 } from '@/lib/aiPersonalization';
 import { useAiPersonalization } from '@/lib/useAiPersonalization';
+import {
+  deleteAllSavedPreferences,
+  EMPTY_SAVED_PREFERENCES,
+  readSavedPreferences,
+  removeSavedPreference,
+  SAVED_PREFERENCE_FIELDS,
+  saveSavedPreference,
+  setSavedPreferencesEnabled,
+  subscribeSavedPreferences,
+  type SavedPreferenceField,
+  type SavedPreferencesStore,
+} from '@/lib/aiSavedPreferences';
 import { type HomeCardId } from '@/lib/homePersonalization';
 import { useHomePersonalization } from '@/lib/useHomePersonalization';
 import {
@@ -293,7 +305,7 @@ function LeftHandedToggle({ enabled }: { enabled: boolean }) {
   );
 }
 
-type PersonalizationMenuValue = AiBasePersonalization | AiPersonalizationLevel | AiResponseLength;
+type PersonalizationMenuValue = AiBasePersonalization | AiPersonalizationLevel | AiResponseLength | string;
 
 function PersonalizationMenuPicker<T extends PersonalizationMenuValue>({
   label,
@@ -425,6 +437,97 @@ function PersonalizationMenuPicker<T extends PersonalizationMenuValue>({
   );
 }
 
+const NOT_SET = 'not_set';
+const SAVED_PREFERENCE_SOURCE_LABELS = { onboarding: 'from your first chat', chat: 'from chat', settings: 'set here' } as const;
+
+/** Preferences saved from chat ("Remember this"); each can be changed or removed, or all turned off. */
+function SavedPreferencesSection({ userId }: { userId?: string | null }) {
+  const [store, setStore] = React.useState<SavedPreferencesStore>(EMPTY_SAVED_PREFERENCES);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readSavedPreferences(userId).then((value) => {
+      if (!cancelled) setStore(value);
+    });
+    const unsubscribe = subscribeSavedPreferences((value, changedUserId) => {
+      if (changedUserId === userId) setStore(value);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [userId]);
+
+  if (!userId) return null;
+
+  const handleChange = (field: SavedPreferenceField, value: string) => {
+    void (value === NOT_SET
+      ? removeSavedPreference(userId, field)
+      : saveSavedPreference(userId, field, value, 'settings')
+    ).catch(() => Alert.alert('Not saved', 'That preference could not be saved. Please try again.'));
+  };
+
+  const handleDeleteAll = () => {
+    Alert.alert(
+      'Delete saved preferences?',
+      'Eazee will stop using everything it saved about how you like answers. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => void deleteAllSavedPreferences(userId) },
+      ]
+    );
+  };
+
+  return (
+    <View style={{ gap: 14, marginTop: 10 }}>
+      <Text style={styles.settingLabel}>Saved preferences</Text>
+      <Text style={styles.homePersonalizationHint}>
+        Things you asked Eazee to remember. Your request in a chat always comes first.
+      </Text>
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityState={{ checked: store.enabled }}
+        onPress={() => void setSavedPreferencesEnabled(userId, !store.enabled)}
+        style={styles.baseStyleRow}
+      >
+        <Text style={styles.settingLabel}>Use saved preferences</Text>
+        <LeftHandedToggle enabled={store.enabled} />
+      </Pressable>
+      {(Object.keys(SAVED_PREFERENCE_FIELDS) as SavedPreferenceField[]).map((field) => {
+        const saved = store.preferences.find((item) => item.field === field);
+        return (
+          <View key={field}>
+            <PersonalizationMenuPicker
+              label={SAVED_PREFERENCE_FIELDS[field].label}
+              value={saved?.value || NOT_SET}
+              options={[
+                { value: NOT_SET, label: 'Not set' },
+                ...SAVED_PREFERENCE_FIELDS[field].options.map((option) => ({ value: option.value, label: option.label })),
+              ]}
+              onChange={(value) => handleChange(field, value)}
+            />
+            {!!saved && (
+              <Text style={[styles.homePersonalizationHint, { marginTop: 2, fontSize: 12 }]}>
+                {`Saved ${SAVED_PREFERENCE_SOURCE_LABELS[saved.source]}, ${new Date(saved.updatedAt).toLocaleDateString()}`}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+      <Pressable
+        accessibilityRole="button"
+        disabled={!store.preferences.length}
+        onPress={handleDeleteAll}
+        style={[styles.saveButton, !store.preferences.length && styles.saveButtonDisabled]}
+      >
+        <Text style={[styles.saveButtonText, !store.preferences.length && styles.saveButtonTextDisabled]}>
+          Delete saved preferences
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function AiPersonalizationPanel({
   bottomInset,
   userId,
@@ -515,6 +618,8 @@ function AiPersonalizationPanel({
             {isSaving ? 'Saving' : hasChanges ? 'Save' : 'Saved'}
           </Text>
         </Pressable>
+
+        <SavedPreferencesSection userId={userId} />
       </ScrollViewWithBar>
     </View>
   );

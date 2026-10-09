@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, RefreshControl, StyleSheet, type ScrollViewProps, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Image, ImageBackground, Keyboard, Linking, Platform, RefreshControl, ScrollView, Share, StyleSheet, type ScrollViewProps, Text, TouchableOpacity, View } from 'react-native';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Audio } from 'expo-av';
@@ -57,6 +57,28 @@ import { GuidedTarget, useGuidance } from '@/components/guidance/GuidanceProvide
 import { getChatAiBarGuidanceTargetId, getChatEazeeButtonGuidanceTargetId, getChatHeaderGuidanceTargetId, getChatPlanDayComposerGuidanceTargetId, getChatWishlistMessageGuidanceTargetId } from '@/lib/navigationHelp';
 import { useLeftHandedMode } from '@/lib/useLeftHandedMode';
 import { readAiPersonalizationSettings } from '@/lib/aiPersonalization';
+import FirstChatWelcome from '@/components/chat/FirstChatWelcome';
+import AssistantMessageActions, { type AssistantMessageActionHandlers } from '@/components/chat/AssistantMessageActions';
+import {
+  buildFirstChatSystemMessage,
+  INITIAL_FIRST_CHAT_STATE,
+  readFirstChatState,
+  shouldOfferFirstChatWelcome,
+  subscribeFirstChatState,
+  updateFirstChatState,
+  type FirstChatStarter,
+  type FirstChatState,
+} from '@/lib/firstChatOnboarding';
+import { trackFirstChatEvent } from '@/lib/firstChatAnalytics';
+import { ASSISTANT_ACTION_MARKERS_INSTRUCTIONS, parseAssistantMessageExtras } from '@/lib/assistantMessageExtras';
+import {
+  buildSavedPreferencesSystemMessage,
+  getSavedPreferenceLabel,
+  readSavedPreferences,
+  saveSavedPreference,
+  SAVED_PREFERENCE_FIELDS,
+} from '@/lib/aiSavedPreferences';
+import { guidanceToolHandlers } from './tools/guidance';
 import { AI_AUTH_REQUIRED_MESSAGE, getAiResponseErrorMessage, isAiAuthRequiredError } from '@/lib/aiAuth';
 import { getFirebaseAppCheckHeaders } from '@/lib/firebaseAppCheck';
 import { getAiRequestHeaders } from '@/lib/aiRequest';
@@ -793,7 +815,8 @@ function getTitleContextMessages(messages: ChatUIMessage[]) {
     .slice(firstSubstantiveUserIndex, firstSubstantiveUserIndex + 8)
     .map((message) => ({
       role: message.role,
-      content: serializeTitleMessage(message),
+      // Reply-button markers are not part of what the chat is about.
+      content: message.role === 'assistant' ? parseAssistantMessageExtras(serializeTitleMessage(message)).text : serializeTitleMessage(message),
     }))
     .filter((message) => message.content.length > 0);
 }
@@ -1325,7 +1348,16 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   onRetryMessage,
   buyingWishlistTodoId,
   resolvedGoalQuotaPlanIds,
+  isLatest,
+  showRememberPrompt,
+  savedPreferenceNotice,
+  actionHandlers,
 }: {
+  /** The newest message in the chat; only it shows quick-reply buttons. */
+  isLatest: boolean;
+  showRememberPrompt: boolean;
+  savedPreferenceNotice?: string | null;
+  actionHandlers: AssistantMessageActionHandlers;
   message: ChatUIMessage;
   messageKey: string;
   router: any;
@@ -1349,7 +1381,13 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   buyingWishlistTodoId: string | null;
   resolvedGoalQuotaPlanIds: Set<string>;
 }) {
-  const isCardOnlyAssistantMessage = message.role === 'assistant' && !message.content && !!message.card;
+  // Eazee's action markers become buttons below; the bubble shows the text without them.
+  const assistantExtras = useMemo(
+    () => (message.role === 'assistant' ? parseAssistantMessageExtras(message.content) : null),
+    [message.content, message.role]
+  );
+  const visibleContent = assistantExtras ? assistantExtras.text : message.content;
+  const isCardOnlyAssistantMessage = message.role === 'assistant' && !visibleContent && !!message.card;
   const isUserVoiceMessage = message.role === 'user' && message.card?.type === 'voiceMessage';
   const isUserDeliveryFailed = message.role === 'user' && message.deliveryStatus === 'failed';
   const deliveryFailureReason = (message.deliveryError || '')
@@ -1438,16 +1476,26 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
             />
           </View>
         ) : null}
-        {!!message.content && !isUserVoiceMessage && (
+        {!!visibleContent && !isUserVoiceMessage && (
           message.role === 'user' ? (
-            <Text selectable style={userMessageTextStyle}>{message.content}</Text>
+            <Text selectable style={userMessageTextStyle}>{visibleContent}</Text>
           ) : (
             <View style={assistantMessageContentStyle}>
               <Markdown markdownit={chatMarkdownParser} rules={assistantMarkdownRules} style={assistantMarkdownStyle}>
-                {message.content}
+                {visibleContent}
               </Markdown>
             </View>
           )
+        )}
+        {assistantExtras && (
+          <AssistantMessageActions
+            extras={assistantExtras}
+            isLatest={isLatest}
+            isStreaming={message.isStreaming}
+            showRememberPrompt={showRememberPrompt}
+            savedPreferenceNotice={savedPreferenceNotice}
+            handlers={actionHandlers}
+          />
         )}
         {message.card && (message.card.type === 'todoCreated' || message.card.type === 'todoUpdated' || message.card.type === 'todoQuery') && (
           <View style={{ marginTop: message.content ? 8 : 0 }}>
@@ -1813,6 +1861,35 @@ export default function ChatScreen() {
   const [fixMyLifeRequestKey, setFixMyLifeRequestKey] = useState('');
   const [toast, setToast] = useState<{ message: string; nonce: number } | null>(null);
   const showToast = useCallback((message: string) => setToast({ message, nonce: Date.now() }), []);
+
+  // First-chat onboarding: the welcome buttons and the one-result flow they start.
+  const [firstChatState, setFirstChatState] = useState<FirstChatState>(INITIAL_FIRST_CHAT_STATE);
+  const firstChatStateRef = useRef<FirstChatState>(INITIAL_FIRST_CHAT_STATE);
+  const [isStartingFirstChat, setIsStartingFirstChat] = useState(false);
+  const isStartingFirstChatRef = useRef(false);
+  const hasTrackedWelcomeRef = useRef(false);
+  const hasTrackedRefinementRef = useRef(false);
+  /** Replies already looked at for [[save_preference]]; loaded history is never re-saved. */
+  const seenAssistantMessageIdsRef = useRef(new Set<string>());
+  const [savedPreferenceNotices, setSavedPreferenceNotices] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const uid = authUser?.uid;
+    let cancelled = false;
+    const apply = (state: FirstChatState) => {
+      firstChatStateRef.current = state;
+      setFirstChatState(state);
+    };
+    void readFirstChatState(uid).then((state) => {
+      if (!cancelled) apply(state);
+    });
+    const unsubscribe = subscribeFirstChatState((state, userId) => {
+      if (userId === uid) apply(state);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [authUser?.uid]);
   /** Set by the header +, so the new Fix my life chat announces itself. */
   const fixMyLifeFromNewChatRef = useRef(false);
   /** Bumped by pull-to-refresh to tear down and reopen the live reply stream. */
@@ -2389,6 +2466,9 @@ export default function ChatScreen() {
 
   const replaceVisibleChat = useCallback((sessionId: string | null, messages: ChatUIMessage[], summary = '') => {
     const nextMessages = ensureVisibleMessageIds(messages, sessionId || 'chat');
+    nextMessages.forEach((message) => {
+      if (message.role === 'assistant' && message.id && !message.isStreaming) seenAssistantMessageIdsRef.current.add(message.id);
+    });
     activeSessionIdRef.current = sessionId;
     chatMessagesRef.current = nextMessages;
     footerHeightRef.current = 0;
@@ -3495,7 +3575,12 @@ export default function ChatScreen() {
       const sessions = await refreshChatSessions();
       try {
         if (!hasPendingCompactHandoff && sessions.length > 0) {
-          await loadSessionIntoChat(sessions[0].id);
+          // An unfinished first-chat flow reopens where the user left it.
+          const firstChat = await readFirstChatState(auth.currentUser?.uid);
+          const onboardingSession = firstChat.status === 'in_progress'
+            ? sessions.find((session) => session.id === firstChat.sessionId)
+            : undefined;
+          await loadSessionIntoChat((onboardingSession || sessions[0]).id);
         }
       } catch { }
     };
@@ -4094,6 +4179,13 @@ export default function ChatScreen() {
     if (isCreatingNewChatRef.current) return;
     const previousSessionId = activeSessionId;
     const previousMessages = [...chatMessages];
+    const firstChat = firstChatStateRef.current;
+    if (firstChat.status === 'in_progress' && firstChat.sessionId && firstChat.sessionId === previousSessionId) {
+      trackFirstChatEvent('flow_left', {
+        intent: firstChat.intent,
+        step: firstChat.assistantReplies <= 1 ? 'starter' : 'clarifying',
+      });
+    }
     isCreatingNewChatRef.current = true;
     setIsCreatingNewChat(true);
     footerHeightRef.current = 0;
@@ -4531,6 +4623,41 @@ export default function ChatScreen() {
       const weekPlanMessages = weekPlanContext && weekPlanContext.sessionId === requestSessionId
         ? [{ role: 'system' as const, content: weekPlanContext.content }]
         : [];
+      const isFixMyLifeRequest = weekPlanMessages.length > 0;
+      const requestUserId = auth.currentUser?.uid;
+      // First use: the starter chat, or the first request typed into an empty chat.
+      const firstChat = firstChatStateRef.current;
+      let firstChatForRequest: FirstChatState | null =
+        firstChat.status === 'in_progress' && !!requestSessionId && firstChat.sessionId === requestSessionId ? firstChat : null;
+      if (
+        !firstChatForRequest &&
+        !isFixMyLifeRequest &&
+        showUserMessage &&
+        !retryMessageId &&
+        !!requestSessionId &&
+        shouldOfferFirstChatWelcome(firstChat) &&
+        !isChatDayPlanTutorialPendingRef.current &&
+        !chatMessagesRef.current.some((message) => message.role === 'assistant')
+      ) {
+        firstChatForRequest = await updateFirstChatState(requestUserId, {
+          status: 'in_progress',
+          intent: 'custom',
+          sessionId: requestSessionId,
+          startedAt: Date.now(),
+          assistantReplies: 0,
+          resultDelivered: false,
+          preferencePromptShown: false,
+          preferencePromptMessageId: null,
+        });
+        trackFirstChatEvent('custom_request', { intent: 'custom' });
+      }
+      const savedPreferencesMessage = buildSavedPreferencesSystemMessage(await readSavedPreferences(requestUserId));
+      const personalizationMessages = [
+        // Fix my life has its own cards, so it does not get the reply buttons.
+        ...(isFixMyLifeRequest ? [] : [{ role: 'system' as const, content: ASSISTANT_ACTION_MARKERS_INSTRUCTIONS }]),
+        ...(savedPreferencesMessage ? [{ role: 'system' as const, content: savedPreferencesMessage }] : []),
+        ...(firstChatForRequest ? [{ role: 'system' as const, content: buildFirstChatSystemMessage(firstChatForRequest) }] : []),
+      ];
       const body = {
         clientId: cid || undefined,
         clientRequestId,
@@ -4546,6 +4673,7 @@ export default function ChatScreen() {
             createdCalendarItems: getCreatedCalendarItems() || [],
             lastDayPlan: getLastDayPlan(),
           }),
+          ...personalizationMessages,
           ...weekPlanMessages,
           ...requestMessages,
         ]
@@ -5114,8 +5242,223 @@ export default function ChatScreen() {
     }
   }, [advanceChatDayPlanTutorial, hideWishlistTutorialPrompt, isListening, deepgramStartListening, deepgramStopListening, isVoiceMessageFinalizing]);
 
+  const isFirstChatSession = !!firstChatState.sessionId && firstChatState.sessionId === activeSessionId;
+
+  const handleSelectFirstChatStarter = useCallback(async (starter: FirstChatStarter) => {
+    if (isStartingFirstChatRef.current) return;
+    isStartingFirstChatRef.current = true;
+    setIsStartingFirstChat(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      // The starter's question is fixed, so it appears at once without waiting for the AI.
+      const sessionId = await appendVisibleChatMessages([
+        { role: 'user', content: `${starter.emoji} ${starter.label}` },
+        { role: 'assistant', content: starter.prompt },
+      ]);
+      if (!sessionId) throw new Error('No chat session');
+      hasTrackedRefinementRef.current = false;
+      await updateFirstChatState(authUser?.uid, {
+        status: 'in_progress',
+        intent: starter.intent,
+        sessionId,
+        startedAt: Date.now(),
+        assistantReplies: 1,
+        resultDelivered: false,
+        preferencePromptShown: false,
+        preferencePromptMessageId: null,
+      });
+      trackFirstChatEvent('starter_selected', { intent: starter.intent });
+    } catch {
+      showToast('Could not start that chat. Please try again.');
+    } finally {
+      isStartingFirstChatRef.current = false;
+      setIsStartingFirstChat(false);
+    }
+  }, [appendVisibleChatMessages, authUser?.uid, showToast]);
+
+  const handleDismissFirstChat = useCallback(() => {
+    void updateFirstChatState(authUser?.uid, { status: 'dismissed' });
+    trackFirstChatEvent('dismissed');
+  }, [authUser?.uid]);
+
+  // Counts replies in the first-chat flow, marks it complete once a result arrives, and
+  // saves preferences the user explicitly asked to keep ([[save_preference]]).
+  useEffect(() => {
+    const uid = authUser?.uid;
+    const state = firstChatStateRef.current;
+    const isOnboardingChat = !!state.sessionId && state.sessionId === activeSessionId;
+    let replies = 0;
+    let resultKind: ReturnType<typeof parseAssistantMessageExtras>['result'] = null;
+    let rememberMessageId: string | null = null;
+
+    for (const message of chatMessages) {
+      if (message.role !== 'assistant' || message.isStreaming) continue;
+      const extras = parseAssistantMessageExtras(message.content);
+      if (extras.text || message.card) replies += 1;
+      // A copyable draft or a proposed task list or goal is a result too, even when the
+      // model forgets its [[result]] marker.
+      const messageResult = extras.result
+        || (extras.copyable ? 'draft' : extras.tasks.length ? 'plan' : extras.goal ? 'goal_plan' : null);
+      if (messageResult && !resultKind) resultKind = messageResult;
+      if (extras.remember && !rememberMessageId && message.id) rememberMessageId = message.id;
+
+      const messageId = message.id;
+      if (!messageId || seenAssistantMessageIdsRef.current.has(messageId)) continue;
+      seenAssistantMessageIdsRef.current.add(messageId);
+      for (const preference of extras.savePreferences) {
+        const label = `${SAVED_PREFERENCE_FIELDS[preference.field].label}: ${getSavedPreferenceLabel(preference.field, preference.value)}`;
+        void saveSavedPreference(uid, preference.field, preference.value, 'chat')
+          .then(() => {
+            setSavedPreferenceNotices((current) => ({ ...current, [messageId]: `Saved to your preferences (${label}). Change it in Settings.` }));
+            trackFirstChatEvent('preference_saved', { field: preference.field });
+          })
+          .catch(() => {
+            setSavedPreferenceNotices((current) => ({ ...current, [messageId]: 'That preference was not saved. Please try again.' }));
+          });
+      }
+    }
+
+    if (!isOnboardingChat || !uid) return;
+    const patch: Partial<FirstChatState> = {};
+    if (rememberMessageId && !state.preferencePromptShown) {
+      patch.preferencePromptShown = true;
+      patch.preferencePromptMessageId = rememberMessageId;
+    }
+    if (state.status === 'in_progress') {
+      if (replies !== state.assistantReplies) patch.assistantReplies = replies;
+      if (resultKind && !state.resultDelivered) {
+        patch.resultDelivered = true;
+        patch.status = 'completed';
+        trackFirstChatEvent('result_delivered', {
+          intent: state.intent,
+          // The starter's own question is not an answer, so it is not counted.
+          replies: Math.max(0, state.intent === 'custom' ? replies : replies - 1),
+          kind: resultKind,
+        });
+      }
+    }
+    if (Object.keys(patch).length) void updateFirstChatState(uid, patch);
+  }, [activeSessionId, authUser?.uid, chatMessages]);
+
+  const assistantActionHandlers = useMemo<AssistantMessageActionHandlers>(() => {
+    const isOnboardingChat = () => {
+      const state = firstChatStateRef.current;
+      return !!state.sessionId && state.sessionId === activeSessionIdRef.current;
+    };
+    return {
+      onChoose: (text) => {
+        if (isOnboardingChat() && firstChatStateRef.current.resultDelivered && !hasTrackedRefinementRef.current) {
+          hasTrackedRefinementRef.current = true;
+          trackFirstChatEvent('result_refined', { intent: firstChatStateRef.current.intent });
+        }
+        void sendTextMessage(text);
+      },
+      onAddTasks: async (tasks) => {
+        try {
+          // Tasks already open in To Do are skipped, so a second tap never adds duplicates.
+          const openTodos = await database.get<TodoModel>('todos')
+            .query(Q.where('completed', false), Q.where('workspace', 'Personal'))
+            .fetch();
+          const existing = new Set(openTodos.map((todo) => String(todo.text || '').trim().toLowerCase()));
+          const toAdd = tasks.filter((task) => !existing.has(task.trim().toLowerCase()));
+          for (const text of toAdd) {
+            await createTodo({
+              text,
+              completed: false,
+              dueDate: startOfDay(new Date()),
+              hasDueTime: false,
+              starred: false,
+              workspace: 'Personal',
+              goalTimeframe: null,
+              type: 'basic',
+              progress: 0,
+              isAmazonUrlLoaded: false,
+              amazonUrlLoadAttempts: 0,
+            });
+          }
+          if (isOnboardingChat()) trackFirstChatEvent('result_used', { intent: firstChatStateRef.current.intent, kind: 'tasks_saved' });
+          const skipped = tasks.length - toAdd.length;
+          return {
+            ok: true,
+            message: toAdd.length
+              ? `Added ${toAdd.length} to To Do for today.${skipped ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already there.` : ''}`
+              : 'These are already in your To Do.',
+          };
+        } catch (error) {
+          return { ok: false, error: String((error as Error)?.message || 'the tasks could not be saved') };
+        }
+      },
+      onSaveGoal: async (goal) => {
+        try {
+          const openGoals = await database.get<TodoModel>('todos')
+            .query(Q.where('completed', false), Q.where('workspace', 'Goals'))
+            .fetch();
+          if (openGoals.some((todo) => String(todo.text || '').trim().toLowerCase() === goal.title.trim().toLowerCase())) {
+            return { ok: true, message: 'This goal is already in your Goals.' };
+          }
+          const result = await guidanceToolHandlers.goal_create({ title: goal.title, timeframe: goal.timeframe });
+          if (!result || !(Number(result.created) > 0)) {
+            return { ok: false, error: String(result?.message || 'the goal could not be saved') };
+          }
+          if (isOnboardingChat()) trackFirstChatEvent('result_used', { intent: firstChatStateRef.current.intent, kind: 'goal_saved' });
+          return { ok: true, message: 'Saved to Goals.' };
+        } catch (error) {
+          return { ok: false, error: String((error as Error)?.message || 'the goal could not be saved') };
+        }
+      },
+      onRemember: async (field, value, remember) => {
+        if (!remember) {
+          trackFirstChatEvent('preference_declined', { field });
+          return { ok: true };
+        }
+        try {
+          await saveSavedPreference(auth.currentUser?.uid, field, value, isOnboardingChat() ? 'onboarding' : 'chat');
+          trackFirstChatEvent('preference_saved', { field });
+          return { ok: true };
+        } catch (error) {
+          return { ok: false, error: String((error as Error)?.message || 'the preference could not be saved') };
+        }
+      },
+      onShare: async (text) => {
+        try {
+          const result = await Share.share({ message: text });
+          if (result.action === Share.sharedAction && isOnboardingChat()) {
+            trackFirstChatEvent('result_used', { intent: firstChatStateRef.current.intent, kind: 'draft_copied' });
+          }
+        } catch {
+          // Closing the share sheet is not an error worth showing.
+        }
+      },
+    };
+  }, [sendTextMessage]);
+
+  const showFirstChatWelcome =
+    !!authUser?.uid &&
+    chatMessages.length === 0 &&
+    !isCurrentSessionTyping &&
+    !showCompactHandoffLoader &&
+    !isAwaitingFixMyLifeReply &&
+    !isChatDayPlanTutorialPending &&
+    shouldOfferFirstChatWelcome(firstChatState);
+
+  useEffect(() => {
+    if (!showFirstChatWelcome || hasTrackedWelcomeRef.current) return;
+    hasTrackedWelcomeRef.current = true;
+    trackFirstChatEvent('welcome_shown');
+  }, [showFirstChatWelcome]);
+
+  const lastChatMessageId = chatMessages[chatMessages.length - 1]?.id;
+
   const renderChatMessage = useCallback(({ item, index }: { item: ChatUIMessage; index: number }) => (
     <ChatMessageBubble
+      isLatest={!!item.id && item.id === lastChatMessageId}
+      showRememberPrompt={
+        !isFirstChatSession ||
+        !firstChatState.preferencePromptShown ||
+        item.id === firstChatState.preferencePromptMessageId
+      }
+      savedPreferenceNotice={item.id ? savedPreferenceNotices[item.id] : null}
+      actionHandlers={assistantActionHandlers}
       message={item}
       messageKey={item.id || `${item.role}-${index}`}
       router={router}
@@ -5138,7 +5481,7 @@ export default function ChatScreen() {
       buyingWishlistTodoId={buyingWishlistTodoId}
       resolvedGoalQuotaPlanIds={resolvedGoalQuotaPlanIds}
     />
-  ), [saveAllDayPlanCards, weekPlanPendingDraftIds, appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
+  ), [assistantActionHandlers, firstChatState.preferencePromptMessageId, firstChatState.preferencePromptShown, isFirstChatSession, lastChatMessageId, savedPreferenceNotices, saveAllDayPlanCards, weekPlanPendingDraftIds, appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
 
   const renderChatFooter = useCallback(() => {
     const logoBounceStyle = {
@@ -5424,6 +5767,22 @@ export default function ChatScreen() {
                     />
                   )}
                 />
+              ) : showFirstChatWelcome ? (
+                <ScrollView
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingVertical: 12 }}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={{ borderRadius: 28, padding: 14, backgroundColor: 'rgba(0, 0, 0, 0.32)' }}>
+                    <FirstChatWelcome
+                      disabled={isStartingFirstChat}
+                      onSelect={(starter) => void handleSelectFirstChatStarter(starter)}
+                      onDismiss={handleDismissFirstChat}
+                    />
+                  </View>
+                </ScrollView>
               ) : (
                 <TouchableOpacity
                   accessible={false}
