@@ -14,6 +14,10 @@ export type RangeCalendarEvent = {
   endDate?: Date;
   isAllDay: boolean;
   location?: string;
+  /** Where to open the event: the app's own event row, or Google Calendar. */
+  source?: 'local' | 'google';
+  /** The id to open it with in the Calendar screen. */
+  openId?: string;
 };
 
 /** Local events starting in [start, end); events mirrored from a todo are left out. */
@@ -33,6 +37,8 @@ export async function fetchLocalCalendarEvents(start: Date, end: Date): Promise<
       endDate: row.endDate,
       isAllDay: false,
       location: row.location,
+      source: 'local' as const,
+      openId: row.id,
     }));
 }
 
@@ -61,6 +67,8 @@ export async function fetchGoogleCalendarEvents(start: Date, end: Date): Promise
         endDate: parseCalendarDateValue(item.end?.dateTime || item.end?.date) || undefined,
         isAllDay: !!(item.start?.date && !item.start?.dateTime),
         location: typeof item.location === 'string' ? item.location : undefined,
+        source: 'google' as const,
+        openId: String(item.id),
       }];
     });
 }

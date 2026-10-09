@@ -9,7 +9,14 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Blur, Canvas, Group, Paragraph, Paint, Skia, type SkParagraph } from '@shopify/react-native-skia';
-import Reanimated, { useAnimatedScrollHandler, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { runOnJS, useAnimatedScrollHandler, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import {
+  getHomePlanDay,
+  getHomePlanTitle,
+  HOME_PLAN_MAX_DAY_OFFSET,
+  loadHomeDayPlanItems,
+} from '@/lib/homeDayPlan';
 import { endOfDay, format, startOfDay } from 'date-fns';
 import { Q } from '@nozbe/watermelondb';
 import { database } from '../../../database/database';
@@ -310,6 +317,10 @@ export default function HomePage() {
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [todayHandledCanvasWidth, setTodayHandledCanvasWidth] = useState(0);
   const [selectedTodayHandledItem, setSelectedTodayHandledItem] = useState<ScheduleItem | null>(null);
+  // The plan card can step through today and the next days; 0 is today.
+  const [planDayOffset, setPlanDayOffset] = useState(0);
+  /** The selected later day's items; null while they load. */
+  const [otherDayPlanItems, setOtherDayPlanItems] = useState<ScheduleItem[] | null>(null);
   const handleHomeTutorialCardLayout = useCallback((stage: HomeTutorialStage) => (event: LayoutChangeEvent) => {
     homeTutorialCardYRef.current[stage] = event.nativeEvent.layout.y;
   }, []);
@@ -1632,6 +1643,51 @@ export default function HomePage() {
     [completingItemIds, scheduleItems, snoozedHomeEventIds, snoozedNextStepTodoIds]
   );
 
+  const planDay = useMemo(() => getHomePlanDay(currentTime, planDayOffset), [currentTime, planDayOffset]);
+  const planTitle = getHomePlanTitle(planDayOffset, planDay);
+  const isShowingTodayPlan = planDayOffset === 0;
+  const displayedPlanItems: ScheduleItem[] = isShowingTodayPlan ? todayHandledItems : otherDayPlanItems ?? [];
+
+  useEffect(() => {
+    if (isShowingTodayPlan) {
+      setOtherDayPlanItems(null);
+      return;
+    }
+    let cancelled = false;
+    setOtherDayPlanItems(null);
+    void loadHomeDayPlanItems(planDay)
+      .then((items) => {
+        if (!cancelled) setOtherDayPlanItems(items);
+      })
+      .catch(() => {
+        if (!cancelled) setOtherDayPlanItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // homeSnapshot reloads after edits, so the other day refreshes with it.
+  }, [homeSnapshot, isFocused, isShowingTodayPlan, planDay]);
+
+  const changePlanDay = useCallback((step: number) => {
+    setPlanDayOffset((current) => {
+      const next = Math.min(HOME_PLAN_MAX_DAY_OFFSET, Math.max(0, current + step));
+      if (next !== current) void Haptics.selectionAsync().catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // A horizontal swipe on the card changes the day; vertical drags still scroll.
+  const planDaySwipe = useMemo(
+    () => Gesture.Pan()
+      .activeOffsetX([-24, 24])
+      .failOffsetY([-14, 14])
+      .onEnd((event) => {
+        if (event.translationX <= -50) runOnJS(changePlanDay)(1);
+        else if (event.translationX >= 50) runOnJS(changePlanDay)(-1);
+      }),
+    [changePlanDay]
+  );
+
   const todayTodoCandidates = useMemo<ScheduleItem[]>(() => {
     const todayStart = startOfDay(currentTime).getTime();
     const todayEnd = endOfDay(currentTime).getTime();
@@ -1992,21 +2048,21 @@ export default function HomePage() {
 
   const widestTimeStr = useMemo(() => {
     let widest = '';
-    for (const item of scheduleItems) {
+    for (const item of displayedPlanItems) {
       if (item.hasTime && item.time) {
         const str = formatCompactScheduleTime(item.time);
         if (str.length > widest.length) widest = str;
       }
     }
     return widest;
-  }, [scheduleItems]);
+  }, [displayedPlanItems]);
 
   const todayCardMaxHeight = Math.min(
     Math.max(Math.round(TODAY_CARD_BASE_HEIGHT * 1.4), TODAY_CARD_BASE_HEIGHT + aiInputHeight),
     TODAY_CARD_MAX_HEIGHT
   );
   const todayCardTargetHeight =
-    todayCardHeaderHeight + Math.max(todayHandledItems.length, 3) * todayHandledRowHeight + 8;
+    todayCardHeaderHeight + Math.max(displayedPlanItems.length, 3) * todayHandledRowHeight + 8;
   const todayCardHeight = Math.min(
     Math.max(todayCardTargetHeight, TODAY_CARD_BASE_HEIGHT),
     todayCardMaxHeight
@@ -2038,7 +2094,7 @@ export default function HomePage() {
       }[];
     }
 
-    return todayHandledItems.map((item, index) => {
+    return displayedPlanItems.map((item, index) => {
       const labelTextStyle = {
         color: Skia.Color(TODAY_CARD_TEXT),
         fontSize: 16,
@@ -2092,14 +2148,14 @@ export default function HomePage() {
         y: index * todayHandledRowHeight,
       };
     });
-  }, [todayHandledItems, todayHandledParagraphWidth, widestTimeStr]);
+  }, [displayedPlanItems, todayHandledParagraphWidth, widestTimeStr]);
 
   const todayHandledContentHeight =
     todayHandledParagraphs.length * todayHandledRowHeight + todayHandledCanvasPaddingBottom;
 
   useEffect(() => {
     todayHandledScrollOffset.value = 0;
-  }, [todayHandledItems.length, todayHandledScrollOffset]);
+  }, [displayedPlanItems.length, planDayOffset, todayHandledScrollOffset]);
 
   const statusText = useMemo(() => {
     const dateLabel = format(currentTime, 'MMM do');
@@ -2870,6 +2926,7 @@ export default function HomePage() {
                   localHighlightInset={3}
                   localHighlightPulseScale={1.02}
                 >
+                  <GestureDetector gesture={planDaySwipe}>
                   <View
                     className="pt-[14px] px-[6px]"
                     style={{
@@ -2880,12 +2937,45 @@ export default function HomePage() {
                     }}
                     accessibilityState={{ busy: isHomeBusy }}
                   >
-                    <Text className="text-[18px] font-bold text-[#ffffff] mb-2.5 ml-4">Today&apos;s plan</Text>
-                    {isInitialHomeLoading ? (
+                    <View className="flex-row items-center mb-2.5 px-2" style={{ minHeight: 28 }}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Previous day"
+                        accessibilityState={{ disabled: planDayOffset === 0 }}
+                        disabled={planDayOffset === 0}
+                        hitSlop={10}
+                        onPress={() => changePlanDay(-1)}
+                        style={({ pressed }) => ({ padding: 2, opacity: planDayOffset === 0 ? 0.25 : pressed ? 0.6 : 1 })}
+                      >
+                        <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+                      </Pressable>
+                      <Text
+                        accessibilityRole="header"
+                        numberOfLines={1}
+                        className="flex-1 text-center text-[18px] font-bold text-[#ffffff]"
+                      >
+                        {planTitle}
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Next day"
+                        accessibilityState={{ disabled: planDayOffset >= HOME_PLAN_MAX_DAY_OFFSET }}
+                        disabled={planDayOffset >= HOME_PLAN_MAX_DAY_OFFSET}
+                        hitSlop={10}
+                        onPress={() => changePlanDay(1)}
+                        style={({ pressed }) => ({
+                          padding: 2,
+                          opacity: planDayOffset >= HOME_PLAN_MAX_DAY_OFFSET ? 0.25 : pressed ? 0.6 : 1,
+                        })}
+                      >
+                        <Ionicons name="chevron-forward" size={22} color="#FFFFFF" />
+                      </Pressable>
+                    </View>
+                    {isInitialHomeLoading || (!isShowingTodayPlan && otherDayPlanItems === null) ? (
                       <View className="items-center justify-center py-6">
                         <ActivityIndicator color="#C1BDB1" />
                       </View>
-                    ) : todayHandledItems.length > 0 ? (
+                    ) : displayedPlanItems.length > 0 ? (
                       <View
                         className="relative"
                         style={{ height: todayCardListHeight }}
@@ -2949,11 +3039,12 @@ export default function HomePage() {
                           scrollEventThrottle={16}
                         >
                           <View style={{ height: todayHandledContentHeight }}>
-                            {todayHandledItems.map((item) => (
+                            {displayedPlanItems.map((item) => (
                               <Pressable
                                 key={item.id}
                                 onPress={() => handleOpenScheduleItem(item)}
-                                onLongPress={() => setSelectedTodayHandledItem(item)}
+                                // Hide/complete/snooze options only apply to today's list.
+                                onLongPress={isShowingTodayPlan ? () => setSelectedTodayHandledItem(item) : undefined}
                                 style={{
                                   height: todayHandledRowHeight,
                                   marginLeft: TODAY_CARD_LIST_LEFT - 4,
@@ -3001,9 +3092,14 @@ export default function HomePage() {
                         )}
                       </View>
                     ) : (
-                      <Text className="text-[14px] leading-[20px] mb-1 text-[#C1BDB1] font-medium ml-4">No events or todos for today</Text>
+                      <Text className="text-[14px] leading-[20px] mb-1 text-[#C1BDB1] font-medium ml-4">
+                        {isShowingTodayPlan
+                          ? 'No events or todos for today'
+                          : `Nothing planned for ${planDayOffset === 1 ? 'tomorrow' : planDay.toLocaleDateString(undefined, { weekday: 'long' })} yet`}
+                      </Text>
                     )}
                   </View>
+                  </GestureDetector>
                 </GuidedTarget>
                 </View>
               );
