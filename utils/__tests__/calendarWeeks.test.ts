@@ -6,18 +6,20 @@ import {
 } from '../calendarWeeks';
 
 describe('calendarWeeks', () => {
-  it('normalizes dates to a Sunday week start at midnight', () => {
+  it('normalizes dates to a Monday week start at midnight', () => {
     const weekStart = normalizeCalendarWeekStart(new Date(2026, 3, 15, 14, 30));
 
-    expect(weekStart).toEqual(new Date(2026, 3, 12, 0, 0, 0, 0));
-    expect(getCalendarWeekKey(new Date(2026, 3, 15, 14, 30))).toBe('2026-04-12');
+    expect(weekStart).toEqual(new Date(2026, 3, 13, 0, 0, 0, 0));
+    expect(getCalendarWeekKey(new Date(2026, 3, 15, 14, 30))).toBe('2026-04-13');
+    // A Sunday belongs to the week that started the Monday before.
+    expect(getCalendarWeekKey(new Date(2026, 3, 19, 9))).toBe('2026-04-13');
   });
 
   it('builds previous, current, and next week starts', () => {
     expect(getAdjacentCalendarWeekStarts(new Date(2026, 3, 15)).map(getCalendarWeekKey)).toEqual([
-      '2026-04-05',
-      '2026-04-12',
-      '2026-04-19',
+      '2026-04-06',
+      '2026-04-13',
+      '2026-04-20',
     ]);
   });
 

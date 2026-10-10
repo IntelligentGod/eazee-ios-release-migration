@@ -31,6 +31,7 @@ import CalendarWeekPager from '@/components/calendar/CalendarWeekPager';
 import CalendarWeekPanel from '@/components/calendar/CalendarWeekPanel';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import {
+  CALENDAR_WEEK_STARTS_ON,
   getCalendarWeekKey,
   normalizeCalendarWeekStart,
 } from '@/utils/calendarWeeks';
@@ -74,7 +75,7 @@ const INITIAL_SCALE = 1;
 const ANDROID_CALENDAR_KEYBOARD_GAP = 10;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
-const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const TIME_LABEL_WIDTH = 50;
 const CALENDAR_GRID_INSET = 18;
 const TIME_LABEL_COLOR = '#96CDD6';
@@ -309,6 +310,12 @@ const CalendarScreen: React.FC = () => {
   const [isCalendarTutorialPending, setIsCalendarTutorialPending] = useState(false);
   const isCalendarTutorialPendingRef = useRef(false);
   const calendarTutorialStageRef = useRef<CalendarTutorialStage | null>(null);
+  // Mirrors the ref so the screen can show the walkthrough's instructions while an event is made.
+  const [calendarTutorialStage, setCalendarTutorialStageState] = useState<CalendarTutorialStage | null>(null);
+  const setCalendarTutorialStage = useCallback((stage: CalendarTutorialStage | null) => {
+    calendarTutorialStageRef.current = stage;
+    setCalendarTutorialStageState(stage);
+  }, []);
   const calendarTutorialEventCreatedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completeCalendarGuidanceAction = useCallback((action: string) => {
     if (activeTarget?.type === 'screen' && activeTarget.params?.calendarAction === action) {
@@ -356,7 +363,7 @@ const CalendarScreen: React.FC = () => {
     );
   }, [startGuidance, user?.uid]);
   const startHomeTutorialGuidance = useCallback(() => {
-    calendarTutorialStageRef.current = null;
+    setCalendarTutorialStage(null);
     startGuidance(
       {
         type: 'screen',
@@ -370,7 +377,7 @@ const CalendarScreen: React.FC = () => {
         },
       }
     );
-  }, [skipHomeTutorialToChat, startGuidance]);
+  }, [skipHomeTutorialToChat, startGuidance, setCalendarTutorialStage]);
   const completeCalendarTutorial = useCallback(async () => {
     const uid = user?.uid || '';
     if (!uid) return;
@@ -394,7 +401,7 @@ const CalendarScreen: React.FC = () => {
       clearTimeout(calendarTutorialEventCreatedTimeoutRef.current);
       calendarTutorialEventCreatedTimeoutRef.current = null;
     }
-    calendarTutorialStageRef.current = 'created';
+    setCalendarTutorialStage('created');
     await completeCalendarTutorial();
     startGuidance(
       {
@@ -409,7 +416,7 @@ const CalendarScreen: React.FC = () => {
         },
       }
     );
-  }, [completeCalendarTutorial, skipHomeTutorialToChat, startGuidance]);
+  }, [completeCalendarTutorial, skipHomeTutorialToChat, startGuidance, setCalendarTutorialStage]);
   const scheduleCalendarTutorialEventCreated = useCallback(() => {
     if (!isCalendarTutorialPendingRef.current || calendarTutorialStageRef.current === 'created') {
       return;
@@ -418,12 +425,12 @@ const CalendarScreen: React.FC = () => {
     if (calendarTutorialEventCreatedTimeoutRef.current) {
       clearTimeout(calendarTutorialEventCreatedTimeoutRef.current);
     }
-    calendarTutorialStageRef.current = 'saving';
+    setCalendarTutorialStage('saving');
     calendarTutorialEventCreatedTimeoutRef.current = setTimeout(() => {
       calendarTutorialEventCreatedTimeoutRef.current = null;
       void showCalendarTutorialEventCreated();
     }, CALENDAR_TUTORIAL_EVENT_REVEAL_DELAY_MS);
-  }, [showCalendarTutorialEventCreated]);
+  }, [showCalendarTutorialEventCreated, setCalendarTutorialStage]);
   const hideCalendarTutorialCreateCard = useCallback(() => {
     if (
       !isCalendarTutorialPendingRef.current ||
@@ -432,9 +439,9 @@ const CalendarScreen: React.FC = () => {
       return;
     }
 
-    calendarTutorialStageRef.current = 'waiting-event';
+    setCalendarTutorialStage('waiting-event');
     cancelGuidance();
-  }, [cancelGuidance]);
+  }, [cancelGuidance, setCalendarTutorialStage]);
   const openedFromParamsRef = useRef<string | null>(null);
   const scrollFromParamsRef = useRef<string | null>(null);
   const actionFromParamsRef = useRef<string | null>(null);
@@ -456,7 +463,7 @@ const CalendarScreen: React.FC = () => {
         if (isActive) {
           isCalendarTutorialPendingRef.current = false;
           setIsCalendarTutorialPending(false);
-          calendarTutorialStageRef.current = null;
+          setCalendarTutorialStage(null);
         }
         return;
       }
@@ -471,7 +478,7 @@ const CalendarScreen: React.FC = () => {
         isCalendarTutorialPendingRef.current = pending;
         setIsCalendarTutorialPending(pending);
         if (!pending) {
-          calendarTutorialStageRef.current = null;
+          setCalendarTutorialStage(null);
         }
       }
     };
@@ -485,7 +492,7 @@ const CalendarScreen: React.FC = () => {
       isActive = false;
       unsubscribe();
     };
-  }, [user?.uid]);
+  }, [user?.uid, setCalendarTutorialStage]);
 
   useEffect(() => () => {
     if (calendarTutorialEventCreatedTimeoutRef.current) {
@@ -499,7 +506,7 @@ const CalendarScreen: React.FC = () => {
       return;
     }
 
-    calendarTutorialStageRef.current = 'create';
+    setCalendarTutorialStage('create');
     startGuidance(
       {
         type: 'screen',
@@ -514,7 +521,7 @@ const CalendarScreen: React.FC = () => {
         onNext: hideCalendarTutorialCreateCard,
       }
     );
-  }, [completeCalendarTutorialAndStartHome, hideCalendarTutorialCreateCard, startGuidance]);
+  }, [completeCalendarTutorialAndStartHome, hideCalendarTutorialCreateCard, startGuidance, setCalendarTutorialStage]);
 
   useEffect(() => {
     if (!isFocused || !isCalendarTutorialPending || calendarTutorialStageRef.current) {
@@ -3188,7 +3195,7 @@ const CalendarScreen: React.FC = () => {
     if (!pendingEventScrollDate || !selectedEvent || !eventDetails) return;
     if (!timelineLayoutReady) return;
 
-    const targetWeekStart = startOfWeek(pendingEventScrollDate, { weekStartsOn: 0 });
+    const targetWeekStart = startOfWeek(pendingEventScrollDate, { weekStartsOn: CALENDAR_WEEK_STARTS_ON });
     if (targetWeekStart.getTime() !== weekStart.getTime()) return;
     const weekKey = getAutoScrollWeekKey(weekStart);
 
@@ -3212,7 +3219,7 @@ const CalendarScreen: React.FC = () => {
     if (!pendingScrollDate) return;
     if (pendingEventScrollDate || selectedEvent || eventDetails || pendingOpen) return;
 
-    const targetWeekStart = startOfWeek(pendingScrollDate, { weekStartsOn: 0 });
+    const targetWeekStart = startOfWeek(pendingScrollDate, { weekStartsOn: CALENDAR_WEEK_STARTS_ON });
     if (targetWeekStart.getTime() !== weekStart.getTime()) return;
     const weekKey = getAutoScrollWeekKey(weekStart);
     const scrollDate = new Date(pendingScrollDate);
@@ -3739,7 +3746,7 @@ const CalendarScreen: React.FC = () => {
         setSelectedEvent(normalizedSelected);
         setEventDetails(details);
         const eventStart = new Date(normalizedSelected.startDate);
-        const targetWeekStart = startOfWeek(eventStart, { weekStartsOn: 0 });
+        const targetWeekStart = startOfWeek(eventStart, { weekStartsOn: CALENDAR_WEEK_STARTS_ON });
         if (targetWeekStart.getTime() !== weekStart.getTime()) {
           setWeekStart(targetWeekStart);
         }
@@ -3847,7 +3854,7 @@ const CalendarScreen: React.FC = () => {
         return;
       }
 
-      const targetWeekStart = startOfWeek(targetDate, { weekStartsOn: 0 });
+      const targetWeekStart = startOfWeek(targetDate, { weekStartsOn: CALENDAR_WEEK_STARTS_ON });
       if (targetWeekStart.getTime() !== weekStart.getTime()) {
         setWeekStart(targetWeekStart);
       }
@@ -3871,7 +3878,7 @@ const CalendarScreen: React.FC = () => {
       return;
     }
 
-    const targetWeekStart = startOfWeek(targetDate, { weekStartsOn: 0 });
+    const targetWeekStart = startOfWeek(targetDate, { weekStartsOn: CALENDAR_WEEK_STARTS_ON });
     if (targetWeekStart.getTime() !== weekStart.getTime()) {
       setWeekStart(targetWeekStart);
     }
@@ -4468,6 +4475,13 @@ const CalendarScreen: React.FC = () => {
         {isLeftHanded ? saveCreateSheetButton : closeCreateSheetButton}
         {isLeftHanded ? closeCreateSheetButton : saveCreateSheetButton}
       </View>
+      {isCalendarTutorialCreating && !isEditMode && (
+        // The walkthrough's card is hidden behind this form, so its instruction moves in here.
+        <View style={styles.tutorialHint} accessibilityRole="text">
+          <Text style={styles.tutorialHintLabel}>Walkthrough</Text>
+          <Text style={styles.tutorialHintText}>Add a title, then tap Save to create your event and finish this step.</Text>
+        </View>
+      )}
       <BottomSheetTextInput
         ref={createTitleInputRef}
         style={styles.titleInput}
@@ -4830,6 +4844,15 @@ const CalendarScreen: React.FC = () => {
   };
 
 
+  const isCalendarTutorialCreating = isCalendarTutorialPending && calendarTutorialStage === 'waiting-event';
+  // While the AI bar is used for the walkthrough's event, say what to type (the AI's own
+  // questions show in their own card, so this steps aside for them).
+  const calendarTutorialAiHint = isCalendarTutorialCreating && createSheetIndex === -1 && !aiNotice && (isAiInputFocused || isAiRunning)
+    ? (isAiRunning
+        ? 'Creating your event...'
+        : 'Type an event, like "Lunch with Sam tomorrow at 1pm", then tap send to finish this step.')
+    : null;
+
   return (
     <View style={{ flex: 1, backgroundColor: '#0E4048' }}>
     <LinearGradient colors={['#219BAE', '#0E4048']} locations={[0, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 1 }} style={[styles.container, { minHeight: Dimensions.get('screen').height }]}>
@@ -5137,6 +5160,14 @@ const CalendarScreen: React.FC = () => {
           </View>
         </View>
       )}
+      {!!calendarTutorialAiHint && (
+        <View pointerEvents="none" style={[styles.tutorialHintFloating, { top: (insets?.top || 0) + 76 }]}>
+          <View style={styles.tutorialHint}>
+            <Text style={styles.tutorialHintLabel}>Walkthrough</Text>
+            <Text style={styles.tutorialHintText}>{calendarTutorialAiHint}</Text>
+          </View>
+        </View>
+      )}
       <CompactAiBanner
         notice={isGoogleDisconnectedNoticeVisible ? GOOGLE_DISCONNECTED_NOTICE : null}
         surface="calendar"
@@ -5279,6 +5310,35 @@ const CalendarScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  tutorialHint: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: 'rgba(4, 32, 34, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(174, 255, 232, 0.35)',
+  },
+  tutorialHintLabel: {
+    color: '#9EF5E4',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  tutorialHintText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  tutorialHintFloating: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 200,
+    elevation: 200,
+  },
   container: {
     flex: 1,
     backgroundColor: '#0E4048',

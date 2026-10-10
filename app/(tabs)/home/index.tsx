@@ -2438,7 +2438,7 @@ export default function HomePage() {
         }}
       >
         <LinearGradient
-          colors={['#BFBCA4', '#68634E']}
+          colors={['#9D997C', '#4D4A3B']} // the Next step card's task rows
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           className="h-12 flex-row items-center px-3.5 rounded-[18px] overflow-hidden border border-white/20"

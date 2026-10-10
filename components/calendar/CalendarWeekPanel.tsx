@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Haptics from 'expo-haptics';
-import { addDays, differenceInCalendarDays, getWeek } from 'date-fns';
+import { addDays, differenceInCalendarDays, getISOWeek } from 'date-fns';
 import { PanGestureHandler, PinchGestureHandler } from 'react-native-gesture-handler';
 
 import EventModel from '@/database/models/EventModel';
@@ -200,7 +200,8 @@ function CalendarWeekHeader({
   timeLabelWidth: number;
 }) {
   const today = new Date();
-  const weekNumber = getWeek(weekStart);
+  // Weeks start on Monday, so the week number is the ISO one.
+  const weekNumber = getISOWeek(weekStart);
 
   return (
     <View style={styles.weekHeader}>

@@ -1,7 +1,10 @@
 import { addDays, startOfWeek } from 'date-fns';
 
+/** The Calendar's weeks run Monday to Sunday. */
+export const CALENDAR_WEEK_STARTS_ON = 1;
+
 export const normalizeCalendarWeekStart = (date: Date) => {
-  const weekStart = startOfWeek(date, { weekStartsOn: 0 });
+  const weekStart = startOfWeek(date, { weekStartsOn: CALENDAR_WEEK_STARTS_ON });
   weekStart.setHours(0, 0, 0, 0);
   return weekStart;
 };
