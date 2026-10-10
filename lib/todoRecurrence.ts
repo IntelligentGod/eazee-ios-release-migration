@@ -111,6 +111,20 @@ export const getTodoRecurrenceOccurrenceDate = (
   return date;
 };
 
+/** Whether the series has an occurrence on `day` (skipped dates excluded). */
+export const isTodoRecurrenceOccurrenceOn = (series: TodoRecurrenceSeriesLike, day: Date) => {
+  const dayKey = startOfLocalDay(day).getTime();
+  if (dayKey < startOfLocalDay(series.startDate).getTime()) return false;
+  if (parseTodoSkippedDateKeys(series.skippedDatesJson).has(dayKey)) return false;
+  for (let index = 0; index < 5000; index += 1) {
+    const occurrenceKey = getTodoOccurrenceDateKey(getTodoRecurrenceOccurrenceDate(series, index));
+    if (occurrenceKey == null) continue;
+    if (occurrenceKey === dayKey) return true;
+    if (occurrenceKey > dayKey) return false;
+  }
+  return false;
+};
+
 export const copyTodoTimeOntoOccurrenceDate = (
   occurrenceDate: Date,
   templateDate?: Date | null

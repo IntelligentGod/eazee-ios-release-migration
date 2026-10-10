@@ -89,3 +89,24 @@ describe('todoRecurrence', () => {
     )).toBe(key(2026, 6, 3));
   });
 });
+
+describe('repeating tasks on later days', () => {
+  const { isTodoRecurrenceOccurrenceOn } = require('@/lib/todoRecurrence');
+  const start = new Date(2026, 9, 9, 10, 15); // Fri Oct 9, 10:15
+
+  it('finds a daily task on every later day, and nothing before it started', () => {
+    const daily = { interval: 1, unit: 'day', startDate: start };
+    expect(isTodoRecurrenceOccurrenceOn(daily, new Date(2026, 9, 13))).toBe(true);
+    expect(isTodoRecurrenceOccurrenceOn(daily, new Date(2026, 9, 15, 18))).toBe(true);
+    expect(isTodoRecurrenceOccurrenceOn(daily, new Date(2026, 9, 8))).toBe(false);
+  });
+
+  it('respects the interval, weekly repeats and skipped days', () => {
+    expect(isTodoRecurrenceOccurrenceOn({ interval: 2, unit: 'day', startDate: start }, new Date(2026, 9, 11))).toBe(true);
+    expect(isTodoRecurrenceOccurrenceOn({ interval: 2, unit: 'day', startDate: start }, new Date(2026, 9, 12))).toBe(false);
+    expect(isTodoRecurrenceOccurrenceOn({ interval: 1, unit: 'week', startDate: start }, new Date(2026, 9, 16))).toBe(true);
+    expect(isTodoRecurrenceOccurrenceOn({ interval: 1, unit: 'week', startDate: start }, new Date(2026, 9, 14))).toBe(false);
+    const skipped = JSON.stringify([new Date(2026, 9, 12).getTime()]);
+    expect(isTodoRecurrenceOccurrenceOn({ interval: 1, unit: 'day', startDate: start, skippedDatesJson: skipped }, new Date(2026, 9, 12))).toBe(false);
+  });
+});

@@ -2,8 +2,15 @@ import { Q } from '@nozbe/watermelondb';
 import { addDays, startOfDay } from 'date-fns';
 import { database } from '@/database/database';
 import TodoModel from '@/database/models/TodoModel';
+import TodoRecurrenceSeriesModel from '@/database/models/TodoRecurrenceSeriesModel';
 import { fetchCalendarEventsInRange, type RangeCalendarEvent } from '@/lib/calendarRange';
 import { getTodoHasDueTime } from '@/utils/todoDates';
+import {
+  copyTodoTimeOntoOccurrenceDate,
+  getTodoOccurrenceDateKey,
+  isTodoRecurrenceOccurrenceOn,
+  normalizeTodoRecurrenceRule,
+} from '@/lib/todoRecurrence';
 
 /** How many days after today the Home "plan" card can show. */
 export const HOME_PLAN_MAX_DAY_OFFSET = 6;
@@ -56,6 +63,56 @@ export function toHomeDayPlanEventItem(event: RangeCalendarEvent): HomeDayPlanIt
   };
 }
 
+/**
+ * Repeating tasks only store their next occurrence, so a later day has no row for
+ * them. This adds the occurrence that falls on `day` for each active series that
+ * has no row there yet, from the series' latest task (its title and time).
+ */
+export async function loadRepeatingTodoItemsForDay(
+  day: Date,
+  rowsOnDay: Pick<TodoModel, 'recurrenceSeriesId'>[]
+): Promise<HomeDayPlanItem[]> {
+  const series = (await database.get<TodoRecurrenceSeriesModel>('todo_recurrence_series').query().fetch())
+    .filter((row) => row.active);
+  if (!series.length) return [];
+
+  const seriesOnDay = new Set(rowsOnDay.map((row) => row.recurrenceSeriesId).filter(Boolean));
+  const seriesTodos = await database.get<TodoModel>('todos')
+    .query(Q.where('recurrence_series_id', Q.oneOf(series.map((row) => row.id))))
+    .fetch();
+  const dayKey = startOfDay(day).getTime();
+
+  return series.flatMap((row): HomeDayPlanItem[] => {
+    const rule = normalizeTodoRecurrenceRule({ interval: row.interval, unit: row.unit });
+    if (!rule || seriesOnDay.has(row.id)) return [];
+    if (!isTodoRecurrenceOccurrenceOn({ ...rule, startDate: row.startDate, anchorDay: row.anchorDay, skippedDatesJson: row.skippedDatesJson }, day)) {
+      return [];
+    }
+    const todos = seriesTodos.filter((todo) => todo.recurrenceSeriesId === row.id);
+    // Any row already on this day (even a completed one) means it is not added again.
+    if (todos.some((todo) => getTodoOccurrenceDateKey(todo.recurrenceOccurrenceDate || todo.dueDate) === dayKey)) return [];
+    const template = [...todos]
+      .filter((todo) => !todo.recurrenceOverride)
+      .sort((left, right) =>
+        (getTodoOccurrenceDateKey(right.recurrenceOccurrenceDate || right.dueDate) ?? 0)
+        - (getTodoOccurrenceDateKey(left.recurrenceOccurrenceDate || left.dueDate) ?? 0))[0];
+    if (!template || template.workspace === 'Goals' || template.workspace === 'Wishlist') return [];
+
+    const hasTime = getTodoHasDueTime(template.dueDate, template.hasDueTime);
+    return [{
+      id: `todo-repeat-${row.id}-${dayKey}`,
+      // Opens the series' current task; that day's own task is created when it comes round.
+      sourceId: template.id,
+      label: template.text,
+      type: 'todo',
+      hasTime,
+      isStarred: template.starred,
+      workspaceKey: template.workspace,
+      ...(hasTime ? { time: copyTodoTimeOntoOccurrenceDate(day, template.dueDate) } : {}),
+    }];
+  });
+}
+
 /** Events and open tasks for one future day, in the same shape as the today list. */
 export async function loadHomeDayPlanItems(day: Date): Promise<HomeDayPlanItem[]> {
   const start = startOfDay(day);
@@ -88,5 +145,7 @@ export async function loadHomeDayPlanItems(day: Date): Promise<HomeDayPlanItem[]
       };
     });
 
-  return orderHomeDayPlanItems([...events.map(toHomeDayPlanEventItem), ...todoItems]);
+  const repeatingItems = await loadRepeatingTodoItemsForDay(start, todos).catch(() => [] as HomeDayPlanItem[]);
+
+  return orderHomeDayPlanItems([...events.map(toHomeDayPlanEventItem), ...todoItems, ...repeatingItems]);
 }
