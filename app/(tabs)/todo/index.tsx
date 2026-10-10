@@ -1652,6 +1652,15 @@ const getReminderSelectionKey = (todo: Pick<TodoItem, 'reminderEnabled' | 'remin
   return preset ? `preset-${preset.minutes}` : 'custom';
 };
 
+/** "Today", "Tomorrow", "Yesterday", then "Mon, Oct 12" (with the year when it is not this year). */
+const formatTodoDateLabel = (date?: Date) => {
+  if (!date) return 'None';
+  if (isToday(date)) return 'Today';
+  if (isTomorrow(date)) return 'Tomorrow';
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, date.getFullYear() === new Date().getFullYear() ? 'EEE, MMM d' : 'EEE, MMM d, yyyy');
+};
+
 const formatTodoTimeLabel = (date?: Date, hasDueTime?: boolean) => {
   if (!date || !getTodoHasDueTime(date, hasDueTime)) {
     return 'None';
@@ -3354,6 +3363,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   const [isGuidancePathSwitching, setIsGuidancePathSwitching] = useState(false);
   const [lastDeletedGuidancePlanId, setLastDeletedGuidancePlanId] = useState<string | null>(null);
   const [isDetailsTimePickerVisible, setIsDetailsTimePickerVisible] = useState(false);
+  const [isDetailsDatePickerVisible, setIsDetailsDatePickerVisible] = useState(false);
   const [pendingDetailsTime, setPendingDetailsTime] = useState(new Date());
   const pendingDetailsTimeRef = useRef(new Date());
   const [pendingGoalQuotaDate, setPendingGoalQuotaDate] = useState(() => startOfDay(new Date()));
@@ -8113,6 +8123,26 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       console.error('Error saving todo time:', error);
     }
   }, [getRecurringEditScope, getTodoOrderingStatePatch, handleReminderResult, refreshLocalTodos, selectedTodoForDetails, updateTodoStateEverywhere]);
+
+  /** Moves the task to another day, keeping its time of day (and so its reminder). */
+  const handleDetailsDateChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    setIsDetailsDatePickerVisible(false);
+    if (event.type === 'dismissed' || !selectedDate || !selectedTodoForDetails) {
+      return;
+    }
+
+    const hasDueTime = getTodoHasDueTime(selectedTodoForDetails.dueDate, selectedTodoForDetails.hasDueTime);
+    const nextDate = new Date(selectedDate);
+    if (hasDueTime && selectedTodoForDetails.dueDate) {
+      nextDate.setHours(selectedTodoForDetails.dueDate.getHours(), selectedTodoForDetails.dueDate.getMinutes(), 0, 0);
+    } else {
+      nextDate.setHours(0, 0, 0, 0);
+    }
+    if (selectedTodoForDetails.dueDate && startOfDay(selectedTodoForDetails.dueDate).getTime() === startOfDay(nextDate).getTime()) {
+      return;
+    }
+    void saveTodoTimeFromDetails(nextDate, hasDueTime);
+  }, [saveTodoTimeFromDetails, selectedTodoForDetails]);
 
   const handleOpenDetailsTimePicker = useCallback(() => {
     if (!selectedTodoForDetails || isDetailsTimePickerVisible) {
@@ -14076,6 +14106,32 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                           end={{ x: 1, y: 0.5 }}
                           style={styles.detailsModalGradientCard}
                         >
+                          {selectedTodoForDetails.workspace !== 'Wishlist' && (
+                            <>
+                              <TouchableOpacity
+                                style={styles.detailsModalMetaRow}
+                                onPress={() => setIsDetailsDatePickerVisible(true)}
+                                disabled={isDetailsDatePickerVisible}
+                                activeOpacity={0.82}
+                                accessibilityRole="button"
+                                accessibilityLabel="Change date"
+                              >
+                                <View style={styles.detailsModalMetaLead}>
+                                  <Ionicons name="calendar-outline" size={20} color="#165C53" />
+                                  <Text style={styles.detailsModalMetaLabel}>Date</Text>
+                                </View>
+                                <View style={styles.detailsModalMetaValueGroup}>
+                                  <Text style={styles.detailsModalMetaValue}>
+                                    {formatTodoDateLabel(selectedTodoForDetails.dueDate)}
+                                  </Text>
+                                  <Ionicons name="chevron-forward" size={22} color="#165C53" />
+                                </View>
+                              </TouchableOpacity>
+
+                              <View style={styles.detailsModalMetaDivider} />
+                            </>
+                          )}
+
                           <TouchableOpacity
                             style={styles.detailsModalMetaRow}
                             onPress={handleOpenDetailsTimePicker}
@@ -14464,6 +14520,13 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           void handleDetailsRepeatChange(recurrence);
         }}
         onClose={() => setIsDetailsRepeatPickerVisible(false)}
+      />
+      <TodoComposerDatePicker
+        visible={isDetailsDatePickerVisible}
+        value={selectedTodoForDetails?.dueDate || new Date()}
+        accentColor={TODO_COMPOSER_ACCENT_COLOR}
+        onChange={handleDetailsDateChange}
+        onClose={() => setIsDetailsDatePickerVisible(false)}
       />
       {isDetailsTimePickerVisible && Platform.OS !== 'android' && (
         <Modal
