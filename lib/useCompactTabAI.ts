@@ -930,9 +930,21 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     }
   }, [executePendingConfirmation, history, isRunning, notice?.kind, runRequest, setInputValue, showNotice]);
 
+  // Whether the latest request was spoken; only then does a follow-up question
+  // switch the microphone on by itself.
+  const lastRequestWasVoiceRef = useRef(false);
+
   const submit = useCallback(async () => {
+    lastRequestWasVoiceRef.current = false;
     await submitText(inputValueRef.current);
   }, [submitText]);
+
+  const submitVoiceText = useCallback(async (text: string) => {
+    lastRequestWasVoiceRef.current = true;
+    await submitText(text);
+  }, [submitText]);
+
+  const wasLastRequestSpoken = useCallback(() => lastRequestWasVoiceRef.current, []);
 
   const dismissNotice = useCallback(() => {
     if (pendingConfirmationRef.current) {
@@ -976,6 +988,8 @@ export function useCompactTabAI(surface: CompactSurface, options: UseCompactTabA
     setInputValue,
     submit,
     submitText,
+    submitVoiceText,
+    wasLastRequestSpoken,
     isRunning,
     notice,
     dismissNotice,

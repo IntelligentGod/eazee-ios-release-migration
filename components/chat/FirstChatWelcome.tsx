@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, Text, useWindowDimensions, View } from 'react-native';
-import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import {
   FIRST_CHAT_STARTERS,
   FIRST_CHAT_WELCOME_FOOTER,
@@ -8,15 +7,13 @@ import {
   type FirstChatStarter,
 } from '@/lib/firstChatOnboarding';
 
-/** The first chat's six starter buttons. Typing in the input below works just as well. */
+/** Six starter buttons on every empty chat. Typing or speaking in the AI bar works just as well. */
 export default function FirstChatWelcome({
   disabled,
   onSelect,
-  onDismiss,
 }: {
   disabled?: boolean;
   onSelect: (starter: FirstChatStarter) => void;
-  onDismiss: () => void;
 }) {
   const { fontScale } = useWindowDimensions();
   // Large accessibility text gets one button per row so labels are not cut off.
@@ -24,23 +21,12 @@ export default function FirstChatWelcome({
 
   return (
     <View style={{ paddingHorizontal: 4, paddingTop: 8 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 }}>
-        <Text
-          accessibilityRole="header"
-          style={{ flex: 1, color: '#F4FFFD', fontSize: 20, lineHeight: 27, fontWeight: '800' }}
-        >
-          {FIRST_CHAT_WELCOME_TITLE}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Hide these suggestions"
-          hitSlop={10}
-          onPress={onDismiss}
-          style={({ pressed }) => ({ padding: 4, marginLeft: 8, opacity: pressed ? 0.6 : 1 })}
-        >
-          <MIcon name="close" size={20} color="rgba(232, 255, 250, 0.7)" />
-        </Pressable>
-      </View>
+      <Text
+        accessibilityRole="header"
+        style={{ marginBottom: 14, color: '#F4FFFD', fontSize: 20, lineHeight: 27, fontWeight: '800' }}
+      >
+        {FIRST_CHAT_WELCOME_TITLE}
+      </Text>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 }}>
         {FIRST_CHAT_STARTERS.map((starter) => (

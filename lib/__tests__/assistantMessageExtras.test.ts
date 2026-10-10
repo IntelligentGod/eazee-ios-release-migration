@@ -72,3 +72,12 @@ describe('first-chat onboarding', () => {
     });
   });
 });
+
+describe('AI error messages', () => {
+  const { getAiResponseErrorMessage, AI_AUTH_REQUIRED_MESSAGE, APP_VERIFICATION_FAILED_MESSAGE } = require('@/lib/aiAuth');
+  it('says the app could not be verified instead of asking a signed-in user to sign in', () => {
+    expect(getAiResponseErrorMessage({ error: 'App verification required' }, 401)).toBe(APP_VERIFICATION_FAILED_MESSAGE);
+    expect(getAiResponseErrorMessage({ error: 'Authentication required' }, 401)).toBe(AI_AUTH_REQUIRED_MESSAGE);
+    expect(getAiResponseErrorMessage({ error: 'Too many requests' }, 429)).toBe('Too many requests');
+  });
+});

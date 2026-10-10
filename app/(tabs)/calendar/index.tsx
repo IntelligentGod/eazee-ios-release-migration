@@ -56,13 +56,11 @@ import { getShortcutForGuidanceTarget, type GuidanceTarget } from '@/lib/navigat
 import { setGuidanceActiveTab } from '@/lib/guidanceActiveTab';
 import { useLeftHandedMode } from '@/lib/useLeftHandedMode';
 import {
-  CALENDAR_TUTORIAL_CREATE_EVENT_MESSAGE,
   TUTORIAL_CALENDAR_EVENT_STEP,
   TUTORIAL_GOAL_GUIDANCE_STEP,
   TUTORIAL_HOME_OVERVIEW_STEP,
   TUTORIAL_WISHLIST_SHOPPING_STEP,
   completeTutorialStep,
-  getTutorialReadingTimeMs,
   getTutorialProgress,
   isTutorialSessionActive,
   subscribeTutorialProgress,
@@ -138,7 +136,7 @@ type StoredPendingGoogleCreateSync = Omit<PendingGoogleCreateSync, 'startDate' |
   endDateMs: number;
 };
 
-type CalendarTutorialStage = 'create' | 'waiting-event' | 'created';
+type CalendarTutorialStage = 'create' | 'waiting-event' | 'saving' | 'created';
 
 const isGuestEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
@@ -420,6 +418,7 @@ const CalendarScreen: React.FC = () => {
     if (calendarTutorialEventCreatedTimeoutRef.current) {
       clearTimeout(calendarTutorialEventCreatedTimeoutRef.current);
     }
+    calendarTutorialStageRef.current = 'saving';
     calendarTutorialEventCreatedTimeoutRef.current = setTimeout(() => {
       calendarTutorialEventCreatedTimeoutRef.current = null;
       void showCalendarTutorialEventCreated();
@@ -509,7 +508,6 @@ const CalendarScreen: React.FC = () => {
       },
       'Calendar',
       {
-        hideCardAfterMs: getTutorialReadingTimeMs(CALENDAR_TUTORIAL_CREATE_EVENT_MESSAGE),
         onSkipSegment: () => {
           void completeCalendarTutorialAndStartHome();
         },
@@ -565,7 +563,8 @@ const CalendarScreen: React.FC = () => {
     inputValue,
     setInputValue,
     submit,
-    submitText,
+    submitVoiceText,
+    wasLastRequestSpoken,
     isRunning: isAiRunning,
     notice: aiNotice,
     dismissNotice,
@@ -588,7 +587,7 @@ const CalendarScreen: React.FC = () => {
     inputValue,
     setInputValue,
     glowAnim,
-    onFinalTranscript: submitText,
+    onFinalTranscript: submitVoiceText,
   });
 
   const handleCalendarAiSendPress = useCallback(() => {
@@ -618,13 +617,14 @@ const CalendarScreen: React.FC = () => {
       return;
     }
 
-    if (autoReplyMicNoticeRef.current === replyNotice || isListening) {
+    // A typed request gets its follow-up question without the mic switching on.
+    if (autoReplyMicNoticeRef.current === replyNotice || isListening || !wasLastRequestSpoken()) {
       return;
     }
 
     autoReplyMicNoticeRef.current = replyNotice;
     handleMicrophonePress();
-  }, [aiNotice, cancelListening, handleMicrophonePress, isAiRunning, isListening]);
+  }, [aiNotice, cancelListening, handleMicrophonePress, isAiRunning, isListening, wasLastRequestSpoken]);
 
   useEffect(() => {
     const show = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -1482,6 +1482,28 @@ const CalendarScreen: React.FC = () => {
   const compactCreateSheetDidMoveRef = useRef(false);
   const requestedCreateSheetIndexRef = useRef<number | null>(null);
   const pendingGoogleCreateSyncInFlightRef = useRef(false);
+  // The walkthrough hides its card once a time slot or the AI bar is tapped. If the user
+  // then closes the form or leaves the AI bar without creating an event, bring it back.
+  useEffect(() => {
+    if (
+      !isFocused ||
+      !isCalendarTutorialPending ||
+      calendarTutorialStageRef.current !== 'waiting-event' ||
+      createSheetIndex !== -1 ||
+      isAiInputFocused ||
+      isAiRunning ||
+      !!aiNotice
+    ) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      if (isCalendarTutorialPendingRef.current && calendarTutorialStageRef.current === 'waiting-event') {
+        showCalendarTutorialCreate();
+      }
+    }, 900);
+    return () => clearTimeout(timeout);
+  }, [aiNotice, createSheetIndex, isAiInputFocused, isAiRunning, isCalendarTutorialPending, isFocused, showCalendarTutorialCreate]);
+
   const openCreateSheet = useCallback((index = CREATE_SHEET_FORM_INDEX) => {
     createSheetDismissSequenceRef.current += 1;
     isCreateSheetDismissingRef.current = false;

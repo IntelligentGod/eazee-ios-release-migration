@@ -19,7 +19,7 @@ export type FirstChatStarter = {
 };
 
 export const FIRST_CHAT_WELCOME_TITLE = 'Hi, I’m Eazee 👋 What would you like help with first?';
-export const FIRST_CHAT_WELCOME_FOOTER = 'Or tell me what you need in your own words.';
+export const FIRST_CHAT_WELCOME_FOOTER = 'Or just type or speak to start the chat in the AI bar below.';
 
 export const FIRST_CHAT_STARTERS: FirstChatStarter[] = [
   {

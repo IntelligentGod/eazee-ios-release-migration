@@ -13,6 +13,7 @@ const DEVELOPMENT_URL =
 
 export const BACKEND_URLS = {
   development: DEVELOPMENT_URL,
+  // development: 'https://king-prawn-app-clone-r7mhu.ondigitalocean.app',
   production: 'https://king-prawn-app-clone-r7mhu.ondigitalocean.app',
 } as const;
 

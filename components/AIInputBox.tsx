@@ -394,12 +394,15 @@ function CancelButton({
     isExpandedMultiline,
     bottomOffset,
     rightOffset,
+    backgroundColor,
     onPress,
 }: {
     isStopMode: boolean;
     isExpandedMultiline: boolean;
     bottomOffset: number;
     rightOffset: number;
+    /** The bar's own dark tone, so the button matches the screen instead of standing out in red. */
+    backgroundColor: string;
     onPress: () => void;
 }) {
     const size = 22;
@@ -423,14 +426,14 @@ function CancelButton({
                 alignItems: 'center',
                 justifyContent: 'center',
                 zIndex: 31,
-                backgroundColor: '#FF5A5F',
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.9)',
-                shadowColor: '#FF5A5F',
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.6,
-                shadowRadius: 6,
-                elevation: 6,
+                backgroundColor,
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.92)',
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.25,
+                shadowRadius: 3,
+                elevation: 3,
             }}
         >
             <MIcon name={isStopMode ? 'stop' : 'close'} size={isStopMode ? 13 : 14} color="#FFFFFF" />
@@ -797,6 +800,7 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             isExpandedMultiline={isExpandedMultiline}
             bottomOffset={usesThemedSurface ? 10 : 8}
             rightOffset={showsInlineSendButton ? 34 : (usesThemedSurface ? 10 : 6)}
+            backgroundColor={surfaceTheme?.sendInnerColor ?? '#215B63'}
             onPress={handleCancelPress}
         />
     ) : null;

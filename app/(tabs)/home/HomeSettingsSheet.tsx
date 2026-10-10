@@ -199,20 +199,27 @@ function NavigationModeToggle() {
   );
 }
 
-const EVENT_REMINDER_OPTIONS: { value: EventReminderMinutes | null; label: string }[] = [
-  { value: null, label: 'Off' },
-  ...EVENT_REMINDER_MINUTE_OPTIONS.map((minutes) => ({ value: minutes, label: `${minutes}m` })),
-];
+const EVENT_REMINDER_TIME_OPTIONS = EVENT_REMINDER_MINUTE_OPTIONS.map((minutes) => ({
+  value: String(minutes),
+  label: `${minutes} minutes before`,
+}));
 
-function EventReminderPicker() {
+/** An on/off switch, and when on, how long before each event to remind. */
+function EventRemindersSetting() {
   const [minutesBefore, setMinutesBefore] = React.useState<EventReminderMinutes | null>(
     DEFAULT_EVENT_REMINDER_SETTINGS.minutesBefore
+  );
+  // Turning reminders back on keeps the time the user chose before.
+  const [lastMinutesBefore, setLastMinutesBefore] = React.useState<EventReminderMinutes>(
+    DEFAULT_EVENT_REMINDER_SETTINGS.minutesBefore ?? 10
   );
 
   useEffect(() => {
     let cancelled = false;
     void readEventReminderSettings().then((settings) => {
-      if (!cancelled) setMinutesBefore(settings.minutesBefore);
+      if (cancelled) return;
+      setMinutesBefore(settings.minutesBefore);
+      if (settings.minutesBefore !== null) setLastMinutesBefore(settings.minutesBefore);
     });
     return () => {
       cancelled = true;
@@ -226,33 +233,35 @@ function EventReminderPicker() {
         Alert.alert('Notifications are off', 'Allow notifications for Eazee in your phone settings to get event reminders.');
         return;
       }
+      setLastMinutesBefore(value);
     }
     setMinutesBefore(value);
     await writeEventReminderSettings({ minutesBefore: value });
     void syncEventReminders();
   };
 
+  const isEnabled = minutesBefore !== null;
+
   return (
-    <View style={styles.modeToggle}>
-      {EVENT_REMINDER_OPTIONS.map((option) => {
-        const selected = minutesBefore === option.value;
-        return (
-          <Pressable
-            key={option.label}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: selected }}
-            accessibilityLabel={option.value === null ? 'Event reminders off' : `Remind ${option.value} minutes before events`}
-            onPress={() => {
-              if (!selected) void handleSelect(option.value);
-            }}
-            style={[styles.modeOption, styles.eventReminderOption, selected && styles.modeOptionSelected]}
-          >
-            <Text style={[styles.modeOptionText, selected && styles.modeOptionTextSelected]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View>
+      <SettingsRow
+        icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🔔</Text>}
+        label="Event Reminders"
+        onPress={() => void handleSelect(isEnabled ? null : lastMinutesBefore)}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: isEnabled }}
+        right={<LeftHandedToggle enabled={isEnabled} />}
+      />
+      {isEnabled && (
+        <View style={styles.eventReminderTiming}>
+          <PersonalizationMenuPicker
+            label="Remind me"
+            value={String(minutesBefore)}
+            options={EVENT_REMINDER_TIME_OPTIONS}
+            onChange={(value) => void handleSelect(Number(value) as EventReminderMinutes)}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -1062,11 +1071,7 @@ export default function HomeSettingsSheet({
             </View>
           )}
         />
-        <SettingsRow
-          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🔔</Text>}
-          label="Event Reminders"
-          right={<EventReminderPicker />}
-        />
+        <EventRemindersSetting />
         <CheckInReminderRow />
         <SettingsRow
           icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🙈</Text>}
@@ -1368,9 +1373,9 @@ const styles = StyleSheet.create({
   modeOptionSelected: {
     backgroundColor: 'rgba(246, 242, 227, 0.94)',
   },
-  eventReminderOption: {
-    minWidth: 36,
-    paddingHorizontal: 5,
+  eventReminderTiming: {
+    // Lines "Remind me" up with the row label, past the bell.
+    paddingLeft: 50,
   },
   modeOptionText: {
     color: '#FFFFFF',

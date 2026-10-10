@@ -620,7 +620,8 @@ export default function HomePage() {
     inputValue,
     setInputValue,
     submit,
-    submitText,
+    submitVoiceText,
+    wasLastRequestSpoken,
     isRunning: isAiRunning,
     notice,
     dismissNotice,
@@ -664,7 +665,7 @@ export default function HomePage() {
     inputValue,
     setInputValue,
     glowAnim,
-    onFinalTranscript: submitText,
+    onFinalTranscript: submitVoiceText,
   });
 
   const handleHomeAiSendPress = useCallback(() => {
@@ -736,13 +737,14 @@ export default function HomePage() {
       return;
     }
 
-    if (autoReplyMicNoticeRef.current === replyNotice || isListening) {
+    // A typed request gets its follow-up question without the mic switching on.
+    if (autoReplyMicNoticeRef.current === replyNotice || isListening || !wasLastRequestSpoken()) {
       return;
     }
 
     autoReplyMicNoticeRef.current = replyNotice;
     handleMicrophonePress();
-  }, [cancelListening, handleMicrophonePress, isAiRunning, isListening, notice]);
+  }, [cancelListening, handleMicrophonePress, isAiRunning, isListening, notice, wasLastRequestSpoken]);
 
   useEffect(() => {
     const show = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';

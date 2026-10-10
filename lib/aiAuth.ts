@@ -16,10 +16,19 @@ export const isAiAuthRequiredError = (error: unknown) => {
     message === 'Authentication required';
 };
 
+/** The server's App Check refused this copy of the app; signing in again would not help. */
+export const APP_VERIFICATION_FAILED_MESSAGE =
+  'Eazee could not verify this app with the server. Please try again later or update Eazee.';
+
 export const getAiResponseErrorMessage = (
   payload: any,
   status: number,
   fallback?: string
-) => status === 401
-  ? AI_AUTH_REQUIRED_MESSAGE
-  : String(payload?.error || payload?.message || fallback || `HTTP ${status}`);
+) => {
+  if (status === 401 && /app verification/i.test(String(payload?.error || ''))) {
+    return APP_VERIFICATION_FAILED_MESSAGE;
+  }
+  return status === 401
+    ? AI_AUTH_REQUIRED_MESSAGE
+    : String(payload?.error || payload?.message || fallback || `HTTP ${status}`);
+};

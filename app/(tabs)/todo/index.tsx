@@ -4844,7 +4844,16 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     !!selectedTodoForDetails &&
     selectedTodoForDetails.workspace === 'Personal' &&
     goalManagedTodoIds.has(selectedTodoForDetails.id);
-  const selectedTaskKind = isSelectedGoalManagedTodo ? null : selectedTodoForDetails?.taskKind || null;
+  // A To Do task whose classification never came back (server down, timed out) still gets
+  // the guidance choice, as a normal task; a later classification replaces this.
+  const selectedTaskKind: TodoTaskKind | null = isSelectedGoalManagedTodo
+    ? null
+    : selectedTodoForDetails?.taskKind
+      || (
+        selectedTodoForDetails?.workspace === 'Personal' && !classifyingTodoIds[selectedTodoForDetails.id]
+          ? 'normal'
+          : null
+      );
   const isSelectedRecipeKind =
     !isSelectedGoalManagedTodo &&
     (
@@ -5317,7 +5326,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     inputValue,
     setInputValue,
     submit,
-    submitText,
+    submitVoiceText,
+    wasLastRequestSpoken,
     isRunning: isAiRunning,
     notice: aiNotice,
     dismissNotice,
@@ -5982,7 +5992,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     inputValue,
     setInputValue,
     glowAnim,
-    onFinalTranscript: submitText,
+    onFinalTranscript: submitVoiceText,
   });
   const {
     isListening: isGoalGuidanceListening,
@@ -6341,7 +6351,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       return;
     }
 
-    if (autoReplyMicNoticeRef.current === replyNotice || isCompactListening) {
+    // A typed request gets its follow-up question without the mic switching on.
+    if (autoReplyMicNoticeRef.current === replyNotice || isCompactListening || !wasLastRequestSpoken()) {
       return;
     }
 
@@ -6350,7 +6361,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     setShowSpeechOverlay(false);
     setSpeechOverlayText('');
     handleCompactVoiceMicrophonePress();
-  }, [aiNotice, cancelCompactVoiceListening, handleCompactVoiceMicrophonePress, isAiRunning, isCompactListening]);
+  }, [aiNotice, cancelCompactVoiceListening, handleCompactVoiceMicrophonePress, isAiRunning, isCompactListening, wasLastRequestSpoken]);
 
   // Auto-hide overlay after processing completes and we're no longer listening
   useEffect(() => {
@@ -12311,7 +12322,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               <GuidanceMarkdown>Video guides are part of **Eazee Pro**. You can still plan this with an Actions plan.</GuidanceMarkdown>
               <TouchableOpacity
                 style={styles.goalGuidanceButton}
-                onPress={() => router.replace({
+                // push, not replace: replace does not switch tabs from inside To Do.
+                onPress={() => router.push({
                   pathname: '/(tabs)/home',
                   params: { settings: 'true', settingsPanel: 'paywall', settingsNonce: String(Date.now()) },
                 })}

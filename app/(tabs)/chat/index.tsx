@@ -3574,14 +3574,8 @@ export default function ChatScreen() {
     const boot = async () => {
       const sessions = await refreshChatSessions();
       try {
-        if (!hasPendingCompactHandoff && sessions.length > 0) {
-          // An unfinished first-chat flow reopens where the user left it.
-          const firstChat = await readFirstChatState(auth.currentUser?.uid);
-          const onboardingSession = firstChat.status === 'in_progress'
-            ? sessions.find((session) => session.id === firstChat.sessionId)
-            : undefined;
-          await loadSessionIntoChat((onboardingSession || sessions[0]).id);
-        }
+        // The chat opens on a fresh chat with the starter buttons; earlier chats are in history.
+        void sessions;
       } catch { }
     };
     boot();
@@ -5276,11 +5270,6 @@ export default function ChatScreen() {
     }
   }, [appendVisibleChatMessages, authUser?.uid, showToast]);
 
-  const handleDismissFirstChat = useCallback(() => {
-    void updateFirstChatState(authUser?.uid, { status: 'dismissed' });
-    trackFirstChatEvent('dismissed');
-  }, [authUser?.uid]);
-
   // Counts replies in the first-chat flow, marks it complete once a result arrives, and
   // saves preferences the user explicitly asked to keep ([[save_preference]]).
   useEffect(() => {
@@ -5437,9 +5426,8 @@ export default function ChatScreen() {
     chatMessages.length === 0 &&
     !isCurrentSessionTyping &&
     !showCompactHandoffLoader &&
-    !isAwaitingFixMyLifeReply &&
-    !isChatDayPlanTutorialPending &&
-    shouldOfferFirstChatWelcome(firstChatState);
+    // Shown during the walkthrough too, so a replayed tutorial starts on the same screen.
+    !isAwaitingFixMyLifeReply;
 
   useEffect(() => {
     if (!showFirstChatWelcome || hasTrackedWelcomeRef.current) return;
@@ -5779,7 +5767,6 @@ export default function ChatScreen() {
                     <FirstChatWelcome
                       disabled={isStartingFirstChat}
                       onSelect={(starter) => void handleSelectFirstChatStarter(starter)}
-                      onDismiss={handleDismissFirstChat}
                     />
                   </View>
                 </ScrollView>
