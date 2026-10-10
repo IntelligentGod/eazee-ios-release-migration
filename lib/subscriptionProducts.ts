@@ -58,6 +58,19 @@ export const FALLBACK_STORE_PRODUCTS: StoreProduct[] = [
   },
 ];
 
+/** The currency the App Store charges in, e.g. "NZD"; null when it is not known. */
+export const getStoreCurrencyCode = (product: Pick<StoreProduct, 'displayPrice' | 'currency'>) => {
+  const code = product.currency?.trim().toUpperCase() || '';
+  // Some locales already spell it out ("NZD 19.99"); then it is not repeated.
+  return code && !product.displayPrice.toUpperCase().includes(code) ? code : null;
+};
+
+/** "$19.99 (NZD)": Apple's local price with its currency, so "$" is never ambiguous. */
+export const formatStorePrice = (product: Pick<StoreProduct, 'displayPrice' | 'currency'>) => {
+  const code = getStoreCurrencyCode(product);
+  return code ? `${product.displayPrice} (${code})` : product.displayPrice;
+};
+
 const PERIOD_UNITS = ['day', 'week', 'month', 'year'] as const;
 const asPeriodUnit = (value: unknown) => PERIOD_UNITS.find((unit) => unit === value) ?? null;
 

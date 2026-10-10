@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { SubscriptionStatus } from '@/lib/subscription';
-import { formatPeriodLabel, isUpgrade, type StoreProduct } from '@/lib/subscriptionProducts';
+import { formatPeriodLabel, formatStorePrice, isUpgrade, type StoreProduct } from '@/lib/subscriptionProducts';
 import { describeSubscriptionStatus } from '@/lib/subscriptionStatusText';
 
 type CurrentPlanCardProps = {
@@ -71,7 +71,7 @@ function SwitchPlanButton({
       className={`mt-3 rounded-2xl border border-[#1FF5EF] px-4 py-3 ${disabled ? 'opacity-60' : ''}`}
     >
       <Text className="text-base font-bold text-white">
-        {`${upgrading ? 'Upgrade' : 'Switch'} to ${product.title} · ${product.displayPrice} ${formatPeriodLabel(product)}`}
+        {`${upgrading ? 'Upgrade' : 'Switch'} to ${product.title} · ${formatStorePrice(product)} ${formatPeriodLabel(product)}`}
       </Text>
       <Text className="mt-1 text-xs text-[#74FEFE]">{detail}</Text>
     </TouchableOpacity>
@@ -100,7 +100,7 @@ export default function CurrentPlanCard({
           <Text className="text-base font-extrabold text-[#00312F]">You are on Eazee Pro</Text>
           <Text className="mt-0.5 text-[13px] font-semibold text-[#00312F] opacity-80">
             {currentProduct && !isSandboxAccount
-              ? `${currentProduct.title} · ${currentProduct.displayPrice} ${formatPeriodLabel(currentProduct)}`
+              ? `${currentProduct.title} · ${formatStorePrice(currentProduct)} ${formatPeriodLabel(currentProduct)}`
               : 'Complimentary access'}
           </Text>
           {!!statusLine && <Text className="mt-0.5 text-xs text-[#00312F]">{statusLine}</Text>}

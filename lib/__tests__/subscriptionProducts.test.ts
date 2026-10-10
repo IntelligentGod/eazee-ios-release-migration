@@ -122,3 +122,12 @@ describe('plan helpers', () => {
     expect(isUpgrade('yearly', 'monthly')).toBe(false);
   });
 });
+
+describe('store prices', () => {
+  const { formatStorePrice } = require('@/lib/subscriptionProducts');
+  it('adds the currency so "$" is never ambiguous, without repeating a code already shown', () => {
+    expect(formatStorePrice({ displayPrice: '$19.99', currency: 'NZD' })).toBe('$19.99 (NZD)');
+    expect(formatStorePrice({ displayPrice: 'NZD 19.99', currency: 'NZD' })).toBe('NZD 19.99');
+    expect(formatStorePrice({ displayPrice: '$9.99', currency: null })).toBe('$9.99');
+  });
+});

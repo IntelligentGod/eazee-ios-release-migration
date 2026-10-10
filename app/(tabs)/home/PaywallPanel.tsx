@@ -38,6 +38,7 @@ import {
   DEFAULT_PRODUCT_DISPLAY,
   FALLBACK_STORE_PRODUCTS,
   formatPeriodLabel,
+  getStoreCurrencyCode,
   getSwitchTargetPlanId,
   getYearlySavingsLabel,
   isUpgrade,
@@ -147,7 +148,12 @@ function PlanCard({
       </View>
 
       <View style={styles.planPriceRow}>
-        <Text style={styles.planPrice}>{product.displayPrice}</Text>
+        <Text style={styles.planPrice}>
+          {product.displayPrice}
+          {!!getStoreCurrencyCode(product) && (
+            <Text style={styles.planCurrency}>{` (${getStoreCurrencyCode(product)})`}</Text>
+          )}
+        </Text>
         <Text style={styles.planPeriod}>{formatPeriodLabel(product)}</Text>
       </View>
 
@@ -198,12 +204,28 @@ export default function PaywallPanel({
   // Plans and prices from the App Store; plan, limits and display settings from
   // the server, which also picks up a cancellation made in Settings.
   useEffect(() => {
-    void getStoreProducts().then(setProducts);
-    if (!userId) return;
+    // StoreKit can fail on the first try (connection still starting); try again a few
+    // times so the placeholder prices do not stay up for the whole visit.
+    let cancelled = false;
+    const loadProducts = async (attempt: number) => {
+      const loaded = await getStoreProducts();
+      if (cancelled) return;
+      setProducts(loaded);
+      if (loaded.some((product) => product.isFallback) && attempt < 3) {
+        setTimeout(() => void loadProducts(attempt + 1), 1500 * (attempt + 1));
+      }
+    };
+    void loadProducts(0);
+    if (!userId) return () => {
+      cancelled = true;
+    };
     void syncStoreSubscriptionStatus(userId).then((overview) => {
       if (overview) setProductDisplay(overview.products);
       refresh();
     });
+    return () => {
+      cancelled = true;
+    };
   }, [refresh, userId]);
 
   const handleContinue = useCallback(async () => {
@@ -376,6 +398,11 @@ export default function PaywallPanel({
                   />
                 ))}
               </View>
+              {orderedProducts.some((product) => product.isFallback) && (
+                <Text style={styles.priceNote}>
+                  Apple confirms the price in your local currency before you subscribe.
+                </Text>
+              )}
 
               <TouchableOpacity
                 accessibilityRole="button"
@@ -655,8 +682,20 @@ const styles = StyleSheet.create({
   },
   planPriceRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'flex-end',
     marginTop: 8,
+  },
+  planCurrency: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  priceNote: {
+    marginTop: 8,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   planPrice: {
     color: '#FFFFFF',
