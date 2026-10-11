@@ -87,7 +87,7 @@ import { useCompactGuidanceBridge } from '@/lib/useCompactGuidanceBridge';
 import { useCompactVoiceInput } from '@/lib/useCompactVoiceInput';
 import { isAiAuthRequiredError } from '@/lib/aiAuth';
 import TodoWorkspaceTabs from '@/components/todo/TodoWorkspaceTabs';
-import { GuidedTarget, useGuidance } from '@/components/guidance/GuidanceProvider';
+import { GuidedTarget, showGuidanceTab, useGuidance } from '@/components/guidance/GuidanceProvider';
 import {
   getShortcutForGuidanceTarget,
   getTodoBackGuidanceTargetId,
@@ -106,6 +106,7 @@ import { useGoalGuidanceAI } from '@/lib/useGoalGuidanceAI';
 import { useRecipeGuidanceAI } from '@/lib/useRecipeGuidanceAI';
 import { useTaskGuidanceAI } from '@/lib/useTaskGuidanceAI';
 import { useSkillGuidanceAI } from '@/lib/useSkillGuidanceAI';
+import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 import {
   acceptGoalGuidancePlan,
   advanceGoalGuidanceForCompletedTodo,
@@ -154,6 +155,7 @@ import {
   type SkillVideo,
 } from '@/lib/skillGuidance';
 import {
+  deleteTaskGuidesForTodos,
   fetchTaskGuideForTodo,
   saveTaskGuide,
   shouldShowTaskGuideShortcut,
@@ -217,6 +219,7 @@ import {
   TUTORIAL_HOME_OVERVIEW_STEP,
   TUTORIAL_TODO_GUIDANCE_STEP,
   TUTORIAL_WISHLIST_SHOPPING_STEP,
+  uncompleteTutorialStep,
   completeTutorialStep,
   getTutorialReadingTimeMs,
   getTutorialProgress,
@@ -302,6 +305,19 @@ type GoalSectionKey = Exclude<GoalTodoTimeframe, 'nextWeek'>;
 type RecipeProgress = { completed: number; total: number; ratio: number };
 type SkillProgress = { completed: number; total: number; ratio: number };
 type TaskProgress = { completed: number; total: number; ratio: number; status: TaskGuide['status'] };
+type TodoTutorialRestoreStep =
+  | 'demo-task'
+  | 'choice'
+  | 'pick-video'
+  | 'accept-plan'
+  | 'video-ready'
+  | 'goal-handoff-back'
+  | 'goal-workspace'
+  | 'goal-timeframes'
+  | 'goal-target'
+  | 'goal-actions'
+  | 'goal-ai-bar'
+  | 'goal-summary';
 type TodoGuidanceTutorialStage = 'actions' | 'video' | 'choice' | 'accept-plan' | 'pick-video' | 'video-ready';
 type GoalGuidanceTutorialStage = 'handoff-back' | 'workspace' | 'timeframes' | 'goal' | 'actions' | 'question' | 'ai-bar' | 'accept-plan' | 'summary' | 'complete';
 
@@ -2607,6 +2623,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   const hasShownGoalTutorialQuestionIntroRef = useRef(false);
   const finishTodoGuidanceTutorialRef = useRef<(closeGuidance: boolean) => Promise<void>>(async () => {});
   const startGoalTutorialTargetRef = useRef<() => void>(() => {});
+  /** Tutorial "back": puts the To Do screen back the way a step needs it, then shows it. */
+  const restoreTodoTutorialStepRef = useRef<(step: TodoTutorialRestoreStep) => void>(() => {});
   const autoRequestedTaskGuidanceRef = useRef<string | null>(null);
   const autoRequestedGoalGuidanceRef = useRef<string | null>(null);
   const completeTodoGuidanceAction = useCallback((action: string) => {
@@ -2677,15 +2695,21 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         autoNextAfterMs: stage === 'video-ready' && hideCardAfterMs
           ? hideCardAfterMs + 2000
           : undefined,
-        onBack: stage === 'video'
+        onBack: stage === 'actions'
+          ? () => restoreTodoTutorialStepRef.current('demo-task')
+          : stage === 'video'
           ? () => showTodoGuidanceTutorialStage('actions', [stage, ...forwardStages])
           : stage === 'choice'
             ? () => showTodoGuidanceTutorialStage('video', [stage, ...forwardStages])
             : stage === 'accept-plan' || stage === 'pick-video'
-              ? () => showTodoGuidanceTutorialStage('choice', [stage, ...forwardStages])
+              ? () => restoreTodoTutorialStepRef.current('choice')
               : stage === 'video-ready'
-                ? () => showTodoGuidanceTutorialStage('pick-video', [stage, ...forwardStages])
+                ? () => restoreTodoTutorialStepRef.current('pick-video')
                 : undefined,
+        // Back from the goal part lands on these, after the choice was already made.
+        restore: stage === 'accept-plan' || stage === 'video-ready'
+          ? () => restoreTodoTutorialStepRef.current(stage)
+          : undefined,
         onSkipSegment: () => { void finishTodoGuidanceTutorialRef.current(false); },
         // Every stage can move on: a user who doesn't pick an option, or whose guidance
         // fails to load, must never be stuck on this part of the walkthrough.
@@ -7253,6 +7277,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             void completeTutorialStep(uid, TUTORIAL_WISHLIST_SHOPPING_STEP).catch((error) => {
               console.warn('Failed to persist skipped wishlist tutorial completion', error);
             });
+            openNewChatAfterTutorial();
           },
         }
       );
@@ -7311,7 +7336,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           : stage === 'question'
             ? 'tutorial-goal-question'
             : stage === 'ai-bar'
-              ? 'tutorial-goal-ai-bar'
+              // "Tap send." points at the Eazee button, which sends the filled-in answer.
+              ? 'tutorial-goal-eazee-button'
               : stage === 'accept-plan'
                 ? 'tutorial-goal-accept-plan'
                 : stage === 'summary'
@@ -7339,7 +7365,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
               : stage === 'question'
                 ? 'guidance question'
               : stage === 'ai-bar'
-                ? 'AI bar'
+                ? 'Eazee button'
                 : stage === 'accept-plan'
                   ? 'Accept plan'
                   : stage === 'summary'
@@ -7350,14 +7376,23 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
           ? getTutorialReadingTimeMs(GOAL_TUTORIAL_ACCEPT_PLAN_MESSAGE)
           : undefined,
         onBack: stage === 'question'
-            ? () => showGoalGuidanceTutorialStage('actions', [stage, ...forwardStages])
+            ? () => restoreTodoTutorialStepRef.current('goal-actions')
             : stage === 'ai-bar'
               ? () => showGoalGuidanceTutorialStage('question', [stage, ...forwardStages])
               : stage === 'accept-plan'
-                ? () => showGoalGuidanceTutorialStage('ai-bar', [stage, ...forwardStages])
+                ? () => restoreTodoTutorialStepRef.current('goal-ai-bar')
                 : stage === 'summary'
                   ? () => showGoalGuidanceTutorialStage('accept-plan', [stage, ...forwardStages])
                   : undefined,
+        restore: stage === 'handoff-back'
+          ? () => restoreTodoTutorialStepRef.current('goal-handoff-back')
+          : stage === 'timeframes'
+            ? () => restoreTodoTutorialStepRef.current('goal-timeframes')
+            : stage === 'actions'
+              ? () => restoreTodoTutorialStepRef.current('goal-actions')
+              : stage === 'summary'
+                ? () => restoreTodoTutorialStepRef.current('goal-summary')
+                : undefined,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
         onNext: forwardStages.length > 0
           ? () => showGoalGuidanceTutorialStage(forwardStages[0], forwardStages.slice(1))
@@ -7371,9 +7406,16 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                   showGoalGuidanceTutorialStage('ai-bar');
                 }
               : stage === 'accept-plan'
-                ? () => cancelGuidance()
+                ? () => {
+                    // Back here after accepting: there is nothing to accept, so move on.
+                    if (goalGuidancePlanStatusRef.current && goalGuidancePlanStatusRef.current !== 'preview') {
+                      showGoalGuidanceTutorialStage('summary');
+                      return;
+                    }
+                    cancelGuidance();
+                  }
                 : stage === 'summary'
-                  ? () => startCalendarTutorialTarget()
+                  ? () => { void skipGoalGuidanceTutorialToCalendar(); }
                   // Moving on without picking Actions plan or sending must stay possible,
                   // or a failed AI reply leaves the user stuck.
                   : stage === 'actions' || stage === 'ai-bar'
@@ -7468,6 +7510,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         keepLocatedTargetCard: true,
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
+        restore: () => restoreTodoTutorialStepRef.current('goal-target'),
       }
     );
   }, [skipGoalGuidanceTutorialToCalendar, startGuidance]);
@@ -7485,6 +7528,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       {
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
+        restore: () => restoreTodoTutorialStepRef.current('goal-workspace'),
       }
     );
   }, [skipGoalGuidanceTutorialToCalendar, startGuidance]);
@@ -13597,6 +13641,164 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         )}
       </>
     );
+  };
+
+  const goalGuidancePlanStatusRef = useRef<string | null>(null);
+  goalGuidancePlanStatusRef.current = goalGuidancePlan?.status ?? null;
+
+  // Tutorial "back": rebuild the screen for an earlier step (tab, open item, workspace,
+  // and the demo item's guidance choice), then show that step. What the user made
+  // along the way (accepted goal actions, events) is kept; those steps can move on.
+  restoreTodoTutorialStepRef.current = (step) => {
+    const uid = user?.uid || '';
+    const demoTodoId = tutorialTodoIdRef.current;
+    const goalId = tutorialGoalTodoIdRef.current;
+
+    const ensureTodoPartActive = () => {
+      if (isTodoGuidanceTutorialPendingRef.current) return;
+      isTodoGuidanceTutorialPendingRef.current = true;
+      setIsTodoGuidanceTutorialPending(true);
+      isGoalGuidanceTutorialPendingRef.current = false;
+      setIsGoalGuidanceTutorialPending(false);
+      goalGuidanceTutorialStageRef.current = null;
+      if (uid) void uncompleteTutorialStep(uid, TUTORIAL_TODO_GUIDANCE_STEP);
+    };
+    const ensureGoalPartActive = () => {
+      if (isGoalGuidanceTutorialPendingRef.current) return;
+      isGoalGuidanceTutorialPendingRef.current = true;
+      setIsGoalGuidanceTutorialPending(true);
+      if (uid) void uncompleteTutorialStep(uid, TUTORIAL_GOAL_GUIDANCE_STEP);
+    };
+    const closeDetails = () => {
+      if (isDetailsModalVisible) resetDetailsModalStateRef.current();
+    };
+    // Opens the item's details (switching workspace), then shows the step once its
+    // buttons are on screen.
+    const openThen = (todoId: string | null, show: () => void) => {
+      if (todoId && !(isDetailsModalVisible && selectedTodoForDetails?.id === todoId)) {
+        closeDetails();
+        queueFocusedTodoOpen(todoId);
+        setTimeout(show, 450);
+        return;
+      }
+      show();
+    };
+    const resetDemoTodoChoice = async (todoId: string) => {
+      await Promise.all([
+        deleteTaskGuidesForTodos([todoId]),
+        deleteSkillGuidesForTodos([todoId]),
+        deleteRecipeGuidesForTodos([todoId]),
+      ]).catch((error) => console.warn('Failed to reset tutorial guidance', error));
+      await updateTodo(todoId, { guidancePath: null }).catch(() => {});
+      updateTodoStateEverywhere(todoId, { guidancePath: null });
+      setTaskGuide(null);
+      setSkillGuide(null);
+      setRecipeGuide(null);
+      setIsTaskGuidanceAiActive(false);
+      setIsSkillGuidanceAiActive(false);
+      setIsRecipeGuidanceAiActive(false);
+      autoRequestedTaskGuidanceRef.current = null;
+    };
+    const resetGoalChoice = async (todoId: string) => {
+      await deleteGoalGuidanceForGoal(todoId).catch((error) => console.warn('Failed to reset tutorial goal plan', error));
+      await updateTodo(todoId, { guidancePath: null }).catch(() => {});
+      updateTodoStateEverywhere(todoId, { guidancePath: null });
+      setGoalGuidancePlan(null);
+      setGoalGuidanceParentPlan(null);
+      setGoalGuidanceAlternative(null);
+      setPendingGoalGuidanceTitle(null);
+      setIsGoalGuidanceAiActive(false);
+      setGoalGuidanceInputValue('');
+      clearGoalGuidanceNotice();
+      hasShownGoalTutorialQuestionIntroRef.current = false;
+      autoRequestedGoalGuidanceRef.current = null;
+    };
+
+    showGuidanceTab('todo');
+    switch (step) {
+      case 'demo-task':
+        // The demo task's own effect points back at it once its details close.
+        todoGuidanceTutorialStageRef.current = 'actions';
+        closeDetails();
+        return;
+      case 'choice':
+        if (!demoTodoId) return;
+        void resetDemoTodoChoice(demoTodoId).then(() => showTodoGuidanceTutorialStage('choice'));
+        return;
+      case 'pick-video':
+        if (!demoTodoId) return;
+        void Promise.all([deleteSkillGuidesForTodos([demoTodoId]), deleteRecipeGuidesForTodos([demoTodoId])])
+          .catch(() => {})
+          .then(() => {
+            setSkillGuide(null);
+            setRecipeGuide(null);
+            showTodoGuidanceTutorialStage('pick-video');
+          });
+        return;
+      case 'accept-plan':
+        ensureTodoPartActive();
+        openThen(demoTodoId, () => {
+          if (!demoTodoId) return;
+          // Undo the accept, so the plan is a preview with its Accept button again.
+          void fetchTaskGuideForTodo(demoTodoId).then(async (guide) => {
+            if (guide && guide.status !== 'preview') {
+              const saved = await saveTaskGuide({
+                todoId: guide.todoId,
+                steps: guide.steps.map((item) => ({ ...item, completed: false })),
+                activeStepIndex: 0,
+                status: 'preview',
+                errorMessage: '',
+              });
+              handleTaskGuideSaved(saved);
+            }
+          }).catch((error) => console.warn('Failed to restore tutorial plan', error))
+            .finally(() => showTodoGuidanceTutorialStage('accept-plan'));
+        });
+        return;
+      case 'video-ready':
+        ensureTodoPartActive();
+        openThen(demoTodoId, () => showTodoGuidanceTutorialStage('video-ready'));
+        return;
+      case 'goal-handoff-back':
+        ensureGoalPartActive();
+        openThen(demoTodoId, () => showGoalGuidanceTutorialStage('handoff-back'));
+        return;
+      case 'goal-workspace':
+        ensureGoalPartActive();
+        closeDetails();
+        goToWorkspaceKey('Personal');
+        showGoalWorkspaceSwipeGuidance();
+        return;
+      case 'goal-timeframes':
+        ensureGoalPartActive();
+        closeDetails();
+        goToWorkspaceKey('Goals');
+        showGoalGuidanceTutorialStage('timeframes');
+        return;
+      case 'goal-target':
+        ensureGoalPartActive();
+        closeDetails();
+        goToWorkspaceKey('Goals');
+        startGoalTutorialTarget();
+        return;
+      case 'goal-actions':
+        ensureGoalPartActive();
+        if (!goalId) return;
+        // Stage set first, so the goal's own effect doesn't show it a second time.
+        goalGuidanceTutorialStageRef.current = 'actions';
+        void resetGoalChoice(goalId).then(() => {
+          openThen(goalId, () => showGoalGuidanceTutorialStage('actions'));
+        });
+        return;
+      case 'goal-ai-bar':
+        if (!goalGuidanceInputValue.trim()) setGoalGuidanceInputValue(TUTORIAL_GOAL_GUIDANCE_REPLY);
+        showGoalGuidanceTutorialStage('ai-bar');
+        return;
+      case 'goal-summary':
+        ensureGoalPartActive();
+        openThen(goalId, () => showGoalGuidanceTutorialStage('summary'));
+        return;
+    }
   };
 
   return (

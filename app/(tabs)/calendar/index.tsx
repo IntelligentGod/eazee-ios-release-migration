@@ -52,7 +52,7 @@ import { useCompactGuidanceBridge } from '@/lib/useCompactGuidanceBridge';
 import { useCompactVoiceInput } from '@/lib/useCompactVoiceInput';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import { getCalendarBackGuidanceTargetId, getCalendarControlGuidanceTargetId } from '@/lib/navigationHelp';
-import { useGuidance } from '@/components/guidance/GuidanceProvider';
+import { showGuidanceTab, useGuidance } from '@/components/guidance/GuidanceProvider';
 import { getShortcutForGuidanceTarget, type GuidanceTarget } from '@/lib/navigationHelp';
 import { setGuidanceActiveTab } from '@/lib/guidanceActiveTab';
 import { useLeftHandedMode } from '@/lib/useLeftHandedMode';
@@ -61,12 +61,14 @@ import {
   TUTORIAL_GOAL_GUIDANCE_STEP,
   TUTORIAL_HOME_OVERVIEW_STEP,
   TUTORIAL_WISHLIST_SHOPPING_STEP,
+  uncompleteTutorialStep,
   completeTutorialStep,
   getTutorialProgress,
   isTutorialSessionActive,
   subscribeTutorialProgress,
 } from '@/lib/tutorial';
 import ScrollViewWithBar from '@/components/ScrollViewWithBar';
+import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 
 const HOUR_HEIGHT = 60;
 /** How long after the finger lifts to wait for a drag to start before releasing a long-press lock. */
@@ -317,6 +319,8 @@ const CalendarScreen: React.FC = () => {
     setCalendarTutorialStageState(stage);
   }, []);
   const calendarTutorialEventCreatedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** An event was made in this walkthrough, so going back to "create" can move on without another. */
+  const hasMadeCalendarTutorialEventRef = useRef(false);
   const completeCalendarGuidanceAction = useCallback((action: string) => {
     if (activeTarget?.type === 'screen' && activeTarget.params?.calendarAction === action) {
       cancelGuidance();
@@ -358,6 +362,7 @@ const CalendarScreen: React.FC = () => {
           void completeTutorialStep(uid, TUTORIAL_WISHLIST_SHOPPING_STEP).catch((error) => {
             console.warn('Failed to persist skipped wishlist tutorial completion', error);
           });
+          openNewChatAfterTutorial();
         },
       }
     );
@@ -425,6 +430,7 @@ const CalendarScreen: React.FC = () => {
     if (calendarTutorialEventCreatedTimeoutRef.current) {
       clearTimeout(calendarTutorialEventCreatedTimeoutRef.current);
     }
+    hasMadeCalendarTutorialEventRef.current = true;
     setCalendarTutorialStage('saving');
     calendarTutorialEventCreatedTimeoutRef.current = setTimeout(() => {
       calendarTutorialEventCreatedTimeoutRef.current = null;
@@ -518,18 +524,43 @@ const CalendarScreen: React.FC = () => {
         onSkipSegment: () => {
           void completeCalendarTutorialAndStartHome();
         },
-        onNext: hideCalendarTutorialCreateCard,
+        onNext: () => {
+          if (hasMadeCalendarTutorialEventRef.current) {
+            void showCalendarTutorialEventCreated();
+            return;
+          }
+          hideCalendarTutorialCreateCard();
+        },
+        restore: () => restoreCalendarTutorialCreateRef.current(),
       }
     );
-  }, [completeCalendarTutorialAndStartHome, hideCalendarTutorialCreateCard, startGuidance, setCalendarTutorialStage]);
+  }, [completeCalendarTutorialAndStartHome, hideCalendarTutorialCreateCard, showCalendarTutorialEventCreated, startGuidance, setCalendarTutorialStage]);
+
+  // Back from the Home handoff: the calendar part is in progress again, at "create".
+  const restoreCalendarTutorialCreateRef = useRef(() => {});
+  restoreCalendarTutorialCreateRef.current = () => {
+    showGuidanceTab('calendar');
+    if (!isCalendarTutorialPendingRef.current) {
+      isCalendarTutorialPendingRef.current = true;
+      setIsCalendarTutorialPending(true);
+      const uid = user?.uid || '';
+      if (uid) void uncompleteTutorialStep(uid, TUTORIAL_CALENDAR_EVENT_STEP);
+    }
+    showCalendarTutorialCreate();
+  };
 
   useEffect(() => {
-    if (!isFocused || !isCalendarTutorialPending || calendarTutorialStageRef.current) {
+    if (!isFocused) {
+      // Left during "create" (e.g. tutorial back to To Do): show it again on return.
+      if (calendarTutorialStageRef.current === 'create') setCalendarTutorialStage(null);
+      return;
+    }
+    if (!isCalendarTutorialPending || calendarTutorialStageRef.current) {
       return;
     }
 
     showCalendarTutorialCreate();
-  }, [isCalendarTutorialPending, isFocused, showCalendarTutorialCreate]);
+  }, [isCalendarTutorialPending, isFocused, setCalendarTutorialStage, showCalendarTutorialCreate]);
 
 
   //location google maps places

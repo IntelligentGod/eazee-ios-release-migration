@@ -49,7 +49,7 @@ import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { useCompactTabAI, type CompactAiNoticeTarget } from '@/lib/useCompactTabAI';
 import { useCompactGuidanceBridge } from '@/lib/useCompactGuidanceBridge';
 import { useCompactVoiceInput } from '@/lib/useCompactVoiceInput';
-import { GuidedTarget, useGuidance } from '@/components/guidance/GuidanceProvider';
+import { GuidedTarget, showGuidanceTab, useGuidance } from '@/components/guidance/GuidanceProvider';
 import {
   getHomeControlGuidanceTargetId,
   getHomeSettingsGuidanceTargetId,
@@ -64,6 +64,7 @@ import {
   TUTORIAL_CALENDAR_EVENT_STEP,
   TUTORIAL_HOME_OVERVIEW_STEP,
   TUTORIAL_WISHLIST_SHOPPING_STEP,
+  uncompleteTutorialStep,
   completeTutorialStep,
   getTutorialProgress,
   isTutorialSessionActive,
@@ -122,6 +123,7 @@ import { extendEventSeries } from '@/lib/eventSeries';
 import { computeBlobVisualMeaning } from '@/src/blob/blobMeaning';
 import { blobMeaningFromBehaviorMetrics } from '@/src/blob/blobMeaningFromSignals';
 import { BLOB_SCENARIOS } from '@/src/blob/blobScenarioPresets';
+import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 
 type GoogleEvent = HomeGoogleEvent;
 
@@ -362,8 +364,12 @@ export default function HomePage() {
             },
             'tutorial complete',
             {
-              onNext: cancelGuidance,
-              onSkipSegment: cancelGuidance,
+              onNext: () => {
+                cancelGuidance();
+                openNewChatAfterTutorial();
+              },
+              onSkipSegment: openNewChatAfterTutorial,
+              onCancel: openNewChatAfterTutorial,
             }
           );
         },
@@ -417,9 +423,22 @@ export default function HomePage() {
           : () => {
               void finishHomeTutorial(true);
             },
+        restore: () => {
+          showGuidanceTab('home');
+          // Set first, so the start effect resumes here instead of at the overview.
+          homeTutorialStageRef.current = stage;
+          if (!isHomeTutorialPendingRef.current) {
+            // Back from the Chat part: the Home part is in progress again.
+            isHomeTutorialPendingRef.current = true;
+            setIsHomeTutorialPending(true);
+            const uid = user?.uid || '';
+            if (uid) void uncompleteTutorialStep(uid, TUTORIAL_HOME_OVERVIEW_STEP);
+          }
+          showHomeTutorialStageRef.current(stage);
+        },
       }
     );
-  }, [finishHomeTutorial, scrollHomeTutorialCardIntoView, startGuidance]);
+  }, [finishHomeTutorial, scrollHomeTutorialCardIntoView, startGuidance, user?.uid]);
   showHomeTutorialStageRef.current = showHomeTutorialStage;
 
   useEffect(() => {
@@ -463,7 +482,13 @@ export default function HomePage() {
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!isFocused || !isHomeTutorialPending || homeTutorialStageRef.current) {
+    if (!isFocused) {
+      // Left Home mid-way (e.g. tutorial back to the calendar): start again from the
+      // overview when the user comes back.
+      homeTutorialStageRef.current = null;
+      return;
+    }
+    if (!isHomeTutorialPending || homeTutorialStageRef.current) {
       return;
     }
 

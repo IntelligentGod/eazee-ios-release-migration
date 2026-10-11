@@ -19,6 +19,7 @@ import {
   setTutorialGoalDemoTodoId,
   setTutorialTodoDemoTodoId,
   startTutorial,
+  uncompleteTutorialStep,
 } from '../tutorial';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -69,6 +70,24 @@ describe('tutorial progress', () => {
     );
     expect(isActiveTutorialStepPending('user-3', TUTORIAL_CHAT_DAY_PLAN_STEP)).toBe(false);
     expect(isActiveTutorialStepPending('user-3', TUTORIAL_TODO_GUIDANCE_STEP)).toBe(true);
+  });
+
+  it('puts a finished step back in progress for tutorial back', async () => {
+    mockedAsyncStorage.setItem.mockResolvedValue();
+    await startTutorial('user-back');
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
+      completedSteps: [TUTORIAL_CHAT_DAY_PLAN_STEP, TUTORIAL_TODO_GUIDANCE_STEP],
+      todoDemoTodoId: 'demo-1',
+    }));
+
+    await uncompleteTutorialStep('user-back', TUTORIAL_TODO_GUIDANCE_STEP);
+
+    expect(mockedAsyncStorage.setItem).toHaveBeenLastCalledWith(
+      `${TUTORIAL_PROGRESS_KEY_PREFIX}:user-back`,
+      JSON.stringify({ completedSteps: [TUTORIAL_CHAT_DAY_PLAN_STEP], todoDemoTodoId: 'demo-1' })
+    );
+    expect(isActiveTutorialStepPending('user-back', TUTORIAL_TODO_GUIDANCE_STEP)).toBe(true);
+    expect(isActiveTutorialStepPending('user-back', TUTORIAL_CHAT_DAY_PLAN_STEP)).toBe(false);
   });
 
   it('requires all tutorial steps before progress is complete', async () => {

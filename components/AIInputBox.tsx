@@ -131,7 +131,7 @@ const surfaceThemes: Record<ThemedSurfaceVariant, SurfaceTheme> = {
         field: { rim: ['#8FFFF0', '#1C6358'], fill: ['#2E6D61', '#39B9A1'] },
         microphone: { rim: ['#8FFFF0', '#1C6358'], fill: ['#3CB4A1', '#2E7D70'] },
         logoColor: '#C2FFEF',
-        sendInMicrophoneSlot: false,
+        sendInMicrophoneSlot: true,
         textColor: '#E8FFF7',
         placeholderTextColor: 'rgba(232,255,247,0.6)',
         sendOuterColors: ['#175C57', '#77F2E4', '#DAFFF7'],
@@ -588,7 +588,7 @@ function MicrophoneButton({
                 borderWidth: micStrokeWidth,
                 overflow: 'visible',
             }}
-            onPress={onPress}
+            onPress={sendMode && onSendPress ? onSendPress : onPress}
             onLongPress={onLongPress}
             onPressOut={onPressOut}
             delayLongPress={delayLongPress}
@@ -621,15 +621,32 @@ function MicrophoneButton({
                     elevation: 4,
                 }}
             >
-                <Image
-                    source={require('../assets/images/ez-logo.png')}
+                <Animated.View style={{ opacity: sendTransition.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
+                    <Image
+                        source={require('../assets/images/ez-logo.png')}
+                        style={{
+                            width: 35,
+                            height: 35,
+                            tintColor: isListening ? microphoneColor : '#D5D3B9',
+                        }}
+                        resizeMode="contain"
+                    />
+                </Animated.View>
+                <Animated.View
+                    pointerEvents="none"
                     style={{
-                        width: 35,
-                        height: 35,
-                        tintColor: isListening ? microphoneColor : '#D5D3B9',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: sendTransition,
                     }}
-                    resizeMode="contain"
-                />
+                >
+                    <MIcon name="arrow-up-bold" size={26} color="#D5D3B9" />
+                </Animated.View>
             </View>
         </TouchableOpacity>
     );
@@ -721,7 +738,9 @@ const AIInputBox: React.FC<AIInputBoxProps> = ({
             (localTextInput.trim().length > 0 && (showSendButton ?? editable)) ||
             (hasVoicePreviewContent && showSendButton === true)
         );
-    const showsSendInMicrophoneSlot = showsSendButton && !!surfaceTheme?.sendInMicrophoneSlot;
+    // The Eazee button is the send button; the small inline arrow is only for a themed
+    // surface that opts out.
+    const showsSendInMicrophoneSlot = showsSendButton && (surfaceTheme ? surfaceTheme.sendInMicrophoneSlot : true);
     const showsInlineSendButton = showsSendButton && !showsSendInMicrophoneSlot;
     const isStopMode = !!onStopPress && (isProcessing || isResponding);
     const showsCancelButton = isStopMode || (

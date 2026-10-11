@@ -53,7 +53,7 @@ import { Q } from '@nozbe/watermelondb';
 import { buildAmazonSearchUrl } from '@/lib/amazonSearch';
 import { readProfileCountryCode } from '@/lib/profileCountry';
 import { setGuidanceActiveTab } from '@/lib/guidanceActiveTab';
-import { GuidedTarget, useGuidance } from '@/components/guidance/GuidanceProvider';
+import { GuidedTarget, showGuidanceTab, useGuidance } from '@/components/guidance/GuidanceProvider';
 import { getChatAiBarGuidanceTargetId, getChatEazeeButtonGuidanceTargetId, getChatHeaderGuidanceTargetId, getChatPlanDayComposerGuidanceTargetId, getChatWishlistMessageGuidanceTargetId } from '@/lib/navigationHelp';
 import { useLeftHandedMode } from '@/lib/useLeftHandedMode';
 import { readAiPersonalizationSettings } from '@/lib/aiPersonalization';
@@ -94,6 +94,7 @@ import { getFirebaseAppCheckHeaders } from '@/lib/firebaseAppCheck';
 import { getAiRequestHeaders } from '@/lib/aiRequest';
 import { requestAiDataSharingConsent } from '@/lib/aiDataSharingConsent';
 import { useAuthSession } from '@/app/context/AuthSessionContext';
+import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 import {
   TUTORIAL_CALENDAR_EVENT_STEP,
   TUTORIAL_CHAT_DAY_PLAN_STEP,
@@ -101,6 +102,7 @@ import {
   TUTORIAL_HOME_OVERVIEW_STEP,
   TUTORIAL_TODO_GUIDANCE_STEP,
   TUTORIAL_WISHLIST_SHOPPING_STEP,
+  uncompleteTutorialStep,
   TODO_TUTORIAL_HANDOFF_MESSAGE,
   TUTORIAL_DEMO_TODO_DETAILS,
   TUTORIAL_DEMO_TODO_TITLE,
@@ -1861,6 +1863,7 @@ export default function ChatScreen() {
   const isFocused = useIsFocused();
   const { user: authUser } = useAuthSession();
   const { activeTarget, cancelGuidance, startGuidance } = useGuidance();
+  const getTutorialUserId = useCallback(() => authUser?.uid || auth.currentUser?.uid || '', [authUser?.uid]);
   const { isLeftHanded } = useLeftHandedMode();
   const [isChatDayPlanTutorialPending, setIsChatDayPlanTutorialPending] = useState(false);
   const [chatDayPlanTutorialStage, setChatDayPlanTutorialStage] = useState<ChatDayPlanTutorialStage | null>(null);
@@ -1870,12 +1873,15 @@ export default function ChatScreen() {
   const hasStartedChatDayPlanTutorialRef = useRef(false);
   const isChatDayPlanTutorialPendingRef = useRef(false);
   const isFinishingChatDayPlanTutorialRef = useRef(false);
+  /** Tutorial "back" into the day-plan part: the stage to show instead of starting over. */
+  const restoreChatDayPlanStageRef = useRef<ChatDayPlanTutorialStage | null>(null);
   const [isWishlistTutorialPending, setIsWishlistTutorialPending] = useState(false);
   const isWishlistTutorialPendingRef = useRef(false);
   const hasStartedWishlistTutorialRef = useRef(false);
   const wishlistTutorialRequestIdRef = useRef<string | null>(null);
   const shouldTrackNextWishlistTutorialRequestRef = useRef(false);
   const showWishlistTutorialInfoRef = useRef<() => void>(() => {});
+  const restoreWishlistTutorialStepRef = useRef<(step: 'info' | 'prompt') => void>(() => {});
   const isFocusedRef = useRef(false);
   useEffect(() => {
     isFocusedRef.current = isFocused;
@@ -1968,8 +1974,12 @@ export default function ChatScreen() {
       },
       'tutorial complete',
       {
-        onNext: cancelGuidance,
-        onSkipSegment: cancelGuidance,
+        onNext: () => {
+          cancelGuidance();
+          openNewChatAfterTutorial();
+        },
+        onSkipSegment: openNewChatAfterTutorial,
+        onCancel: openNewChatAfterTutorial,
       }
     );
   }, [cancelGuidance, startGuidance]);
@@ -2014,6 +2024,10 @@ export default function ChatScreen() {
         onSkipSegment: () => {
           void completeWishlistTutorialAndShowEnd();
         },
+        onNext: () => {
+          void completeWishlistTutorialAndShowEnd();
+        },
+        restore: () => restoreWishlistTutorialStepRef.current('prompt'),
       }
     );
   }, [completeWishlistTutorialAndShowEnd, startGuidance]);
@@ -2031,10 +2045,25 @@ export default function ChatScreen() {
         onSkipSegment: () => {
           void completeWishlistTutorialAndShowEnd();
         },
+        restore: () => restoreWishlistTutorialStepRef.current('info'),
       }
     );
   }, [completeWishlistTutorialAndShowEnd, showWishlistTutorialPrompt, startGuidance]);
   showWishlistTutorialInfoRef.current = showWishlistTutorialInfo;
+
+  // Back from the end card: the wishlist part is in progress again, in the same chat.
+  restoreWishlistTutorialStepRef.current = (step) => {
+    showGuidanceTab('chat');
+    hasStartedWishlistTutorialRef.current = true;
+    if (!isWishlistTutorialPendingRef.current) {
+      isWishlistTutorialPendingRef.current = true;
+      setIsWishlistTutorialPending(true);
+      const uid = getTutorialUserId();
+      if (uid) void uncompleteTutorialStep(uid, TUTORIAL_WISHLIST_SHOPPING_STEP);
+    }
+    if (step === 'info') showWishlistTutorialInfo();
+    else showWishlistTutorialPrompt();
+  };
 
   const restoreWishlistTutorialAfterFailedRequest = useCallback((requestId: string) => {
     if (
@@ -2109,13 +2138,26 @@ export default function ChatScreen() {
               ? () => startChatTutorialStage('ai-bar')
               : undefined,
           onSkipSegment: () => { skipChatDayPlanTutorialRef.current(); },
-          onNext: nextStage ? () => startChatTutorialStage(nextStage) : undefined,
+          // The last stage waits for a day plan; next moves on without one.
+          onNext: nextStage ? () => startChatTutorialStage(nextStage) : () => { skipChatDayPlanTutorialRef.current(); },
+          restore: () => {
+            showGuidanceTab('chat');
+            if (isChatDayPlanTutorialPendingRef.current) {
+              startChatTutorialStage(currentStage);
+              return;
+            }
+            // Back from the To Do part: this part is in progress again, resumed at this
+            // stage in the same chat (the start effect would otherwise begin a new chat).
+            restoreChatDayPlanStageRef.current = currentStage;
+            const uid = getTutorialUserId();
+            if (uid) void uncompleteTutorialStep(uid, TUTORIAL_CHAT_DAY_PLAN_STEP);
+          },
         }
       );
     }
 
     startChatTutorialStage(stage);
-  }, [startGuidance]);
+  }, [getTutorialUserId, startGuidance]);
 
   const advanceChatDayPlanTutorial = useCallback((nextStage: ChatDayPlanTutorialStage) => {
     if (!isChatDayPlanTutorialPendingRef.current) return;
@@ -4251,6 +4293,13 @@ export default function ChatScreen() {
     }
 
     hasStartedChatDayPlanTutorialRef.current = true;
+
+    const restoreStage = restoreChatDayPlanStageRef.current;
+    if (restoreStage) {
+      restoreChatDayPlanStageRef.current = null;
+      showChatDayPlanTutorialStage(restoreStage);
+      return;
+    }
 
     const startChatDayPlanTutorial = async () => {
       if (chatMessages.some((message) => isMeaningfulChatMessage(message))) {

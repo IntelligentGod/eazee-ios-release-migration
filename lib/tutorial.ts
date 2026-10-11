@@ -195,6 +195,26 @@ export async function completeTutorialStep(userId: string, step: TutorialStep) {
   emitTutorialProgressChanged();
 }
 
+/** Tutorial "back" into a finished part: that part is in progress again. */
+export async function uncompleteTutorialStep(userId: string, step: TutorialStep) {
+  const progress = await getTutorialProgress(userId);
+  if (!progress.completedSteps.includes(step)) return;
+  const completedSteps = new Set(progress.completedSteps);
+  completedSteps.delete(step);
+  await AsyncStorage.setItem(
+    getTutorialProgressKey(userId),
+    serializeTutorialProgress({
+      completedSteps: Array.from(completedSteps),
+      todoDemoTodoId: progress.todoDemoTodoId,
+      goalDemoTodoId: progress.goalDemoTodoId,
+    })
+  );
+  if (isTutorialSessionActive(userId)) {
+    activeTutorialCompletedSteps.set(userId, completedSteps);
+  }
+  emitTutorialProgressChanged();
+}
+
 export async function setTutorialTodoDemoTodoId(userId: string, todoId: string) {
   const progress = await getTutorialProgress(userId);
   await AsyncStorage.setItem(

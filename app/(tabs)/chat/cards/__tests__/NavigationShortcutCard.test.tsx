@@ -258,6 +258,7 @@ describe('NavigationShortcutCard', () => {
         workspaceKey: 'Personal',
         openTodoId: 'todo-1',
         openTodoNonce: expect.any(String),
+        navNonce: expect.any(String),
       },
     });
   });

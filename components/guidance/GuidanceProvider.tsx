@@ -20,7 +20,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { usePathname } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -140,6 +140,11 @@ type GuidanceStartOptions = {
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
+  /**
+   * Tutorial "back": puts the screen back the way this step needs it (tab, open panels,
+   * choices), then shows this step again. Without it, back only re-shows the card.
+   */
+  restore?: () => void;
   completeAfterMs?: number;
   autoNextAfterMs?: number;
   hideCardAfterMs?: number;
@@ -147,11 +152,25 @@ type GuidanceStartOptions = {
   useTutorialCardPlacement?: boolean;
 };
 
+const GUIDANCE_TAB_ROUTES: Record<GuidanceTab, string> = {
+  chat: '/(tabs)/chat',
+  home: '/(tabs)/home',
+  todo: '/(tabs)/todo',
+  calendar: '/(tabs)/calendar',
+};
+
+/** Switches to a tab for a tutorial step being restored. */
+export function showGuidanceTab(tab: GuidanceTab) {
+  if (getGuidanceActiveTab() !== tab) router.navigate(GUIDANCE_TAB_ROUTES[tab] as any);
+}
+
 type GuidanceContextValue = {
   activeTarget: GuidanceTarget | null;
   activeTargetId: string | null;
   startGuidance: (target: GuidanceTarget, label?: string, options?: GuidanceStartOptions) => void;
   cancelGuidance: () => void;
+  /** Goes back to the previous tutorial step, restoring its screen. */
+  goBackInTutorial: () => void;
   registerTarget: (target: RegisteredTarget) => () => void;
   updateTargetRect: (id: string, rect: Rect | null) => void;
   isMuted: boolean;
@@ -168,6 +187,7 @@ const noopGuidanceContext: GuidanceContextValue = {
   activeTargetId: null,
   startGuidance: () => {},
   cancelGuidance: () => {},
+  goBackInTutorial: () => {},
   registerTarget: () => () => {},
   updateTargetRect: () => {},
   isMuted: false,
@@ -994,15 +1014,50 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session, step, todoWorkspaceKey]);
 
+  // The tutorial steps shown so far, oldest first, so "back" works on every step:
+  // a step without its own back reopens the step before it.
+  const tutorialHistoryRef = useRef<{
+    key: string;
+    target: GuidanceTarget;
+    label?: string;
+    options?: GuidanceStartOptions;
+    /** The tab the step was shown on (a "Tap Calendar" step is shown on To Do). */
+    tab: GuidanceTab | null;
+  }[]>([]);
+  const startGuidanceRef = useRef<(target: GuidanceTarget, label?: string, options?: GuidanceStartOptions) => void>(() => {});
+  const showPreviousTutorialStep = useCallback(() => {
+    const history = tutorialHistoryRef.current;
+    history.pop();
+    const previous = history[history.length - 1];
+    if (!previous) return;
+    if (previous.options?.restore) {
+      previous.options.restore();
+      return;
+    }
+    if (previous.tab) showGuidanceTab(previous.tab);
+    startGuidanceRef.current(previous.target, previous.label, previous.options);
+  }, []);
+
   const startGuidance = useCallback((target: GuidanceTarget, label?: string, options?: GuidanceStartOptions) => {
     const resolvedLabel = label?.trim() || getGuidanceTargetLabel(target);
+    let onBack = options?.onBack;
+    if (options?.onSkipSegment) {
+      const key = JSON.stringify(target);
+      const history = tutorialHistoryRef.current;
+      // Coming back to a step already shown (its own back, or a replay) drops what came after it.
+      const shownAt = history.findIndex((entry) => entry.key === key);
+      const tab = shownAt >= 0 ? history[shownAt].tab : getGuidanceActiveTab();
+      if (shownAt >= 0) history.splice(shownAt);
+      history.push({ key, target, label, options, tab });
+      if (!onBack && history.length > 1) onBack = showPreviousTutorialStep;
+    }
     setHiddenCardSessionId(null);
     setSession({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       target,
       label: resolvedLabel,
       onCancel: options?.onCancel,
-      onBack: options?.onBack,
+      onBack,
       onNext: options?.onNext,
       onSkipSegment: options?.onSkipSegment,
       completeAfterMs: options?.completeAfterMs,
@@ -1011,7 +1066,8 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
       keepLocatedTargetCard: options?.keepLocatedTargetCard,
       useTutorialCardPlacement: options?.useTutorialCardPlacement ?? isTutorialGuidanceTarget(target),
     });
-  }, []);
+  }, [showPreviousTutorialStep]);
+  startGuidanceRef.current = startGuidance;
 
   const cancelGuidance = useCallback(() => {
     voiceRequestIdRef.current += 1;
@@ -1124,6 +1180,7 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
     activeTargetId: visibleStep?.targetId || null,
     startGuidance,
     cancelGuidance,
+    goBackInTutorial: showPreviousTutorialStep,
     registerTarget,
     updateTargetRect,
     isMuted,
@@ -1131,6 +1188,7 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
     replayVoice,
   }), [
     cancelGuidance,
+    showPreviousTutorialStep,
     isMuted,
     registerTarget,
     replayVoice,
