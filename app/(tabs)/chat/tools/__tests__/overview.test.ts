@@ -781,8 +781,21 @@ describe('plan_my_day', () => {
         type: 'navigationShortcut',
         label: "today's schedule (home)",
         route: '/(tabs)/home',
-        params: {},
+        params: { planDate: todayYmd },
       },
+    });
+  });
+
+  it('names the plan day and opens Home on it', async () => {
+    const day = new Date();
+    day.setDate(day.getDate() + 1);
+    const tomorrowYmd = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    setLastDayPlan({ date: tomorrowYmd, calendarItems: [], todoItems: [] });
+
+    const result = await executeToolCall({ name: 'save_day_plan', arguments: {} }, { serverUrl: 'http://localhost' });
+
+    expect(result.messages[1]).toMatchObject({
+      card: { type: 'navigationShortcut', label: "tomorrow's schedule (home)", params: { planDate: tomorrowYmd } },
     });
   });
 

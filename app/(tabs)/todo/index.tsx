@@ -13913,16 +13913,13 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                         onPress={handleDetailsBackPress}
                         size={42}
                         style={styles.detailsModalIconButton}
+                        tintColor="rgba(4, 28, 24, 0.55)"
                         fallbackTint="dark"
-                        fallbackBackgroundColor="rgba(232, 255, 250, 0.14)"
-                        fallbackBorderColor="rgba(232, 255, 250, 0.28)"
+                        fallbackBackgroundColor="rgba(4, 28, 24, 0.55)"
+                        fallbackBorderColor="rgba(232, 255, 250, 0.22)"
                         hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
                       >
-                        <Ionicons
-                          name="arrow-back"
-                          size={26}
-                          color={detailsScreenAppearance?.headerMenuColor || detailsTheme.headerMenuColor}
-                        />
+                        <Ionicons name="arrow-back" size={26} color="#FFFFFF" />
                       </LiquidGlassIconButton>
                     </GuidedTarget>
                   </View>

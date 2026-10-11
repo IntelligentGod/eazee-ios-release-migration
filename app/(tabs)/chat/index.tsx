@@ -66,6 +66,7 @@ import {
   shouldOfferFirstChatWelcome,
   subscribeFirstChatState,
   updateFirstChatState,
+  type FirstChatIntent,
   type FirstChatStarter,
   type FirstChatState,
 } from '@/lib/firstChatOnboarding';
@@ -79,6 +80,15 @@ import {
   SAVED_PREFERENCE_FIELDS,
 } from '@/lib/aiSavedPreferences';
 import { guidanceToolHandlers } from './tools/guidance';
+import {
+  buildFirstChatDataSection,
+  buildStarterPrompt,
+  loadSavedGoals,
+  loadTodaySummary,
+  type SavedGoalSummary,
+  type TodaySummary,
+} from '@/lib/firstChatContext';
+import { findPreferenceForAnswer, getRememberPreferenceQuestion, type SavedPreferenceField } from '@/lib/aiSavedPreferences';
 import { AI_AUTH_REQUIRED_MESSAGE, getAiResponseErrorMessage, isAiAuthRequiredError } from '@/lib/aiAuth';
 import { getFirebaseAppCheckHeaders } from '@/lib/firebaseAppCheck';
 import { getAiRequestHeaders } from '@/lib/aiRequest';
@@ -807,6 +817,26 @@ function serializeTitleMessage(message: ChatUIMessage) {
   return cardType ? `${cardType} card` : '';
 }
 
+/**
+ * A key for an assistant reply that survives the chat reloading its messages (which can
+ * give them new ids), so a prompt or notice added under a reply stays with it.
+ */
+const getReplyKey = (message: Pick<ChatUIMessage, 'role' | 'content'>) => {
+  // Only the visible text, so markers or spacing changed when the reply is saved and
+  // reloaded do not change the key.
+  const text = message.role === 'assistant'
+    ? parseAssistantMessageExtras(String(message.content || '')).text
+    : String(message.content || '');
+  return `${message.role}:${text.replace(/\s+/g, ' ').trim().slice(0, 100)}`;
+};
+
+/** Saved goals for the goal starter, today's tasks and events for the day-plan starter. */
+async function loadFirstChatData(intent?: FirstChatIntent): Promise<{ goals?: SavedGoalSummary[]; today?: TodaySummary }> {
+  if (intent === 'goal') return { goals: await loadSavedGoals().catch(() => []) };
+  if (intent === 'plan_day') return { today: await loadTodaySummary().catch(() => undefined) };
+  return {};
+}
+
 function getTitleContextMessages(messages: ChatUIMessage[]) {
   const firstSubstantiveUserIndex = messages.findIndex(isSubstantiveTitleUserMessage);
   if (firstSubstantiveUserIndex < 0) return [];
@@ -1351,12 +1381,14 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   isLatest,
   showRememberPrompt,
   savedPreferenceNotice,
+  rememberSuggestion,
   actionHandlers,
 }: {
   /** The newest message in the chat; only it shows quick-reply buttons. */
   isLatest: boolean;
   showRememberPrompt: boolean;
   savedPreferenceNotice?: string | null;
+  rememberSuggestion?: { field: SavedPreferenceField; value: string; question: string } | null;
   actionHandlers: AssistantMessageActionHandlers;
   message: ChatUIMessage;
   messageKey: string;
@@ -1494,6 +1526,7 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
             isStreaming={message.isStreaming}
             showRememberPrompt={showRememberPrompt}
             savedPreferenceNotice={savedPreferenceNotice}
+            rememberSuggestion={rememberSuggestion}
             handlers={actionHandlers}
           />
         )}
@@ -1872,6 +1905,11 @@ export default function ChatScreen() {
   /** Replies already looked at for [[save_preference]]; loaded history is never re-saved. */
   const seenAssistantMessageIdsRef = useRef(new Set<string>());
   const [savedPreferenceNotices, setSavedPreferenceNotices] = useState<Record<string, string>>({});
+  /** A preference answer the user tapped ("Flexible priority list"), waiting for the result reply. */
+  const pendingPreferenceAnswerRef = useRef<{ field: SavedPreferenceField; value: string; sessionId: string | null } | null>(null);
+  /** "Remember this?" prompts the app adds under a result reply, by message id. */
+  const [rememberSuggestions, setRememberSuggestions] = useState<Record<string, { field: SavedPreferenceField; value: string; question: string }>>({});
+  const rememberPromptSessionIdsRef = useRef(new Set<string>());
   useEffect(() => {
     const uid = authUser?.uid;
     let cancelled = false;
@@ -4650,7 +4688,15 @@ export default function ChatScreen() {
         // Fix my life has its own cards, so it does not get the reply buttons.
         ...(isFixMyLifeRequest ? [] : [{ role: 'system' as const, content: ASSISTANT_ACTION_MARKERS_INSTRUCTIONS }]),
         ...(savedPreferencesMessage ? [{ role: 'system' as const, content: savedPreferencesMessage }] : []),
-        ...(firstChatForRequest ? [{ role: 'system' as const, content: buildFirstChatSystemMessage(firstChatForRequest) }] : []),
+        ...(firstChatForRequest
+          ? [{
+              role: 'system' as const,
+              content: buildFirstChatSystemMessage(
+                firstChatForRequest,
+                buildFirstChatDataSection(firstChatForRequest.intent, await loadFirstChatData(firstChatForRequest.intent))
+              ),
+            }]
+          : []),
       ];
       const body = {
         clientId: cid || undefined,
@@ -5244,10 +5290,12 @@ export default function ChatScreen() {
     setIsStartingFirstChat(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
-      // The starter's question is fixed, so it appears at once without waiting for the AI.
+      // The starter's question appears at once without waiting for the AI, built from what
+      // the app already has: saved goals for a goal, today's tasks and events for a day plan.
+      const starterData = await loadFirstChatData(starter.intent);
       const sessionId = await appendVisibleChatMessages([
         { role: 'user', content: `${starter.emoji} ${starter.label}` },
-        { role: 'assistant', content: starter.prompt },
+        { role: 'assistant', content: buildStarterPrompt(starter, starterData) },
       ]);
       if (!sessionId) throw new Error('No chat session');
       hasTrackedRefinementRef.current = false;
@@ -5289,20 +5337,50 @@ export default function ChatScreen() {
       const messageResult = extras.result
         || (extras.copyable ? 'draft' : extras.tasks.length ? 'plan' : extras.goal ? 'goal_plan' : null);
       if (messageResult && !resultKind) resultKind = messageResult;
-      if (extras.remember && !rememberMessageId && message.id) rememberMessageId = message.id;
+      if (extras.remember && !rememberMessageId && message.id) rememberMessageId = getReplyKey(message);
 
       const messageId = message.id;
       if (!messageId || seenAssistantMessageIdsRef.current.has(messageId)) continue;
       seenAssistantMessageIdsRef.current.add(messageId);
+
+      // The user picked a preference answer earlier; once the result arrives, offer to
+      // remember it (once per chat, and once in the first-chat flow), unless the AI asked.
+      const pendingAnswer = pendingPreferenceAnswerRef.current;
+      const sessionKey = activeSessionId || '';
+      if (
+        pendingAnswer &&
+        pendingAnswer.sessionId === activeSessionId &&
+        messageResult &&
+        !extras.remember &&
+        !rememberPromptSessionIdsRef.current.has(sessionKey) &&
+        !(isOnboardingChat && state.preferencePromptShown)
+      ) {
+        pendingPreferenceAnswerRef.current = null;
+        rememberPromptSessionIdsRef.current.add(sessionKey);
+        const replyKey = getReplyKey(message);
+        const suggestion = {
+          field: pendingAnswer.field,
+          value: pendingAnswer.value,
+          question: getRememberPreferenceQuestion(pendingAnswer.field, pendingAnswer.value),
+        };
+        void readSavedPreferences(uid).then((store) => {
+          // Already saved with the same value: nothing to ask.
+          if (store.preferences.some((item) => item.field === suggestion.field && item.value === suggestion.value)) return;
+          setRememberSuggestions((current) => ({ ...current, [replyKey]: suggestion }));
+        });
+        if (isOnboardingChat && uid) {
+          void updateFirstChatState(uid, { preferencePromptShown: true, preferencePromptMessageId: replyKey });
+        }
+      }
       for (const preference of extras.savePreferences) {
         const label = `${SAVED_PREFERENCE_FIELDS[preference.field].label}: ${getSavedPreferenceLabel(preference.field, preference.value)}`;
         void saveSavedPreference(uid, preference.field, preference.value, 'chat')
           .then(() => {
-            setSavedPreferenceNotices((current) => ({ ...current, [messageId]: `Saved to your preferences (${label}). Change it in Settings.` }));
+            setSavedPreferenceNotices((current) => ({ ...current, [getReplyKey(message)]: `Saved to your preferences (${label}). Change it in Settings.` }));
             trackFirstChatEvent('preference_saved', { field: preference.field });
           })
           .catch(() => {
-            setSavedPreferenceNotices((current) => ({ ...current, [messageId]: 'That preference was not saved. Please try again.' }));
+            setSavedPreferenceNotices((current) => ({ ...current, [getReplyKey(message)]: 'That preference was not saved. Please try again.' }));
           });
       }
     }
@@ -5336,6 +5414,10 @@ export default function ChatScreen() {
     };
     return {
       onChoose: (text) => {
+        const preference = findPreferenceForAnswer(text);
+        if (preference) {
+          pendingPreferenceAnswerRef.current = { ...preference, sessionId: activeSessionIdRef.current };
+        }
         if (isOnboardingChat() && firstChatStateRef.current.resultDelivered && !hasTrackedRefinementRef.current) {
           hasTrackedRefinementRef.current = true;
           trackFirstChatEvent('result_refined', { intent: firstChatStateRef.current.intent });
@@ -5436,6 +5518,10 @@ export default function ChatScreen() {
   }, [showFirstChatWelcome]);
 
   const lastChatMessageId = chatMessages[chatMessages.length - 1]?.id;
+  const chatRowExtraData = useMemo(
+    () => ({ rememberSuggestions, savedPreferenceNotices, promptId: firstChatState.preferencePromptMessageId }),
+    [firstChatState.preferencePromptMessageId, rememberSuggestions, savedPreferenceNotices]
+  );
 
   const renderChatMessage = useCallback(({ item, index }: { item: ChatUIMessage; index: number }) => (
     <ChatMessageBubble
@@ -5443,9 +5529,10 @@ export default function ChatScreen() {
       showRememberPrompt={
         !isFirstChatSession ||
         !firstChatState.preferencePromptShown ||
-        item.id === firstChatState.preferencePromptMessageId
+        getReplyKey(item) === firstChatState.preferencePromptMessageId
       }
-      savedPreferenceNotice={item.id ? savedPreferenceNotices[item.id] : null}
+      savedPreferenceNotice={savedPreferenceNotices[getReplyKey(item)] ?? null}
+      rememberSuggestion={rememberSuggestions[getReplyKey(item)] ?? null}
       actionHandlers={assistantActionHandlers}
       message={item}
       messageKey={item.id || `${item.role}-${index}`}
@@ -5469,7 +5556,7 @@ export default function ChatScreen() {
       buyingWishlistTodoId={buyingWishlistTodoId}
       resolvedGoalQuotaPlanIds={resolvedGoalQuotaPlanIds}
     />
-  ), [assistantActionHandlers, firstChatState.preferencePromptMessageId, firstChatState.preferencePromptShown, isFirstChatSession, lastChatMessageId, savedPreferenceNotices, saveAllDayPlanCards, weekPlanPendingDraftIds, appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
+  ), [assistantActionHandlers, rememberSuggestions, firstChatState.preferencePromptMessageId, firstChatState.preferencePromptShown, isFirstChatSession, lastChatMessageId, savedPreferenceNotices, saveAllDayPlanCards, weekPlanPendingDraftIds, appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
 
   const renderChatFooter = useCallback(() => {
     const logoBounceStyle = {
@@ -5712,6 +5799,8 @@ export default function ChatScreen() {
                   style={{ flex: 1, width: '100%' }}
                   contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 12, paddingBottom: 20, paddingTop: 20, width: '100%' }}
                   data={chatMessages}
+                  // Rows also change when a prompt or notice is added under an existing reply.
+                  extraData={chatRowExtraData}
                   renderItem={renderChatMessage}
                   keyExtractor={(item, index) => item.id || `${item.role}-${index}`}
                   ListFooterComponent={renderChatFooter}

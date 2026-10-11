@@ -68,6 +68,44 @@ export const isSavedPreferenceField = (value: unknown): value is SavedPreference
 export const isValidSavedPreference = (field: unknown, value: unknown): field is SavedPreferenceField =>
   isSavedPreferenceField(field) && SAVED_PREFERENCE_FIELDS[field].options.some((option) => option.value === value);
 
+const REMEMBER_PHRASES: Record<string, string> = {
+  'planStyle:timed': 'timed schedules',
+  'planStyle:flexible': 'flexible plans',
+  'detail:one_step': 'one small step at a time',
+  'detail:full_plan': 'the full plan',
+  'tone:professional': 'a professional tone',
+  'tone:friendly': 'a friendly tone',
+  'tone:direct': 'a direct tone',
+  'responseLength:short': 'short answers',
+  'responseLength:detailed': 'detailed answers',
+};
+
+/** "Should I remember that you prefer flexible plans?" */
+export const getRememberPreferenceQuestion = (field: SavedPreferenceField, value: string) =>
+  `Should I remember that you prefer ${REMEMBER_PHRASES[`${field}:${value}`] || getSavedPreferenceLabel(field, value).toLowerCase()}?`;
+
+const ANSWER_PATTERNS: { pattern: RegExp; field: SavedPreferenceField; value: string }[] = [
+  { pattern: /\b(full|whole|entire|complete)\b.*\bplan\b/, field: 'detail', value: 'full_plan' },
+  { pattern: /\b(one|small|tiny|single|first)\b.*\bstep\b/, field: 'detail', value: 'one_step' },
+  { pattern: /\btimed\b|\bwith (set )?times\b/, field: 'planStyle', value: 'timed' },
+  { pattern: /\bflexible\b/, field: 'planStyle', value: 'flexible' },
+  { pattern: /^(more )?professional\b/, field: 'tone', value: 'professional' },
+  { pattern: /^(more )?friendly\b/, field: 'tone', value: 'friendly' },
+  { pattern: /^(more )?direct\b/, field: 'tone', value: 'direct' },
+];
+
+/** The preference a tapped answer button stands for, e.g. "Flexible priority list". */
+export function findPreferenceForAnswer(answer: string): { field: SavedPreferenceField; value: string } | null {
+  const normalized = answer.trim().toLowerCase();
+  for (const field of Object.keys(SAVED_PREFERENCE_FIELDS) as SavedPreferenceField[]) {
+    const option = SAVED_PREFERENCE_FIELDS[field].options.find((candidate) => candidate.label.toLowerCase() === normalized);
+    if (option) return { field, value: option.value };
+  }
+  // The AI often rewords the buttons ("Full email catch-up plan"), so also match the meaning.
+  const match = ANSWER_PATTERNS.find(({ pattern }) => pattern.test(normalized));
+  return match ? { field: match.field, value: match.value } : null;
+}
+
 export const getSavedPreferenceLabel = (field: SavedPreferenceField, value: string) =>
   SAVED_PREFERENCE_FIELDS[field].options.find((option) => option.value === value)?.label || value;
 

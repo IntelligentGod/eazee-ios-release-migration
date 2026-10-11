@@ -1111,14 +1111,14 @@ export default function HomeSettingsSheet({
         />
         <SettingsRow
           disabled={!userId}
-          icon={<MaterialCommunityIcons name="play-circle-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>👀</Text>}
           label="Replay Tutorial"
           targetId={getHomeSettingsControlGuidanceTargetId('replayTutorial')}
           onPress={handleReplayTutorial}
           right={<MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.78)" />}
         />
         <SettingsRow
-          icon={<MaterialCommunityIcons name="shield-account-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>{'🧑‍💻'}</Text>}
           label="Legal & Support"
           targetId={getHomeSettingsControlGuidanceTargetId('legalSupport')}
           onPress={handleOpenLegalSupport}

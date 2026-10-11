@@ -214,6 +214,15 @@ function RememberPrompt({
   );
 }
 
+/** Follow-ups for a result the AI delivered without any, so a result is never a dead end. */
+export function getDefaultFollowUps(extras: AssistantMessageExtras): string[] {
+  const isResult = !!(extras.result || extras.copyable || extras.tasks.length || extras.goal);
+  if (!isResult) return [];
+  if (extras.copyable || extras.result === 'draft') return ['Make it shorter', 'Adjust the tone'];
+  if (extras.result === 'comparison') return ['Explain the trade-offs', 'Help me decide'];
+  return ['Make it simpler', 'Adjust the plan'];
+}
+
 /** Buttons and review cards under one of Eazee's replies, built from its markers. */
 export default function AssistantMessageActions({
   extras,
@@ -221,6 +230,7 @@ export default function AssistantMessageActions({
   isStreaming,
   showRememberPrompt,
   savedPreferenceNotice,
+  rememberSuggestion,
   handlers,
 }: {
   extras: AssistantMessageExtras;
@@ -230,14 +240,18 @@ export default function AssistantMessageActions({
   /** The preference prompt is shown at most once during onboarding. */
   showRememberPrompt: boolean;
   savedPreferenceNotice?: string | null;
+  /** A "remember this?" prompt the app adds after the user picked a preference answer. */
+  rememberSuggestion?: AssistantMessageExtras['remember'];
   handlers: AssistantMessageActionHandlers;
 }) {
   const [chosenOption, setChosenOption] = useState<string | null>(null);
   if (isStreaming) return null;
 
-  const showOptions = isLatest && extras.options.length > 0 && !chosenOption;
+  const options = extras.options.length ? extras.options : getDefaultFollowUps(extras);
+  const showOptions = isLatest && options.length > 0 && !chosenOption;
+  const remember = extras.remember ?? rememberSuggestion ?? null;
   const showCopy = extras.copyable && !!extras.text;
-  if (!showOptions && !showCopy && !extras.tasks.length && !extras.goal && !(extras.remember && showRememberPrompt) && !savedPreferenceNotice) {
+  if (!showOptions && !showCopy && !extras.tasks.length && !extras.goal && !(remember && showRememberPrompt) && !savedPreferenceNotice) {
     return null;
   }
 
@@ -248,7 +262,7 @@ export default function AssistantMessageActions({
       )}
       {extras.tasks.length > 0 && <TaskReviewCard tasks={extras.tasks} onAddTasks={handlers.onAddTasks} />}
       {!!extras.goal && <GoalReviewCard goal={extras.goal} onSaveGoal={handlers.onSaveGoal} />}
-      {!!extras.remember && showRememberPrompt && <RememberPrompt remember={extras.remember} onRemember={handlers.onRemember} />}
+      {!!remember && showRememberPrompt && <RememberPrompt remember={remember} onRemember={handlers.onRemember} />}
       {(showOptions || showCopy) && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {showCopy && (
@@ -262,7 +276,7 @@ export default function AssistantMessageActions({
               <Text style={chipTextStyle}>Copy</Text>
             </Pressable>
           )}
-          {showOptions && extras.options.map((option) => (
+          {showOptions && options.map((option) => (
             <Pressable
               key={option}
               accessibilityRole="button"

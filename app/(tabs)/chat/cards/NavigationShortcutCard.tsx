@@ -38,10 +38,13 @@ export function NavigationShortcutCard({ label, route, params, target, router }:
             startGuidance,
             router,
             fallback: { route, params },
+            // A fresh value each tap, so the screen acts on the params again (e.g. Home
+            // switching back to the plan's day after the user moved to another day).
+            extraParams: { navNonce: String(Date.now()) },
           });
           return;
         }
-        router.push({ pathname: route as any, params: params || {} });
+        router.push({ pathname: route as any, params: { ...(params || {}), navNonce: String(Date.now()) } });
       }}
       style={{
         backgroundColor: 'rgba(2, 77, 76, 0.82)',

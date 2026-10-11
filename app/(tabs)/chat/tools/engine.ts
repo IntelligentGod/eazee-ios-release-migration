@@ -1,3 +1,4 @@
+import { differenceInCalendarDays, format } from 'date-fns';
 import { getToolHandler } from '.';
 import { presentTodoResult, presentCalendarResult, presentGoogleResult, presentGuidanceResult, presentAppNavigationResult } from './presenters';
 import { getLastDayPlan, removeCreatedCalendarItems, removeLastCalendarItems, setLastDayPlan, setLastCalendarItems, setLastQueryItems } from './memory';
@@ -10,12 +11,23 @@ type ExecuteToolDeps = {
   renameChatTitle?: (title: string) => Promise<{ title: string }>;
 };
 
-const getLocalTodayYmd = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+// Home's plan card can show today and the next 6 days (HOME_PLAN_MAX_DAY_OFFSET).
+const HOME_PLAN_DAYS_AHEAD = 6;
+
+/** The "go to schedule" button for a saved plan, opening Home on the plan's day. */
+const getHomeScheduleShortcut = (date?: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ''));
+  if (!match) return null;
+  const planDay = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const offset = differenceInCalendarDays(planDay, new Date());
+  if (offset < 0 || offset > HOME_PLAN_DAYS_AHEAD) return null;
+  const dayName = offset === 0 ? 'today' : offset === 1 ? 'tomorrow' : format(planDay, 'EEEE');
+  return {
+    type: 'navigationShortcut',
+    label: `${dayName}'s schedule (home)`,
+    route: '/(tabs)/home',
+    params: { planDate: date },
+  };
 };
 
 export async function executeToolCall(
@@ -142,25 +154,14 @@ export async function executeToolCall(
         ];
       } else if (name === 'save_day_plan') {
         const savedPlan = getLastDayPlan();
-        const shouldShowHomeShortcut = savedPlan?.date === getLocalTodayYmd();
+        const homeShortcut = getHomeScheduleShortcut(savedPlan?.date);
         setLastDayPlan(null);
         messages = [
           {
             role: 'assistant',
             content: result?.repeatWeekly ? 'Added to your calendar, repeating every week.' : 'Added to your schedule.',
           },
-          ...(shouldShowHomeShortcut
-            ? [{
-                role: 'assistant' as const,
-                content: '',
-                card: {
-                  type: 'navigationShortcut',
-                  label: "today's schedule (home)",
-                  route: '/(tabs)/home',
-                  params: {},
-                },
-              }]
-            : []),
+          ...(homeShortcut ? [{ role: 'assistant' as const, content: '', card: homeShortcut }] : []),
         ];
       } else if (name === 'daily_overview') {
         const date = result?.date || new Date().toISOString().slice(0, 10);

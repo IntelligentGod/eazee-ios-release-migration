@@ -17,7 +17,7 @@ import {
   HOME_PLAN_MAX_DAY_OFFSET,
   loadHomeDayPlanItems,
 } from '@/lib/homeDayPlan';
-import { endOfDay, format, startOfDay } from 'date-fns';
+import { differenceInCalendarDays, endOfDay, format, startOfDay } from 'date-fns';
 import { Q } from '@nozbe/watermelondb';
 import { database } from '../../../database/database';
 import EventModel from '../../../database/models/EventModel';
@@ -260,7 +260,10 @@ const mergeHomeEventCompletionsIntoSnapshot = (
 };
 
 export default function HomePage() {
-  const { manageAccount, manageAccountSection, manageAccountNonce, settings, settingsNonce, settingsPanel } = useLocalSearchParams<{
+  const { manageAccount, manageAccountSection, manageAccountNonce, settings, settingsNonce, settingsPanel, planDate, navNonce } = useLocalSearchParams<{
+    /** Open the plan card on this day (yyyy-MM-dd) and scroll to it, e.g. from a saved chat plan. */
+    planDate?: string;
+    navNonce?: string;
     manageAccount?: string;
     manageAccountSection?: string;
     manageAccountNonce?: string;
@@ -1669,6 +1672,16 @@ export default function HomePage() {
     };
     // homeSnapshot reloads after edits, so the other day refreshes with it.
   }, [homeSnapshot, isFocused, isShowingTodayPlan, planDay]);
+
+  // "Go to schedule" from a saved chat plan: show that plan's day, then scroll down to the card.
+  useEffect(() => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof planDate === 'string' ? planDate : '');
+    if (!match) return;
+    const offset = differenceInCalendarDays(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])), new Date());
+    setPlanDayOffset(Math.min(HOME_PLAN_MAX_DAY_OFFSET, Math.max(0, offset)));
+    const timer = setTimeout(() => scrollHomeTutorialCardIntoView('todays-plan'), 350);
+    return () => clearTimeout(timer);
+  }, [navNonce, planDate, scrollHomeTutorialCardIntoView]);
 
   const changePlanDay = useCallback((step: number) => {
     setPlanDayOffset((current) => {

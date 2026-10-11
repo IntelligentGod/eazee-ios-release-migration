@@ -81,3 +81,13 @@ describe('AI error messages', () => {
     expect(getAiResponseErrorMessage({ error: 'Too many requests' }, 429)).toBe('Too many requests');
   });
 });
+
+describe('default follow-ups', () => {
+  const { getDefaultFollowUps } = require('@/components/chat/AssistantMessageActions');
+  it('adds follow-ups to a result that came without any, and none to a chat reply', () => {
+    expect(getDefaultFollowUps(parseAssistantMessageExtras('Hi Sarah...\n[[copy]]'))).toEqual(['Make it shorter', 'Adjust the tone']);
+    expect(getDefaultFollowUps(parseAssistantMessageExtras('Plan...\n[[tasks: A | B]]'))).toEqual(['Make it simpler', 'Adjust the plan']);
+    expect(getDefaultFollowUps(parseAssistantMessageExtras('Option A wins.\n[[result: comparison]]'))).toEqual(['Explain the trade-offs', 'Help me decide']);
+    expect(getDefaultFollowUps(parseAssistantMessageExtras('Sure, happy to help!'))).toEqual([]);
+  });
+});
