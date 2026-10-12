@@ -53,7 +53,10 @@ export default function AppDialogHost() {
     Alert.alert = (title: string, message?: string, buttons?: AlertButton[], options?: AlertOptions) => {
       const dialogButtons = toDialogButtons(buttons);
       const cancelButton = buttons?.find((button) => button.style === 'cancel');
-      const dismissible = !!cancelButton || options?.cancelable === true || dialogButtons.length === 1;
+      // cancelable: false keeps a one-button dialog up until its button is pressed.
+      const dismissible = options?.cancelable === false
+        ? false
+        : !!cancelButton || options?.cancelable === true || dialogButtons.length === 1;
       enqueue({
         title,
         message,

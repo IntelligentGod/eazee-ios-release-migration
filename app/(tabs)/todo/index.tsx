@@ -4000,20 +4000,23 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     }
 
     const isCompletedHistory = todo.completed && (todo.recurrenceCompletedCount || 0) > 1;
+    const repeatLabel = getTodoRecurrenceLabel(todo.recurrence).toLowerCase();
     return new Promise((resolve) => {
       Alert.alert(
-        'Delete repeating todo',
+        'Delete repeating task',
         isCompletedHistory
-          ? 'Delete completed history or the entire repeat series?'
-          : 'Delete this occurrence or the entire repeat series?',
+          ? `"${todo.text}" repeats ${repeatLabel}. Delete its completed history, or delete the task and stop it repeating?`
+          // Deleting only this one brings the next repeat straight back, which reads as
+          // "the task won't delete" unless it says so.
+          : `"${todo.text}" repeats ${repeatLabel}. Delete just this one (the next repeat will still appear), or delete the task and stop it repeating?`,
         [
           { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
           {
-            text: isCompletedHistory ? 'Completed history' : 'This occurrence',
+            text: isCompletedHistory ? 'Completed history' : 'Just this one',
             onPress: () => resolve(isCompletedHistory ? 'completedHistory' : 'one'),
           },
           {
-            text: 'Entire series',
+            text: 'Stop repeating',
             style: 'destructive',
             onPress: () => resolve('series'),
           },
@@ -4076,6 +4079,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
 
     } catch (error) {
       console.error('Error deleting todo:', error);
+      Alert.alert("Couldn't delete the task", 'Please try again.');
     }
   }, [getRecurringDeleteScope, localTodos, refreshLocalTodos, selectedTodoForDetails?.id]);
 
@@ -6650,6 +6654,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         }
       } catch (error) {
         console.error('Error deleting todo:', error);
+        Alert.alert("Couldn't delete the task", 'Please try again.');
       }
     }
   };
