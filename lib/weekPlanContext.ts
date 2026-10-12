@@ -4,6 +4,7 @@ import { addDays, format } from 'date-fns';
 import { database } from '@/database/database';
 import GoalGuidancePlanModel from '@/database/models/GoalGuidancePlanModel';
 import TodoModel from '@/database/models/TodoModel';
+import TodoRecurrenceSeriesModel from '@/database/models/TodoRecurrenceSeriesModel';
 import { fetchCalendarEventsInRange, type RangeCalendarEvent } from '@/lib/calendarRange';
 import {
   DEFAULT_LIFE_GRAPH_SETTINGS,
@@ -14,6 +15,7 @@ import {
   type LifeGraphNodeProgress,
   type LifeGraphSettings,
 } from '@/lib/lifeGraph';
+import { getTodoRecurrenceLabel, normalizeTodoRecurrenceRule } from '@/lib/todoRecurrence';
 import { inferGoalTimeframeFromDueDate } from '@/utils/goalTimeframes';
 
 /** Fix my life always plans a Monday to Sunday week. */
@@ -30,6 +32,8 @@ export type WeekPlanTask = {
   hasDueTime: boolean;
   isOverdue: boolean;
   starred: boolean;
+  /** How it repeats, e.g. "Daily", when it is a repeating task. */
+  repeats?: string;
 };
 
 export type WeekPlanGoalStep = {
@@ -82,7 +86,7 @@ const describeTask = (task: WeekPlanTask) => {
       : task.dueDate
         ? `due ${format(task.dueDate, 'EEE MMM d')}`
         : 'no date';
-  return `- "${task.title}" (${when}${task.starred ? ', starred' : ''})`;
+  return `- "${task.title}" (${when}${task.starred ? ', starred' : ''}${task.repeats ? `, repeats ${task.repeats.toLowerCase()}: a block on each day it repeats` : ''})`;
 };
 
 const describeEvent = (event: RangeCalendarEvent) =>
@@ -137,8 +141,8 @@ export function buildWeekPlanContext(input: WeekPlanInput) {
     '1. FIRST reply: plan the whole week right away with plan_my_week. Do not ask questions first. In one or two sentences, say what the week is built around (how many tasks, which goal, the busiest days, anything overdue), that each day can be saved to the calendar and set to repeat weekly, and that the user can ask for changes.',
     `2. Call plan_my_week exactly once, with one entry in days for EACH of these dates, in order: ${planDates.join(', ')}. Today is included. Never plan only one day, and never use plan_my_day for this.`,
     `   - weekGoal: the week's focus in a few words${hasWeekGoal ? ': the This Week goal below' : ": the most important goal or theme in the user's tasks"}. It is only shown to the user; nothing is saved from it.`,
-    "   - Give EVERY To Do task below a time block, except the ones marked fixed (they already have their time and appear on that day). A task due on a given day goes on that day. Overdue and undated tasks are spread over the coming days, starred and overdue ones first, on lighter days. Use each task's exact title.",
-    "   - Then add one block a day for the week's goal step, when there is a This Week goal. Follow the goal's plan steps in order (one-off steps once, daily steps can repeat). If the goal has no steps, use small daily steps toward it.",
+    "   - Give EVERY To Do task below a time block, except the ones marked fixed (they already have their time and appear on that day). A task due on a given day goes on that day. A repeating task gets a block on each day it repeats. Overdue and undated tasks are spread over the coming days, starred and overdue ones first, on lighter days. Use each task's exact title. The user's tasks come first: never leave one out to make room for a goal block.",
+    "   - Then, in the slots left, add one block a day for the week's goal step, when there is a This Week goal. Follow the goal's plan steps in order (one-off steps once, daily steps can repeat). If the goal has no steps, use small daily steps toward it.",
     "   - items: at most 5 per day, each type event with a start time (ISO, the user's timezone), durationMinutes and timeSource ai, at realistic times: leave breaks, keep evenings light, never stack the day full. Short titles only; never details. If a day has more than fits, move the least urgent undated tasks to a lighter day.",
     "   - mainGoal: the day's main focus in a few words: the goal step, or the most important task that day.",
     '   - Calendar events and timed tasks already on that day are fixed: the app shows them on the card and plans around them. Do not include them as items, and do not schedule over them.',
@@ -253,6 +257,11 @@ export async function loadWeekPlanContext(userId: string | null | undefined, now
     .filter((todo) => todo.workspace === 'Wishlist')
     .map((todo) => ({ title: todo.text, details: todo.details }));
 
+  const repeatLabelBySeriesId = new Map(
+    (await database.get<TodoRecurrenceSeriesModel>('todo_recurrence_series').query().fetch().catch(() => []))
+      .filter((series) => series.active)
+      .map((series) => [series.id, getTodoRecurrenceLabel(normalizeTodoRecurrenceRule({ interval: series.interval, unit: series.unit }))])
+  );
   const tasks = openTodos
     .filter((todo) => todo.workspace !== 'Goals' && todo.workspace !== 'Wishlist')
     .filter((todo) => !todo.dueDate || todo.dueDate.getTime() < weekEndExclusive.getTime())
@@ -262,6 +271,7 @@ export async function loadWeekPlanContext(userId: string | null | undefined, now
       hasDueTime: !!todo.hasDueTime,
       isOverdue: !!todo.dueDate && todo.dueDate.getTime() < todayStart.getTime(),
       starred: !!todo.starred,
+      repeats: todo.recurrenceSeriesId ? repeatLabelBySeriesId.get(todo.recurrenceSeriesId) : undefined,
     }))
     .sort((left, right) => Number(right.isOverdue) - Number(left.isOverdue) || Number(right.starred) - Number(left.starred));
 

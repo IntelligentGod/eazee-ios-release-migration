@@ -7,6 +7,7 @@ import type { ToolHandler } from './todo';
 import { classifyCreatedTodoItemsInBackground, createTodoItems } from './todo';
 import { createCalendarEvent } from './calendar';
 import { createWeeklyEventSeries, extendEventSeries } from '@/lib/eventSeries';
+import { loadRepeatingTodoItemsForDay } from '@/lib/homeDayPlan';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { getTodoHasDueTime, parseTodoInput } from '@/utils/todoDates';
 import { updateTodo } from '@/lib/todoMutations';
@@ -369,7 +370,11 @@ const plan_my_day: ToolHandler = async (args: any) => {
     priority: 'low' | 'medium' | 'high';
     durationMinutes?: number;
   }[] = [];
-  const blockerItems = await withFallbackTimeout(fetchDayPlanCalendarBlockers(date), DAY_PLAN_BLOCKER_TIMEOUT_MS, []);
+  const blockerItems = await withFallbackTimeout(
+    fetchDayPlanCalendarBlockers(date, { includeRepeatingTasks: args?.asSchedule === true }),
+    DAY_PLAN_BLOCKER_TIMEOUT_MS,
+    []
+  );
   // In a week schedule, an event or timed task already on that day is shown as fixed; never add it twice.
   const fixedTitleKeys = args?.asSchedule === true
     ? new Set(blockerItems.map((blocker) => normalizeTodoTitleKey(String(blocker.title || ''))))
@@ -690,7 +695,10 @@ const save_day_plan: ToolHandler = async () => {
   };
 };
 
-async function fetchDayPlanCalendarBlockers(date: string): Promise<DayPlanTimelineItem[]> {
+async function fetchDayPlanCalendarBlockers(
+  date: string,
+  options?: { includeRepeatingTasks?: boolean }
+): Promise<DayPlanTimelineItem[]> {
   const targetDate = parseCalendarDateValue(date) || new Date();
   const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0);
   const dayEndExclusive = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1, 0, 0, 0);
@@ -788,7 +796,132 @@ async function fetchDayPlanCalendarBlockers(date: string): Promise<DayPlanTimeli
     });
   }
 
+  // A repeating task only has a row for its current day; on later days of a week schedule
+  // its timed repeat is just as fixed as a timed task.
+  if (options?.includeRepeatingTasks) {
+    const rowsOnDay = (todos as TodoModel[]).filter((todo) => {
+      const dueTime = todo?.dueDate ? new Date(todo.dueDate).getTime() : NaN;
+      return dueTime >= dayStart.getTime() && dueTime < dayEndExclusive.getTime();
+    });
+    const repeats = await loadRepeatingTodoItemsForDay(dayStart, rowsOnDay).catch(() => []);
+    for (const repeat of repeats) {
+      if (!repeat.hasTime || !repeat.time) continue;
+      const startDate = new Date(repeat.time);
+      const endDate = new Date(startDate.getTime() + EXISTING_TODO_FALLBACK_DURATION_MINUTES * 60_000);
+      blockers.push({
+        id: `existing-repeat-${repeat.id}`,
+        kind: 'blocker',
+        source: 'existing',
+        title: repeat.label,
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+        durationMinutes: EXISTING_TODO_FALLBACK_DURATION_MINUTES,
+        timeSource: 'user',
+        hidden: true,
+      });
+    }
+  }
+
   return blockers;
+}
+
+const toPlanDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const isSamePlanTask = (left: string, right: string) => {
+  const a = normalizeTodoTitleKey(left);
+  const b = normalizeTodoTitleKey(right);
+  if (!a || !b) return false;
+  return a === b || (Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a)));
+};
+
+type WeekTaskToPlace = {
+  title: string;
+  /** The day it belongs on; none for overdue or undated tasks, which go on a lighter day. */
+  date?: string;
+  rank: number;
+};
+
+/**
+ * The open tasks a week schedule should give a block: untimed tasks due in the week,
+ * overdue and undated tasks, and each untimed repeat. Timed tasks in the week are fixed
+ * items on their day already.
+ */
+async function loadWeekTasksToPlace(dates: string[]): Promise<WeekTaskToPlace[]> {
+  const first = parseCalendarDateValue(dates[0]);
+  const last = parseCalendarDateValue(dates[dates.length - 1]);
+  if (!first || !last) return [];
+  const weekStart = new Date(first.getFullYear(), first.getMonth(), first.getDate());
+  const weekEndExclusive = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
+  const todos = await database.collections
+    .get<TodoModel>('todos')
+    .query(Q.where('completed', false))
+    .fetch();
+  const openTasks = todos.filter((todo) =>
+    isSupportedTodoWorkspaceKey(todo.workspace) && todo.workspace !== 'Goals' && todo.workspace !== 'Wishlist');
+
+  const tasks: WeekTaskToPlace[] = [];
+  for (const todo of openTasks) {
+    const due = todo.dueDate ? new Date(todo.dueDate) : null;
+    if (due && due.getTime() >= weekEndExclusive.getTime()) continue;
+    const inWeek = !!due && due.getTime() >= weekStart.getTime();
+    if (inWeek && getTodoHasDueTime(due, todo.hasDueTime)) continue;
+    tasks.push({
+      title: String(todo.text || ''),
+      date: inWeek && due ? toPlanDateKey(due) : undefined,
+      // Due that day first, then overdue and starred, then the rest.
+      rank: inWeek ? 0 : due ? (todo.starred ? 1 : 2) : (todo.starred ? 2 : 3),
+    });
+  }
+
+  for (const date of dates) {
+    const day = parseCalendarDateValue(date);
+    if (!day) continue;
+    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const dayEndExclusive = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    const rowsOnDay = openTasks.filter((todo) => {
+      const dueTime = todo.dueDate ? new Date(todo.dueDate).getTime() : NaN;
+      return dueTime >= dayStart.getTime() && dueTime < dayEndExclusive.getTime();
+    });
+    const repeats = await loadRepeatingTodoItemsForDay(dayStart, rowsOnDay).catch(() => []);
+    for (const repeat of repeats) {
+      if (!repeat.hasTime) tasks.push({ title: repeat.label, date, rank: 0 });
+    }
+  }
+
+  return tasks.filter((task) => task.title.trim()).sort((left, right) => left.rank - right.rank);
+}
+
+/**
+ * The AI picks each day's blocks and sometimes leaves the user's own tasks out. Every open
+ * task it missed goes on its own day, or on the lightest day when it has none, one past the
+ * usual limit; whatever still doesn't fit is reported instead of silently dropped.
+ */
+async function addMissedWeekTasks(days: { date: string; items: any[] }[]) {
+  const tasks = await loadWeekTasksToPlace(days.map((day) => day.date)).catch(() => []);
+  const unscheduled: string[] = [];
+  const maxItems = MAX_WEEK_PLAN_ITEMS_PER_DAY + 1;
+  const isPlannedOn = (task: WeekTaskToPlace, day: { items: any[] }) =>
+    day.items.some((item) => isSamePlanTask(String(item?.text || ''), task.title));
+
+  for (const task of tasks) {
+    const candidates = task.date
+      ? days.filter((day) => day.date === task.date)
+      : days;
+    const alreadyPlanned = task.date
+      ? candidates.some((day) => isPlannedOn(task, day))
+      : days.some((day) => isPlannedOn(task, day));
+    if (alreadyPlanned || !candidates.length) continue;
+    const target = [...candidates]
+      .filter((day) => day.items.length < maxItems)
+      .sort((left, right) => left.items.length - right.items.length)[0];
+    if (!target) {
+      unscheduled.push(task.title);
+      continue;
+    }
+    target.items.push({ text: task.title, durationMinutes: 30, timeSource: 'none' });
+  }
+  return Array.from(new Set(unscheduled));
 }
 
 async function inferExistingTodoDurations(
@@ -974,15 +1107,21 @@ const plan_my_week: ToolHandler = async (args: any) => {
     .slice(0, MAX_WEEK_PLAN_DAYS);
   if (!days.length) throw new Error('NO_WEEK_PLAN_DAYS');
 
+  const plannedDays = (days as { date: string; mainGoal: string; items: any[] }[]).map((day) => ({
+    ...day,
+    items: day.items.length ? day.items : [{ text: day.mainGoal, durationMinutes: 45, timeSource: 'ai' }],
+  }));
+  // A whole-week plan must include the user's tasks; a one-day change keeps the AI's version.
+  const unscheduledTasks = plannedDays.length > 1 ? await addMissedWeekTasks(plannedDays) : [];
+
   const plans = [];
-  for (const { date, mainGoal, items } of days as { date: string; mainGoal: string; items: any[] }[]) {
-    const dayItems = items.length ? items : [{ text: mainGoal, durationMinutes: 45, timeSource: 'ai' }];
-    const plan = await plan_my_day({ date, items: dayItems, asSchedule: true });
+  for (const { date, mainGoal, items } of plannedDays) {
+    const plan = await plan_my_day({ date, items, asSchedule: true });
     plans.push({ ...plan, mainGoal });
   }
   const weekGoal = normalizeText(args?.weekGoal);
   // Nothing reaches the calendar until the user approves a day with its Save button.
-  return { days: plans, weekGoal: weekGoal ? { title: weekGoal } : null };
+  return { days: plans, weekGoal: weekGoal ? { title: weekGoal } : null, unscheduledTasks };
 };
 
 export const overviewToolHandlers: Record<string, ToolHandler> = {

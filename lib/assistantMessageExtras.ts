@@ -103,7 +103,7 @@ export const ASSISTANT_ACTION_MARKERS_INSTRUCTIONS = [
   '- [[goal: Goal title | thisWeek]] to offer saving a goal (timeframe: thisWeek, thisMonth, thisYear or longTerm). The app asks the user to confirm first.',
   '- [[copy]] after a draft the user may want to copy (a message, CV text, email).',
   '- [[result: plan|draft|comparison|first_step|breakdown|goal_plan]] when this reply delivers a usable result.',
-  '- [[remember: field=value | Question]] to ask whether to remember a preference the user chose, e.g. [[remember: planStyle=flexible | Should I remember that you prefer flexible plans?]]. Fields: planStyle (timed, flexible), detail (one_step, full_plan), tone (professional, friendly, direct), responseLength (short, detailed). At most once in a conversation.',
+  '- [[remember: field=value | Question]] to ask whether to remember a preference the user chose, e.g. [[remember: planStyle=flexible | Should I remember that you prefer flexible plans?]]. Fields: planStyle (timed, flexible), detail (one_step, full_plan), tone (professional, friendly, direct), responseLength (short, detailed). At most once in a conversation, and only when a system message for this conversation says you may.',
   '- [[save_preference: field=value]] only when the user explicitly asks for a lasting preference ("always keep answers short"). A one-off request ("keep this one short") is not a lasting preference. Do not claim it was saved; the app confirms it.',
   'When the user explicitly asks you to create tasks, events or goals, keep using your tools for that as usual.',
 ].join('\n');

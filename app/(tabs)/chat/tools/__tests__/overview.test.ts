@@ -628,6 +628,51 @@ describe('plan_my_day', () => {
     expect(card?.timelineItems.filter((item: any) => item.kind === 'blocker').map((item: any) => item.title)).toEqual(['Learning the guitar']);
   });
 
+  it('adds open tasks the AI left out of a week plan, and reports what does not fit', async () => {
+    const todo = (text: string, extra: Record<string, unknown> = {}) => ({
+      id: text, text, completed: false, workspace: 'Personal', starred: false, hasDueTime: false, ...extra,
+    });
+    database.collections.get.mockImplementation((table: string) => ({
+      query: jest.fn(() => ({
+        fetch: jest.fn(async () => table === 'todos'
+          ? [
+              todo('Gym session'),
+              todo('Send invoice', { dueDate: new Date('2026-03-19T00:00:00') }),
+              todo('Call plumber'),
+              todo('Learn Spanish', { workspace: 'Goals' }),
+              todo('Dentist', { dueDate: new Date('2026-03-19T15:00:00'), hasDueTime: true }),
+            ]
+          : []),
+      })),
+    }));
+
+    const result = await executeToolCall(
+      {
+        name: 'plan_my_week',
+        arguments: {
+          days: [
+            { date: '2026-03-18', mainGoal: 'Fitness', items: [{ text: 'Gym session', start: '2026-03-18T07:00:00', durationMinutes: 60, timeSource: 'ai' }] },
+            { date: '2026-03-19', mainGoal: 'Admin', items: [{ text: 'Plan the week', start: '2026-03-19T09:00:00', durationMinutes: 30, timeSource: 'ai' }] },
+          ],
+        },
+      },
+      { serverUrl: 'http://localhost' }
+    );
+
+    const titlesOn = (date: string) => result.messages
+      .map((message: any) => message.card)
+      .find((card: any) => card?.date === date)
+      ?.calendarItems.map((item: any) => item.title);
+    expect(titlesOn('2026-03-19')).toEqual(expect.arrayContaining(['Plan the week', 'Send invoice']));
+    const allTitles = [...titlesOn('2026-03-18'), ...titlesOn('2026-03-19')];
+    expect(allTitles.filter((title: string) => title === 'Gym session')).toHaveLength(1);
+    expect(allTitles).toContain('Call plumber');
+    // Goals are planned through goal steps, and a timed task is already fixed on its day.
+    expect(allTitles).not.toContain('Learn Spanish');
+    expect(allTitles).not.toContain('Dentist');
+    expect(result.messages[0]?.content).not.toContain("didn't fit");
+  });
+
   it('never saves the week goal as a goal', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { guidanceToolHandlers } = require('../guidance');

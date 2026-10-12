@@ -135,12 +135,18 @@ export async function executeToolCall(
         }));
         const first = cards[0];
         if (first) setLastDayPlan(first);
+        const unscheduledTasks: string[] = Array.isArray(result?.unscheduledTasks)
+          ? result.unscheduledTasks.filter((title: unknown): title is string => typeof title === 'string' && !!title.trim())
+          : [];
         messages = [
           {
             role: 'assistant',
             content: [
               `Here's your week: ${cards.length} ${cards.length === 1 ? 'day' : 'days'}, each with its main focus and schedule.`,
               "Tap Save plan on a day, or Save all at the end, to add it to your calendar. Turn on Repeat weekly to keep a day's schedule every week. Reply with any changes.",
+              ...(unscheduledTasks.length
+                ? [`These tasks didn't fit this week: ${unscheduledTasks.map((title) => `"${title}"`).join(', ')}. Ask me to swap them in for something else.`]
+                : []),
             ].join(' '),
           },
           ...cards.map((card) => ({ role: 'assistant' as const, content: '', card })),
