@@ -17,11 +17,13 @@ const PulsatingLine: React.FC<PulsatingLineProps> = ({ width, height }) => {
           toValue: 30,
           duration: 1500,
           useNativeDriver: false,
+          isInteraction: false,
         }),
         Animated.timing(hueAnim, {
           toValue: 0,
           duration: 1500,
           useNativeDriver: false,
+          isInteraction: false,
         }),
       ])
     );
@@ -32,11 +34,13 @@ const PulsatingLine: React.FC<PulsatingLineProps> = ({ width, height }) => {
           toValue: 1,
           duration: 1000,
           useNativeDriver: false,
+          isInteraction: false,
         }),
         Animated.timing(opacityAnim, {
           toValue: 0.5,
           duration: 1000,
           useNativeDriver: false,
+          isInteraction: false,
         }),
       ])
     );

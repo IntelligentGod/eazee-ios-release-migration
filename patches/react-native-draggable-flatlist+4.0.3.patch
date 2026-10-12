@@ -53,28 +53,89 @@ index 3bf1f43..827f949 100644
      onDragEnd: onDragEnd,
      onAnimValInit: onAnimValInit
    }));
+diff --git a/node_modules/react-native-draggable-flatlist/src/components/CellRendererComponent.tsx b/node_modules/react-native-draggable-flatlist/src/components/CellRendererComponent.tsx
+index e4e861a..280a63a 100644
+--- a/node_modules/react-native-draggable-flatlist/src/components/CellRendererComponent.tsx
++++ b/node_modules/react-native-draggable-flatlist/src/components/CellRendererComponent.tsx
+@@ -34,7 +34,7 @@ function CellRendererComponent<T>(props: Props<T>) {
+   const viewRef = useRef<Animated.View>(null);
+   const { cellDataRef, propsRef, containerRef } = useRefs<T>();
+ 
+-  const { horizontalAnim, scrollOffset } = useAnimatedValues();
++  const { horizontalAnim, scrollOffset, activeIndexAnim } = useAnimatedValues();
+   const {
+     activeKey,
+     keyExtractor,
+@@ -63,6 +63,12 @@ function CellRendererComponent<T>(props: Props<T>) {
+     if (translate.value && !isWeb) {
+       heldTanslate.value = translate.value;
+     }
++    // Once no drag is in progress (released without moving, or the reorder was reset),
++    // nothing will re-layout this cell, so a held offset would leave it shifted onto
++    // its neighbour (looking like it disappeared) until the app restarts.
++    if (!activeKey && activeIndexAnim.value < 0) {
++      heldTanslate.value = 0;
++    }
+     const t = activeKey ? translate.value : heldTanslate.value;
+     return {
+       transform: [horizontalAnim.value ? { translateX: t } : { translateY: t }],
 diff --git a/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx b/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx
-index 7c88afc..df21156 100644
+index 7c88afc..fb550fa 100644
 --- a/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx
 +++ b/node_modules/react-native-draggable-flatlist/src/components/DraggableFlatList.tsx
-@@ -40,6 +40,10 @@ import { useStableCallback } from "../hooks/useStableCallback";
+@@ -40,6 +40,11 @@ import { useStableCallback } from "../hooks/useStableCallback";
  import ScrollOffsetListener from "./ScrollOffsetListener";
  import { typedMemo } from "../utils";
  
 +// How long after the finger lifts to wait before releasing a cell that was armed by a
 +// long press but never dragged (see onContainerTouchEnd).
 +const ARMED_CELL_RELEASE_DELAY_MS = 250;
++const DATA_CHANGE_RESET_FALLBACK_MS = 500;
 +
  type RNGHFlatListProps<T> = Animated.AnimateProps<
    FlatListProps<T> & {
      ref: React.Ref<FlatList<T>>;
-@@ -144,8 +148,17 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -111,6 +116,8 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+     return props.keyExtractor(item, index);
+   });
+ 
++  const dataResetTokenRef = useRef(0);
++  const dragSessionRef = useRef(0);
+   const dataRef = useRef(props.data);
+   const dataHasChanged =
+     dataRef.current.map(keyExtractor).join("") !==
+@@ -119,9 +126,22 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+   if (dataHasChanged) {
+     // When data changes make sure `activeKey` is nulled out in the same render pass
+     activeKey = null;
+-    InteractionManager.runAfterInteractions(() => {
++    // runAfterInteractions can wait indefinitely while another interaction is open; until
++    // reset runs, the stale active key keeps every cell's pointerEvents "none", so the
++    // list ignores taps. A timer clears it too, unless a new drag started meanwhile.
++    const resetToken = ++dataResetTokenRef.current;
++    const sessionAtChange = dragSessionRef.current;
++    const resetOnce = () => {
++      if (dataResetTokenRef.current !== resetToken) return;
++      dataResetTokenRef.current += 1;
++      if (dragSessionRef.current !== sessionAtChange) return;
++      // A cell armed by a long press when the data changed would otherwise never get its
++      // release, leaving the screen's drag state and the outer scroll lock on.
++      if (activeIndexAnim.value >= 0) onRelease(activeIndexAnim.value);
+       reset();
+-    });
++    };
++    InteractionManager.runAfterInteractions(resetOnce);
++    setTimeout(resetOnce, DATA_CHANGE_RESET_FALLBACK_MS);
+   }
+ 
+   useEffect(() => {
+@@ -144,8 +164,17 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
      });
    }, [props.data, keyExtractor, keyToIndexRef]);
  
 +  // Each long press that arms a cell starts a drag session, so the release fallback in
 +  // onContainerTouchEnd can tell an armed-but-never-moved cell from a real drag.
-+  const dragSessionRef = useRef(0);
++  // (Declared with the refs above it so the data-change reset can read it.)
 +  const panStartedSessionRef = useRef(0);
 +  const endedSessionRef = useRef(0);
 +
@@ -86,7 +147,7 @@ index 7c88afc..df21156 100644
      const index = keyToIndexRef.current.get(activeKey);
      const cellData = cellDataRef.current.get(activeKey);
      if (cellData) {
-@@ -155,6 +168,7 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -155,6 +184,7 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
  
      const { onDragBegin } = propsRef.current;
      if (index !== undefined) {
@@ -94,7 +155,7 @@ index 7c88afc..df21156 100644
        spacerIndexAnim.value = index;
        activeIndexAnim.value = index;
        setActiveKey(activeKey);
-@@ -182,8 +196,32 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -182,8 +212,32 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
      return false;
    };
  
@@ -127,7 +188,7 @@ index 7c88afc..df21156 100644
    };
  
    const extraData = useMemo(
-@@ -215,12 +253,14 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -215,12 +269,14 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
    );
  
    const onRelease = useStableCallback((index: number) => {
@@ -142,7 +203,7 @@ index 7c88afc..df21156 100644
  
        const newData = [...data];
        if (from !== to) {
-@@ -231,6 +271,13 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -231,6 +287,13 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
        onDragEnd?.({ from, to, data: newData });
  
        setActiveKey(null);
@@ -156,7 +217,7 @@ index 7c88afc..df21156 100644
      }
    );
  
-@@ -273,6 +320,9 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -273,6 +336,9 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
    const gestureDisabled = useSharedValue(false);
  
    const panGesture = Gesture.Pan()
@@ -166,7 +227,7 @@ index 7c88afc..df21156 100644
      .onBegin((evt) => {
        gestureDisabled.value = disabled.value;
        if (gestureDisabled.value) return;
-@@ -321,6 +371,10 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+@@ -321,6 +387,10 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
        // Turning this into a worklet causes timing issues. We want it to run
        // just after the finger lifts.
        runOnJS(onContainerTouchEnd)();

@@ -3438,7 +3438,7 @@ const CalendarScreen: React.FC = () => {
       if (response.status === 403) {
         throw new Error('GOOGLE_DELETE_FORBIDDEN');
       }
-      throw new Error('GOOGLE_DELETE_FAILED');
+      throw Object.assign(new Error('GOOGLE_DELETE_FAILED'), { status: response.status });
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (
@@ -3595,8 +3595,9 @@ const CalendarScreen: React.FC = () => {
 
       try {
         await database.write(async () => {
-          const record = await database.get<EventModel>('events').find(recordId);
-          await record.destroyPermanently();
+          // Already gone (deleted twice, or with its repeat or task): nothing left to delete.
+          const record = await database.get<EventModel>('events').find(recordId).catch(() => null);
+          await record?.destroyPermanently();
         });
         return true;
       } catch (error) {
@@ -3629,7 +3630,7 @@ const CalendarScreen: React.FC = () => {
         if (!event.isGoogleEvent) {
           const success = await deleteFromLocal();
           if (!success) {
-            throw new Error('Failed to delete local event');
+            throw new Error('LOCAL_DELETE_FAILED');
           }
         }
 
@@ -3640,24 +3641,31 @@ const CalendarScreen: React.FC = () => {
       } catch (error) {
         console.error('Error during deletion:', error);
         const message = error instanceof Error ? error.message : '';
-        if (message === 'GOOGLE_AUTH_REQUIRED') {
-          Alert.alert('Google account required', 'Reconnect Google Calendar, then try deleting this event again.');
-        } else if (message === 'GOOGLE_DELETE_FORBIDDEN') {
-          Alert.alert('Read-only event', "This Google Calendar event can't be deleted from Eazee.");
-        } else {
-          Alert.alert('Error', 'Failed to delete the event. Please try again.');
-        }
+        showDeleteError(error);
       }
     };
 
-    const showDeleteError = (error: unknown) => {
+    function showDeleteError(error: unknown) {
       const message = error instanceof Error ? error.message : '';
       if (message === 'GOOGLE_AUTH_REQUIRED') {
         Alert.alert('Google account required', 'Reconnect Google Calendar, then try deleting this event again.');
+      } else if (message === 'GOOGLE_DELETE_FORBIDDEN') {
+        Alert.alert('Read-only event', "This Google Calendar event can't be deleted from Eazee.");
+      } else if (message === 'GOOGLE_DELETE_FAILED') {
+        // Say which part failed, so a report shows whether it was Google or this phone.
+        const status = (error as { status?: number }).status;
+        Alert.alert(
+          "Couldn't delete the event",
+          status
+            ? `Google Calendar didn't accept the delete (error ${status}). Please try again.`
+            : "Google Calendar couldn't be reached. Check your connection and try again."
+        );
+      } else if (message === 'LOCAL_DELETE_FAILED') {
+        Alert.alert("Couldn't delete the event", "It couldn't be removed on this phone. Please try again.");
       } else {
         Alert.alert('Error', 'Failed to delete the event. Please try again.');
       }
-    };
+    }
 
     const localRecordId = event.isGoogleEvent ? '' : String((event as any)?.id || (event as any)?._raw?.id || '');
     let seriesId = '';

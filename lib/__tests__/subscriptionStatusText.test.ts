@@ -52,7 +52,8 @@ describe('plan comparison table', () => {
 
   it('shows guidance as Pro-only until an admin gives free users some', () => {
     expect(rowFor('Goal & task guidance').free).toEqual({ kind: 'none' });
-    expect(rowFor('Goal & task guidance').pro).toEqual({ kind: 'check' });
+    expect(rowFor('Goal & task guidance').pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
+    expect(rowFor('Recipe & skill generation, video lookup').pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
     const limits = {
       ...DEFAULT_SUBSCRIPTION_LIMITS,
       free: { ...DEFAULT_SUBSCRIPTION_LIMITS.free, guidance: { ...DEFAULT_SUBSCRIPTION_LIMITS.free.guidance, goalGuidance: 2 } },

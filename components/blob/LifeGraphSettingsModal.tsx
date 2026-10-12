@@ -145,7 +145,7 @@ function NodeTick({ label, checked, onToggle }: { label: string; checked: boolea
 const toDraftNodes = (settings: LifeGraphSettings): DraftNode[] =>
   settings.nodes.map(({ keywords, ...node }) => ({ ...node, keywordsText: keywords.join(', ') }));
 
-/** Face and node on/off apply right away, like the Home settings; names, keywords and targets save with Save. */
+/** Face, node on/off and weekly targets apply right away, like the Home settings; names and keywords save with Save. */
 function LifeGraphSettingsForm({
   settings,
   progress,
@@ -169,6 +169,12 @@ function LifeGraphSettingsForm({
 
   const updateDraft = (id: LifeGraphNodeId, patch: Partial<DraftNode>) => {
     setDraftNodes((nodes) => nodes && nodes.map((node) => (node.id === id ? { ...node, ...patch } : node)));
+    // The target sets how big the node grows, so the Droplet shows it right away instead of
+    // only after Save (going back or closing used to drop the change).
+    if (patch.weeklyTarget !== undefined) {
+      const weeklyTarget = patch.weeklyTarget;
+      apply({ ...current, nodes: current.nodes.map((node) => (node.id === id ? { ...node, weeklyTarget } : node)) });
+    }
   };
 
   const saveDraft = () => {

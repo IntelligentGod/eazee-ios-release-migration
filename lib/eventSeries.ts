@@ -221,7 +221,17 @@ async function extendEventSeriesNow(through: Date, now: Date) {
  * are deleted, earlier ones stay. On Google the repeat is ended the same way.
  */
 export async function stopEventSeriesFrom(seriesId: string, from: Date) {
-  const series = await database.get<EventSeriesModel>('event_series').find(seriesId);
+  const series = await database.get<EventSeriesModel>('event_series').find(seriesId).catch(() => null);
+  if (!series) {
+    // The repeat's record is already gone; delete the occurrences still showing.
+    const leftovers = await database.get<EventModel>('events')
+      .query(Q.where('series_id', seriesId), Q.where('start_date', Q.gte(from.getTime())))
+      .fetch();
+    await database.write(async () => {
+      for (const occurrence of leftovers) await occurrence.destroyPermanently();
+    });
+    return { deletedCount: leftovers.length };
+  }
   const isFromFirstOccurrence = from.getTime() <= series.startDate.getTime();
 
   if (series.googleEventId) {

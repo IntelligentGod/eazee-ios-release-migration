@@ -1,4 +1,5 @@
-export type TodoRecurrenceUnit = 'day' | 'week' | 'month';
+/** 'weekday' repeats Monday to Friday (its interval is always 1). */
+export type TodoRecurrenceUnit = 'day' | 'week' | 'month' | 'weekday';
 
 export type TodoRecurrenceRule = {
   interval: number;
@@ -13,7 +14,7 @@ export type TodoRecurrenceSeriesLike = TodoRecurrenceRule & {
 
 export const TODO_RECURRENCE_MISSED_CAP_DAYS = 31;
 
-const VALID_UNITS = new Set<TodoRecurrenceUnit>(['day', 'week', 'month']);
+const VALID_UNITS = new Set<TodoRecurrenceUnit>(['day', 'week', 'month', 'weekday']);
 
 export const startOfLocalDay = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -37,7 +38,7 @@ export const normalizeTodoRecurrenceRule = (value: unknown): TodoRecurrenceRule 
   }
 
   return {
-    interval: Math.round(interval),
+    interval: unit === 'weekday' ? 1 : Math.round(interval),
     unit: unit as TodoRecurrenceUnit,
   };
 };
@@ -46,6 +47,7 @@ export const getTodoRecurrenceLabel = (rule?: TodoRecurrenceRule | null) => {
   if (!rule) return 'No repeat';
   if (rule.interval === 1 && rule.unit === 'day') return 'Daily';
   if (rule.interval === 1 && rule.unit === 'week') return 'Weekly';
+  if (rule.unit === 'weekday') return 'Weekdays';
   if (rule.interval === 1 && rule.unit === 'month') return 'Monthly';
   return `Every ${rule.interval} ${rule.unit}${rule.interval === 1 ? '' : 's'}`;
 };
@@ -54,6 +56,7 @@ export const getTodoRecurrencePreset = (rule?: TodoRecurrenceRule | null) => {
   if (!rule) return 'none';
   if (rule.interval === 1 && rule.unit === 'day') return 'daily';
   if (rule.interval === 1 && rule.unit === 'week') return 'weekly';
+  if (rule.unit === 'weekday') return 'weekdays';
   if (rule.interval === 1 && rule.unit === 'month') return 'monthly';
   return 'custom';
 };
@@ -86,6 +89,18 @@ const getMonthOccurrenceDate = (startDate: Date, interval: number, index: number
   return date;
 };
 
+/** The index-th Monday-to-Friday day from the start (a weekend start begins on Monday). */
+const getWeekdayOccurrenceDate = (startDate: Date, index: number) => {
+  const first = new Date(startDate);
+  while (first.getDay() === 0 || first.getDay() === 6) {
+    first.setDate(first.getDate() + 1);
+  }
+  const weekdayOffset = first.getDay() - 1 + index;
+  const date = new Date(first);
+  date.setDate(first.getDate() - (first.getDay() - 1) + Math.floor(weekdayOffset / 5) * 7 + (weekdayOffset % 5));
+  return date;
+};
+
 export const getTodoRecurrenceOccurrenceDate = (
   series: TodoRecurrenceSeriesLike,
   index: number
@@ -93,6 +108,10 @@ export const getTodoRecurrenceOccurrenceDate = (
   const startDate = new Date(series.startDate);
   const safeIndex = Math.max(0, Math.floor(index));
   const interval = Math.max(1, Math.round(series.interval));
+
+  if (series.unit === 'weekday') {
+    return getWeekdayOccurrenceDate(startDate, safeIndex);
+  }
 
   if (series.unit === 'month') {
     return getMonthOccurrenceDate(

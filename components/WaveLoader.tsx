@@ -29,18 +29,21 @@ const WaveLoader = () => {
               toValue: MAX_HEIGHT,
               duration: ANIMATION_DURATION * 0.25,
               useNativeDriver: false,
+              isInteraction: false,
             }),
             // Shrink back to original size
             Animated.timing(value, {
               toValue: SIZE,
               duration: ANIMATION_DURATION * 0.25,
               useNativeDriver: false,
+              isInteraction: false,
             }),
             // Stay at original size for remaining duration
             Animated.timing(value, {
               toValue: SIZE,
               duration: ANIMATION_DURATION * 0.5,
               useNativeDriver: false,
+              isInteraction: false,
             }),
           ])
         ),

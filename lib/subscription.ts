@@ -132,7 +132,8 @@ export type ComparisonRow = {
 
 const guidanceValue = (limits: (number | null)[]): ComparisonValue => {
   if (limits.every((limit) => limit === 0)) return { kind: 'none' };
-  if (limits.every((limit) => limit === null)) return { kind: 'check' };
+  // Say it, like the AI actions and Voice rows, rather than a tick that reads as "included".
+  if (limits.every((limit) => limit === null)) return { kind: 'text', label: formatDailyLimit(null, '') };
   const daily = limits.filter((limit): limit is number => typeof limit === 'number' && limit > 0);
   return { kind: 'text', label: daily.length ? `Up to ${Math.max(...daily)} / day` : 'Unlimited' };
 };

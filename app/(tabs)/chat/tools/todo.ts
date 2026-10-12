@@ -56,6 +56,9 @@ const normalizeTodoRecurrenceInput = (value: unknown): TodoRecurrenceRule | null
     if (isTodoRecurrenceOffInput(normalized)) return null;
     if (normalized === 'daily' || normalized === 'every day') return { interval: 1, unit: 'day' };
     if (normalized === 'weekly') return { interval: 1, unit: 'week' };
+    if (normalized === 'weekdays' || normalized === 'every weekday' || normalized === 'weekdays only') {
+      return { interval: 1, unit: 'weekday' };
+    }
     if (normalized === 'monthly') return { interval: 1, unit: 'month' };
     const match = normalized.match(/^every\s+(\d{1,2})\s+(day|days|week|weeks|month|months)$/);
     if (match) {

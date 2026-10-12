@@ -4,6 +4,8 @@ import {
   getNextTodoRecurrenceDateKeyAfter,
   getTodoRecurrenceOccurrenceDate,
   normalizeTodoRecurrenceRule,
+  getTodoRecurrencePreset,
+  isTodoRecurrenceOccurrenceOn,
   serializeTodoSkippedDateKeys,
   startOfLocalDay,
 } from '../todoRecurrence';
@@ -108,5 +110,25 @@ describe('repeating tasks on later days', () => {
     expect(isTodoRecurrenceOccurrenceOn({ interval: 1, unit: 'week', startDate: start }, new Date(2026, 9, 14))).toBe(false);
     const skipped = JSON.stringify([new Date(2026, 9, 12).getTime()]);
     expect(isTodoRecurrenceOccurrenceOn({ interval: 1, unit: 'day', startDate: start, skippedDatesJson: skipped }, new Date(2026, 9, 12))).toBe(false);
+  });
+});
+
+describe('weekday repeats', () => {
+  const series = (startDate: Date) => ({ interval: 1, unit: 'weekday' as const, startDate });
+  const ymd = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}`;
+
+  it('repeats Monday to Friday and skips weekends', () => {
+    const friday = new Date(2026, 9, 9, 9, 0); // Fri Oct 9
+    const days = [0, 1, 2, 3, 4, 5].map((index) => ymd(getTodoRecurrenceOccurrenceDate(series(friday), index)));
+    expect(days).toEqual(['10/9', '10/12', '10/13', '10/14', '10/15', '10/16']);
+    expect(isTodoRecurrenceOccurrenceOn(series(friday), new Date(2026, 9, 10))).toBe(false);
+    expect(isTodoRecurrenceOccurrenceOn(series(friday), new Date(2026, 9, 12))).toBe(true);
+  });
+
+  it('starts on Monday when created on a weekend, and is labelled Weekdays', () => {
+    expect(ymd(getTodoRecurrenceOccurrenceDate(series(new Date(2026, 9, 10)), 0))).toBe('10/12');
+    expect(getTodoRecurrenceLabel({ interval: 1, unit: 'weekday' })).toBe('Weekdays');
+    expect(getTodoRecurrencePreset({ interval: 1, unit: 'weekday' })).toBe('weekdays');
+    expect(normalizeTodoRecurrenceRule({ interval: 3, unit: 'weekday' })).toEqual({ interval: 1, unit: 'weekday' });
   });
 });

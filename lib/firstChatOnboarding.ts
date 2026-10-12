@@ -23,6 +23,20 @@ export const FIRST_CHAT_WELCOME_FOOTER = 'Or just type or speak to start the cha
 
 export const FIRST_CHAT_STARTERS: FirstChatStarter[] = [
   {
+    intent: 'decision',
+    emoji: '⚖️',
+    label: 'Make a decision',
+    prompt: 'What are you deciding between, and what matters most to you?',
+    outcome: 'A comparison of their actual options and a reasoned recommendation once there is enough information.',
+  },
+  {
+    intent: 'write',
+    emoji: '✍️',
+    label: 'Write a message',
+    prompt: 'Who’s it for, and what do you want to say? I’ll draft it for you.',
+    outcome: 'A usable draft of the message.',
+  },
+  {
     intent: 'plan_day',
     emoji: '📅',
     label: 'Plan my day',
@@ -49,20 +63,6 @@ export const FIRST_CHAT_STARTERS: FirstChatStarter[] = [
     label: 'Clear my head',
     prompt: 'What’s on your mind? Send it all through, and I’ll help you sort it into manageable next steps.',
     outcome: 'Their concerns organised into groups, with what to address first and practical next steps.',
-  },
-  {
-    intent: 'decision',
-    emoji: '⚖️',
-    label: 'Make a decision',
-    prompt: 'What are you deciding between, and what matters most to you?',
-    outcome: 'A comparison of their actual options and a reasoned recommendation once there is enough information.',
-  },
-  {
-    intent: 'write',
-    emoji: '✍️',
-    label: 'Write a message',
-    prompt: 'Who’s it for, and what do you want to say? I’ll draft it for you.',
-    outcome: 'A usable draft of the message.',
   },
 ];
 

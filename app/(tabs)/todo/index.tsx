@@ -862,7 +862,12 @@ const EXACT_ALARM_SETTINGS_ACTION = 'android.settings.REQUEST_SCHEDULE_EXACT_ALA
 const ANDROID_TODO_KEYBOARD_GAP = 10;
 const TODO_AI_BAR_HEIGHT = 61;
 const TODO_DETAILS_SHELL_COLOR = 'rgba(24, 94, 82, 0.25)';
-const TODO_DETAILS_CARD_GRADIENT: [string, string] = ['#BEFFF4', '#298071'];
+const TODO_DETAILS_CARD_GRADIENT: [string, string] = ['#92E8D9', '#298071'];
+/** Text on those cards: dark over the light left side, light over the dark right side. */
+const TODO_DETAILS_CARD_DARK_TEXT = '#296056';
+const TODO_DETAILS_CARD_LIGHT_TEXT = '#C6FDF3';
+/** The guidance-path switch keeps its own, lighter gradient. */
+const TODO_GUIDANCE_SWITCH_CARD_GRADIENT: [string, string] = ['#BEFFF4', '#298071'];
 const GOAL_GUIDANCE_CARD_GRADIENT: [string, string] = ['#4B9387', '#024035'];
 const GOAL_GUIDANCE_ICON_COLOR = '#024035';
 const RECIPE_GUIDANCE_CARD_GRADIENT: [string, string] = ['#4B9387', '#024035'];
@@ -1745,6 +1750,7 @@ const RECURRENCE_PRESET_RULES: Record<string, TodoRecurrenceRule | null> = {
   none: null,
   daily: { interval: 1, unit: 'day' },
   weekly: { interval: 1, unit: 'week' },
+  weekdays: { interval: 1, unit: 'weekday' },
   monthly: { interval: 1, unit: 'month' },
 };
 
@@ -1764,7 +1770,7 @@ const TodoRepeatPicker = React.memo(({
 }) => {
   const [preset, setPreset] = useState(() => getTodoRecurrencePreset(value));
   const [customInterval, setCustomInterval] = useState(value?.interval || 2);
-  const [customUnit, setCustomUnit] = useState<TodoRecurrenceUnit>(value?.unit || 'day');
+  const [customUnit, setCustomUnit] = useState<TodoRecurrenceUnit>(value?.unit && value.unit !== 'weekday' ? value.unit : 'day');
 
   useEffect(() => {
     if (!visible) {
@@ -1807,6 +1813,7 @@ const TodoRepeatPicker = React.memo(({
                 { key: 'none', label: 'No repeat' },
                 { key: 'daily', label: 'Daily' },
                 { key: 'weekly', label: 'Weekly' },
+                { key: 'weekdays', label: 'Weekdays' },
                 { key: 'monthly', label: 'Monthly' },
                 { key: 'custom', label: 'Custom' },
               ].map((option) => (
@@ -7797,18 +7804,18 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       isTranslated: isCompleting,
     };
 
-    Animated.parallel([
-      Animated.timing(animationsRef.current.fadeAnims[id], {
-        toValue: isCompleting ? 0.6 : 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(animationsRef.current.translateXAnims[id], {
-        toValue: isCompleting ? 20 : 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // A row can be ticked before the effect that creates its values has run; a missing
+    // value would throw here and leave the task stuck as "completing".
+    syncTodoAnimationState(id, !isCompleting);
+    // Not an "interaction": an animation that never reports finishing would otherwise hold
+    // InteractionManager, and the reorderable lists wait on it to clear their drag state.
+    Animated.timing(animationsRef.current.fadeAnims[id], {
+      toValue: isCompleting ? 0.6 : 1,
+      duration: 150,
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+    animationsRef.current.translateXAnims[id]?.setValue(isCompleting ? 20 : 0);
 
     animationsRef.current.animationStates[id] = newState;
 
@@ -7900,18 +7907,26 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         }));
       }
 
-      // The completion is saved; failures below are logged and never revert it.
-      try {
-        handleReminderResult(result.reminderStatus);
-        if (isCompleting) {
-          await handleGoalActionCompleted(id);
+      // The completion is saved: the task can be tapped again now. Follow-up work (goal
+      // progress, repeats) runs on its own, so a slow or stuck step there can't leave the
+      // button dead until the app restarts. Failures are logged and never revert it.
+      togglingTodoIdsRef.current.delete(id);
+      setCompletingTodoId((currentId) => currentId === id ? null : currentId);
+      handleReminderResult(result.reminderStatus);
+      void (async () => {
+        try {
+          if (isCompleting) {
+            await handleGoalActionCompleted(id);
+          }
+          if (todoToToggle.recurrenceSeriesId) {
+            await refreshLocalTodos();
+          }
+        } catch (error) {
+          console.error('Error after toggling todo:', error);
         }
-        if (todoToToggle.recurrenceSeriesId) {
-          await refreshLocalTodos();
-        }
-      } catch (error) {
-        console.error('Error after toggling todo:', error);
-      }
+      })();
+    } catch (error) {
+      console.error('Error toggling todo:', error);
     } finally {
       togglingTodoIdsRef.current.delete(id);
       setCompletingTodoId((currentId) => currentId === id ? null : currentId);
@@ -10962,7 +10977,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
 
     return (
       <LinearGradient
-        colors={TODO_DETAILS_CARD_GRADIENT}
+        colors={TODO_GUIDANCE_SWITCH_CARD_GRADIENT}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={[styles.detailsModalGradientCard, styles.guidancePathSwitchCard]}
@@ -14292,7 +14307,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                               value={editedTodoDetails}
                               onChangeText={setEditedTodoDetails}
                               placeholder="Add details..."
-                              placeholderTextColor="#004D3F"
+                              placeholderTextColor={TODO_DETAILS_CARD_DARK_TEXT}
                             />
                           </LinearGradient>
                         </Animated.View>
@@ -14316,14 +14331,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                                 accessibilityLabel="Change date"
                               >
                                 <View style={styles.detailsModalMetaLead}>
-                                  <Ionicons name="calendar-outline" size={20} color="#165C53" />
-                                  <Text style={styles.detailsModalMetaLabel}>Date</Text>
+                                  <Ionicons name="calendar-outline" size={20} color={TODO_DETAILS_CARD_DARK_TEXT} />
+                                  <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>Date</Text>
                                 </View>
                                 <View style={styles.detailsModalMetaValueGroup}>
                                   <Text style={styles.detailsModalMetaValue}>
                                     {formatTodoDateLabel(selectedTodoForDetails.dueDate)}
                                   </Text>
-                                  <Ionicons name="chevron-forward" size={22} color="#165C53" />
+                                  <Ionicons name="chevron-forward" size={22} color={TODO_DETAILS_CARD_LIGHT_TEXT} />
                                 </View>
                               </TouchableOpacity>
 
@@ -14338,8 +14353,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                             activeOpacity={0.82}
                           >
                             <View style={styles.detailsModalMetaLead}>
-                              <Ionicons name="time-outline" size={20} color="#165C53" />
-                              <Text style={styles.detailsModalMetaLabel}>Time</Text>
+                              <Ionicons name="time-outline" size={20} color={TODO_DETAILS_CARD_DARK_TEXT} />
+                              <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>Time</Text>
                             </View>
                             <View style={styles.detailsModalMetaValueGroup}>
                               <Text style={styles.detailsModalMetaValue}>
@@ -14354,10 +14369,10 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                                   }}
                                   hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
                                 >
-                                  <Ionicons name="close" size={16} color="#0E4D45" />
+                                  <Ionicons name="close" size={16} color={TODO_DETAILS_CARD_LIGHT_TEXT} />
                                 </TouchableOpacity>
                               )}
-                              <Ionicons name="chevron-forward" size={22} color="#165C53" />
+                              <Ionicons name="chevron-forward" size={22} color={TODO_DETAILS_CARD_LIGHT_TEXT} />
                             </View>
                           </TouchableOpacity>
 
@@ -14369,14 +14384,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                             activeOpacity={0.82}
                           >
                             <View style={styles.detailsModalMetaLead}>
-                              <Ionicons name="notifications-outline" size={20} color="#165C53" />
-                              <Text style={styles.detailsModalMetaLabel}>Reminder</Text>
+                              <Ionicons name="notifications-outline" size={20} color={TODO_DETAILS_CARD_DARK_TEXT} />
+                              <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>Reminder</Text>
                             </View>
                             <View style={styles.detailsModalMetaValueGroup}>
                               <Text style={styles.detailsModalMetaValue}>
                                 {getTodoReminderLabel(selectedTodoForDetails, selectedTodoForDetails.hasDueTime)}
                               </Text>
-                              <Ionicons name="chevron-forward" size={22} color="#165C53" />
+                              <Ionicons name="chevron-forward" size={22} color={TODO_DETAILS_CARD_LIGHT_TEXT} />
                             </View>
                           </TouchableOpacity>
 
@@ -14390,14 +14405,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                                 activeOpacity={0.82}
                               >
                                 <View style={styles.detailsModalMetaLead}>
-                                  <Ionicons name="repeat" size={20} color="#165C53" />
-                                  <Text style={styles.detailsModalMetaLabel}>Repeat</Text>
+                                  <Ionicons name="repeat" size={20} color={TODO_DETAILS_CARD_DARK_TEXT} />
+                                  <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>Repeat</Text>
                                 </View>
                                 <View style={styles.detailsModalMetaValueGroup}>
                                   <Text style={styles.detailsModalMetaValue}>
                                     {getTodoRecurrenceLabel(selectedTodoForDetails.recurrence)}
                                   </Text>
-                                  <Ionicons name="chevron-forward" size={22} color="#165C53" />
+                                  <Ionicons name="chevron-forward" size={22} color={TODO_DETAILS_CARD_LIGHT_TEXT} />
                                 </View>
                               </TouchableOpacity>
 
@@ -14418,8 +14433,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                             activeOpacity={0.82}
                           >
                             <View style={styles.detailsModalMetaLead}>
-                              <Ionicons name="calendar" size={20} color="#165C53" />
-                              <Text style={styles.detailsModalMetaLabel}>Send to Calendar</Text>
+                              <Ionicons name="calendar" size={20} color={TODO_DETAILS_CARD_DARK_TEXT} />
+                              <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>Send to Calendar</Text>
                             </View>
                             <Text style={styles.detailsModalActionValue}>
                               {isMovingTodoToCalendar ? 'Sending...' : ''}
@@ -14439,9 +14454,9 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                               <MaterialCommunityIcons
                                 name={selectedTodoForDetails.starred ? "hexagram" : "hexagram-outline"}
                                 size={20}
-                                color="#165C53"
+                                color={TODO_DETAILS_CARD_DARK_TEXT}
                               />
-                              <Text style={styles.detailsModalMetaLabel}>
+                              <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>
                                 {selectedTodoForDetails.starred ? 'Unstar' : 'Star'}
                               </Text>
                             </View>
@@ -14458,8 +14473,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                             activeOpacity={0.82}
                           >
                             <View style={styles.detailsModalMetaLead}>
-                              <Ionicons name="trash" size={20} color="#165C53" />
-                              <Text style={styles.detailsModalMetaLabel}>Delete</Text>
+                              <Ionicons name="trash" size={20} color={TODO_DETAILS_CARD_DARK_TEXT} />
+                              <Text style={[styles.detailsModalMetaLabel, styles.detailsModalCardDarkText]}>Delete</Text>
                             </View>
                           </TouchableOpacity>
                         </LinearGradient>
@@ -15092,7 +15107,7 @@ const styles = StyleSheet.create({
     minHeight: 108,
     padding: 0,
     textAlignVertical: 'top',
-    color: '#004D3F',
+    color: '#296056',
     fontSize: 15,
     lineHeight: 19,
   },
@@ -15793,6 +15808,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(24, 94, 82, 0.22)',
     marginVertical: 2,
   },
+  // Labels on the details and date/time cards (the shared label style is used elsewhere too).
+  detailsModalCardDarkText: {
+    color: '#296056',
+  },
   detailsModalMetaLabel: {
     fontSize: 17,
     fontWeight: '700',
@@ -15806,12 +15825,12 @@ const styles = StyleSheet.create({
   },
   detailsModalMetaValue: {
     fontSize: 16,
-    color: '#EFFFFB',
+    color: '#C6FDF3',
     fontWeight: '500',
   },
   detailsModalActionValue: {
     fontSize: 15,
-    color: '#EFFFFB',
+    color: '#C6FDF3',
     fontWeight: '500',
   },
   detailsModalClearButton: {
