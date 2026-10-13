@@ -6,6 +6,14 @@ import { PRIVACY_POLICY_URL } from '@/lib/legalLinks';
 
 type DialogButton = { text: string; tone: 'primary' | 'secondary' | 'destructive'; onPress?: () => void };
 
+/**
+ * iOS silently refuses to present a modal while another one is on screen (e.g. a
+ * sheet still animating closed), so a dialog that has not shown by then is presented again.
+ * onShow only fires after the fade-in finishes (~0.7s on first show), so this must comfortably outlast it.
+ */
+export const DIALOG_PRESENT_RETRY_MS = 1500;
+const DIALOG_REPRESENT_DELAY_MS = 50;
+
 type Dialog = {
   title: string;
   message?: string;
@@ -45,6 +53,26 @@ export default function AppDialogHost() {
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const current = queue[0];
+  const [isRepresentPending, setIsRepresentPending] = useState(false);
+  const isShownRef = useRef(false);
+  const visible = !!current && !isRepresentPending;
+
+  // Without this, a dialog awaited by its caller (e.g. AI data-sharing consent) can wait forever unseen.
+  useEffect(() => {
+    if (isRepresentPending) {
+      const timer = setTimeout(() => setIsRepresentPending(false), DIALOG_REPRESENT_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+    if (!visible) {
+      isShownRef.current = false;
+      return;
+    }
+    if (isShownRef.current) return;
+    const timer = setTimeout(() => {
+      if (!isShownRef.current) setIsRepresentPending(true);
+    }, DIALOG_PRESENT_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [visible, isRepresentPending]);
 
   useEffect(() => {
     const enqueue = (dialog: Dialog) => setQueue((items) => [...items, dialog]);
@@ -100,7 +128,10 @@ export default function AppDialogHost() {
 
   return (
     <Modal
-      visible={!!current}
+      visible={visible}
+      onShow={() => {
+        isShownRef.current = true;
+      }}
       transparent
       animationType="fade"
       statusBarTranslucent
