@@ -52,3 +52,16 @@ describe('which preference question the app asks', () => {
     }
   });
 });
+
+describe('which chats can still show a preference question', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isPreferencePromptChatOpen } = require('@/lib/preferencePromptChats');
+
+  it('is open until three chats have shown one, and stays open in those three', () => {
+    expect(isPreferencePromptChatOpen([], 'calendar-chat')).toBe(true);
+    expect(isPreferencePromptChatOpen(['a', 'b'], 'c')).toBe(true);
+    expect(isPreferencePromptChatOpen(['a', 'b', 'c'], 'b')).toBe(true);
+    expect(isPreferencePromptChatOpen(['a', 'b', 'c'], 'd')).toBe(false);
+    expect(isPreferencePromptChatOpen(['a'], null)).toBe(false);
+  });
+});

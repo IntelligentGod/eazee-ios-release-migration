@@ -4,13 +4,15 @@ import type { SavedPreferenceField } from '@/lib/aiSavedPreferences';
 
 /**
  * The preference follow-ups ("Timed schedule or flexible list?" then "Should I remember
- * that you prefer …?") run in each of an account's first few chats, then stop. Existing
- * users start counting from their next chat. Kept per account on this device.
+ * that you prefer …?") run in an account's first few chats where they are actually shown,
+ * then stop. A chat with nothing to ask (a calendar change, say) does not use one up.
+ * Kept per account on this device.
  */
 export const PREFERENCE_PROMPT_CHAT_LIMIT = 3;
 
 // v2: everyone, testers included, gets three fresh chats with the app-asked question.
-const storageKey = (userId: string) => `preferencePromptChats:v3:${userId}`;
+// v4: counted only where a question was shown; everyone starts fresh.
+const storageKey = (userId: string) => `preferencePromptChats:v4:${userId}`;
 
 export async function readPreferencePromptChatIds(userId?: string | null): Promise<string[]> {
   if (!userId) return [];
@@ -22,8 +24,12 @@ export async function readPreferencePromptChatIds(userId?: string | null): Promi
   }
 }
 
+/** Whether this chat may still show a preference question: it already has, or there is room. */
+export const isPreferencePromptChatOpen = (countedChatIds: string[], sessionId: string | null | undefined) =>
+  !!sessionId && (countedChatIds.includes(sessionId) || countedChatIds.length < PREFERENCE_PROMPT_CHAT_LIMIT);
+
 /**
- * Counts this chat as one of the first few if there is room. Returns the counted chats
+ * Counts this chat as one of the first few if there is room; called once a question shows. Returns the counted chats
  * and whether this one is among them.
  */
 export async function claimPreferencePromptChat(userId: string, sessionId: string) {

@@ -99,6 +99,7 @@ import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 import {
   PREFERENCE_FOLLOW_UP_SYSTEM_MESSAGE,
   claimPreferencePromptChat,
+  isPreferencePromptChatOpen,
   pickPreferenceQuestion,
   readPreferencePromptChatIds,
   type PreferenceQuestion,
@@ -1959,6 +1960,14 @@ export default function ChatScreen() {
   // The one preference question the app adds in each of those chats, by the reply it sits under.
   const [preferenceQuestions, setPreferenceQuestions] = useState<Record<string, PreferenceQuestion>>({});
   const preferenceQuestionSessionIdsRef = useRef(new Set<string>());
+  /** A preference question or "remember?" prompt showed in this chat: it uses one of the few. */
+  const countPreferencePromptChat = useCallback((sessionId: string) => {
+    const uid = authUser?.uid || auth.currentUser?.uid;
+    if (!uid || !sessionId) return;
+    void claimPreferencePromptChat(uid, sessionId)
+      .then((result) => setPreferencePromptChatIds(result.sessionIds))
+      .catch(() => {});
+  }, [authUser?.uid]);
   preferencePromptChatIdsRef.current = preferencePromptChatIds;
   useEffect(() => {
     let cancelled = false;
@@ -4800,13 +4809,13 @@ export default function ChatScreen() {
         trackFirstChatEvent('custom_request', { intent: 'custom' });
       }
       const savedPreferencesMessage = buildSavedPreferencesSystemMessage(await readSavedPreferences(requestUserId));
-      // One of the account's first few chats gets the preference follow-ups (the first-use
-      // flow has its own version of them).
-      const preferenceChat = !isFixMyLifeRequest && requestUserId && requestSessionId
-        ? await claimPreferencePromptChat(requestUserId, requestSessionId)
-        : null;
-      if (preferenceChat) setPreferencePromptChatIds(preferenceChat.sessionIds);
-      const needsPreferenceFollowUp = !!preferenceChat?.isPreferenceChat && !firstChatForRequest;
+      // While the account has preference chats left, the AI may ask one (the first-use flow
+      // has its own version). A chat only counts once a question is actually shown.
+      const preferenceChatIds = requestUserId ? await readPreferencePromptChatIds(requestUserId) : [];
+      setPreferencePromptChatIds(preferenceChatIds);
+      const needsPreferenceFollowUp = !isFixMyLifeRequest
+        && isPreferencePromptChatOpen(preferenceChatIds, requestSessionId)
+        && !firstChatForRequest;
       const personalizationMessages = [
         // Fix my life has its own cards, so it does not get the reply buttons.
         ...(isFixMyLifeRequest ? [] : [{ role: 'system' as const, content: ASSISTANT_ACTION_MARKERS_INSTRUCTIONS }]),
@@ -5469,6 +5478,9 @@ export default function ChatScreen() {
       const messageId = message.id;
       if (!messageId || seenAssistantMessageIdsRef.current.has(messageId)) continue;
       seenAssistantMessageIdsRef.current.add(messageId);
+      if (extras.remember && isPreferencePromptChatOpen(preferencePromptChatIdsRef.current, activeSessionId)) {
+        countPreferencePromptChat(activeSessionId || '');
+      }
 
       // The user picked a preference answer earlier; once the result arrives, offer to
       // remember it (once per chat, and once in the first-chat flow), unless the AI asked.
@@ -5480,7 +5492,7 @@ export default function ChatScreen() {
         messageResult &&
         !extras.remember &&
         !rememberPromptSessionIdsRef.current.has(sessionKey) &&
-        preferencePromptChatIdsRef.current.includes(sessionKey) &&
+        isPreferencePromptChatOpen(preferencePromptChatIdsRef.current, sessionKey) &&
         !(isOnboardingChat && state.preferencePromptShown)
       ) {
         pendingPreferenceAnswerRef.current = null;
@@ -5495,6 +5507,7 @@ export default function ChatScreen() {
           // Already saved with the same value: nothing to ask.
           if (store.preferences.some((item) => item.field === suggestion.field && item.value === suggestion.value)) return;
           setRememberSuggestions((current) => ({ ...current, [replyKey]: suggestion }));
+          countPreferencePromptChat(sessionKey);
         });
         if (isOnboardingChat && uid) {
           void updateFirstChatState(uid, { preferencePromptShown: true, preferencePromptMessageId: replyKey });
@@ -5509,7 +5522,7 @@ export default function ChatScreen() {
         uid &&
         !extras.remember &&
         !pendingPreferenceAnswerRef.current &&
-        preferencePromptChatIdsRef.current.includes(sessionKey) &&
+        isPreferencePromptChatOpen(preferencePromptChatIdsRef.current, sessionKey) &&
         !preferenceQuestionSessionIdsRef.current.has(sessionKey) &&
         !rememberPromptSessionIdsRef.current.has(sessionKey) &&
         !chatMessages.some((item) => item.role === 'assistant'
@@ -5527,6 +5540,7 @@ export default function ChatScreen() {
           // Already saved: nothing to ask.
           if (store.preferences.some((item) => item.field === question.field)) return;
           setPreferenceQuestions((current) => ({ ...current, [replyKey]: question }));
+          countPreferencePromptChat(sessionKey);
         });
       }
       for (const preference of extras.savePreferences) {
@@ -5679,7 +5693,7 @@ export default function ChatScreen() {
   }, [showFirstChatWelcome]);
 
   const lastChatMessageId = chatMessages[chatMessages.length - 1]?.id;
-  const isPreferencePromptChat = !!activeSessionId && preferencePromptChatIds.includes(activeSessionId);
+  const isPreferencePromptChat = isPreferencePromptChatOpen(preferencePromptChatIds, activeSessionId);
   const chatRowExtraData = useMemo(
     () => ({ rememberSuggestions, savedPreferenceNotices, promptId: firstChatState.preferencePromptMessageId, isPreferencePromptChat, preferenceQuestions }),
     [firstChatState.preferencePromptMessageId, isPreferencePromptChat, preferenceQuestions, rememberSuggestions, savedPreferenceNotices]
