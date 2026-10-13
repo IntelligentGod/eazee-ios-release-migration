@@ -142,6 +142,8 @@ type ScheduleItem = {
   completionKey?: string;
   occurrenceStart?: Date;
   workspaceKey?: string;
+  /** A timed event that has already ended today: still listed, shown faded. */
+  isPast?: boolean;
 };
 
 type NextStepState = {
@@ -162,6 +164,7 @@ const TODAY_CARD_BLUR_HEIGHT = 60;
 const TODAY_CARD_RADIUS = 22;
 const TODAY_CARD_SURFACE = 'rgba(46,45,34,0.25)';
 const TODAY_CARD_TEXT = '#C1BDB1';
+const TODAY_CARD_PAST_TEXT = 'rgba(193, 189, 177, 0.45)';
 const TODAY_CARD_LIST_LEFT = 16;
 const TODAY_CARD_LIST_RIGHT = 16;
 const HIDDEN_HOME_ITEM_IDS_STORAGE_KEY = 'home:hiddenItemIds:v1';
@@ -1586,12 +1589,13 @@ export default function HomePage() {
       const eventItemId = `event-${String(event.id)}`;
       const completionId = buildHomeEventCompletionId(completionSource, completionKey, occurrenceStart);
       const isTimedEvent = !(event as GoogleEvent).isAllDay;
+      // Today's plan is the whole day: an event that has ended stays, faded, so the day's
+      // events never seem to be missing. Next step only looks at current and later ones.
       const hasEnded = isTimedEvent && event.endDate.getTime() <= currentTime.getTime();
 
       if (
         hiddenHomeItemIds.has(eventItemId) ||
-        completedHomeEventIds.has(completionId) ||
-        hasEnded
+        completedHomeEventIds.has(completionId)
       ) {
         return;
       }
@@ -1607,6 +1611,7 @@ export default function HomePage() {
         completionSource,
         completionKey,
         occurrenceStart,
+        ...(hasEnded ? { isPast: true } : {}),
       };
 
       if (item.hasTime) {
@@ -2136,7 +2141,7 @@ export default function HomePage() {
 
     return displayedPlanItems.map((item, index) => {
       const labelTextStyle = {
-        color: Skia.Color(TODAY_CARD_TEXT),
+        color: Skia.Color(item.isPast ? TODAY_CARD_PAST_TEXT : TODAY_CARD_TEXT),
         fontSize: 16,
         fontFamilies: Platform.OS === 'android' ? ['sans-serif'] : ['System'],
         fontStyle: { weight: 400 as const },

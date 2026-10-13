@@ -2539,6 +2539,7 @@ export default function ChatScreen() {
     partialTranscript,
     startListening: deepgramStartListening,
     stopListening: deepgramStopListening,
+    cancelListening: deepgramCancelListening,
   } = useDeepgramTranscription({
     getAccessToken: deepgramConfig.getAccessToken,
     model: deepgramConfig.model,
@@ -2564,6 +2565,18 @@ export default function ChatScreen() {
   });
 
   const isListening = isStreaming;
+  /**
+   * Moving to another chat (new, starter, or from history) starts with an empty bar: typed
+   * text and a voice session still listening belong to the chat being left. A recorded voice
+   * message keeps its own draft flow.
+   */
+  const resetComposerForChatSwitch = useCallback(() => {
+    inputValueRef.current = '';
+    setInputValue('');
+    if (voiceRecordingModeRef.current !== 'voiceMessage') {
+      void deepgramCancelListening().catch(() => {});
+    }
+  }, [deepgramCancelListening]);
   const isCurrentSessionTyping = !!activeSessionId && typingSessionIds.includes(activeSessionId);
   const showCompactHandoffLoader = isBootstrappingCompactHandoff && chatMessages.length === 0;
   // Fix my life starts a new chat, so any assistant text or card in it is the first reply.
@@ -4320,8 +4333,7 @@ export default function ChatScreen() {
     clearAssistantReadAnchor();
     stickyFollowEnabledRef.current = true;
     replaceVisibleChat(null, [], '');
-    inputValueRef.current = '';
-    setInputValue('');
+    resetComposerForChatSwitch();
     pendingGoalQuotaDateRequestRef.current = null;
     setGoalQuotaDatePickerInput(null);
     resetToolMemory();
@@ -4334,7 +4346,7 @@ export default function ChatScreen() {
       isCreatingNewChatRef.current = false;
       setIsCreatingNewChat(false);
     }
-  }, [activeSessionId, chatMessages, clearAssistantReadAnchor, replaceVisibleChat, summarizeSession]);
+  }, [activeSessionId, chatMessages, clearAssistantReadAnchor, replaceVisibleChat, resetComposerForChatSwitch, summarizeSession]);
 
   useEffect(() => {
     if (!isFocused || !isChatDayPlanTutorialPending) {
@@ -4455,11 +4467,12 @@ export default function ChatScreen() {
     const previousSessionId = activeSessionId;
     const previousMessages = [...chatMessages];
     setIsHistoryModalVisible(false);
+    resetComposerForChatSwitch();
     await loadSessionIntoChat(sessionId);
     if (previousSessionId && previousMessages.some((message) => isMeaningfulChatMessage(message))) {
       void summarizeSession(previousSessionId, previousMessages);
     }
-  }, [activeSessionId, chatMessages, loadSessionIntoChat, summarizeSession]);
+  }, [activeSessionId, chatMessages, loadSessionIntoChat, resetComposerForChatSwitch, summarizeSession]);
 
   const toggleSessionPin = useCallback(async (sessionId: string, pinned: boolean) => {
     try {
@@ -5398,6 +5411,7 @@ export default function ChatScreen() {
   const handleSelectFirstChatStarter = useCallback(async (starter: FirstChatStarter) => {
     if (isStartingFirstChatRef.current) return;
     isStartingFirstChatRef.current = true;
+    resetComposerForChatSwitch();
     setIsStartingFirstChat(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
@@ -5427,7 +5441,7 @@ export default function ChatScreen() {
       isStartingFirstChatRef.current = false;
       setIsStartingFirstChat(false);
     }
-  }, [appendVisibleChatMessages, authUser?.uid, showToast]);
+  }, [appendVisibleChatMessages, authUser?.uid, resetComposerForChatSwitch, showToast]);
 
   // Counts replies in the first-chat flow, marks it complete once a result arrives, and
   // saves preferences the user explicitly asked to keep ([[save_preference]]).
