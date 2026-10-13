@@ -17,6 +17,7 @@ type ChatHistoryModalProps = {
   onSelectSession: (sessionId: string) => void;
   onTogglePin: (sessionId: string, pinned: boolean) => void;
   onDeleteSession: (sessionId: string) => void;
+  onRenameSession?: (sessionId: string, title: string) => void;
 };
 
 function formatChatDate(timestamp: number) {
@@ -156,6 +157,7 @@ function ChatHistoryRow({
   searchQuery,
   showSummaries,
   onDeleteSession,
+  onRenameRequest,
   onSelectSession,
   onTogglePin,
 }: {
@@ -164,6 +166,7 @@ function ChatHistoryRow({
   searchQuery: string;
   showSummaries?: boolean;
   onDeleteSession: (sessionId: string) => void;
+  onRenameRequest?: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onTogglePin: (sessionId: string, pinned: boolean) => void;
 }) {
@@ -192,7 +195,7 @@ function ChatHistoryRow({
           borderWidth: 1,
           borderColor: 'rgba(173, 255, 240, 0.55)',
           paddingLeft: 44,
-          paddingRight: 44,
+          paddingRight: onRenameRequest ? 76 : 44,
           paddingVertical: 14,
           justifyContent: 'center',
           shadowColor: '#001A17',
@@ -208,6 +211,17 @@ function ChatHistoryRow({
         >
           <MIcon name={session.pinned ? 'pin' : 'pin-outline'} size={20} color={session.pinned ? '#FFFFFF' : '#21A19B'} />
         </TouchableOpacity>
+        {onRenameRequest && (
+          <TouchableOpacity
+            onPress={() => onRenameRequest(session.id)}
+            style={{ position: 'absolute', top: 13, right: 44, zIndex: 2 }}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            accessibilityRole="button"
+            accessibilityLabel="Rename chat"
+          >
+            <MIcon name="pencil-outline" size={20} color="#137D78" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           onPress={() => onDeleteSession(session.id)}
           style={{ position: 'absolute', top: 13, right: 12, zIndex: 2 }}
@@ -241,6 +255,110 @@ function ChatHistoryRow({
         )}
       </LinearGradient>
     </TouchableOpacity>
+  );
+}
+
+/** Rename a chat: used from the history list and from the title above a chat. */
+export function RenameChatDialog({
+  initialTitle,
+  onCancel,
+  onSave,
+}: {
+  initialTitle: string;
+  onCancel: () => void;
+  onSave: (title: string) => void;
+}) {
+  const [value, setValue] = useState(initialTitle);
+  const trimmed = value.trim();
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+        backgroundColor: 'rgba(0, 20, 18, 0.55)',
+      }}
+    >
+      <TouchableOpacity
+        onPress={onCancel}
+        activeOpacity={1}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+      <LinearGradient
+        colors={['#067369', '#004643']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          width: '100%',
+          maxWidth: 340,
+          borderRadius: 24,
+          borderWidth: 1,
+          borderColor: 'rgba(173, 255, 240, 0.55)',
+          padding: 20,
+          elevation: 12,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <MIcon name="pencil-outline" size={22} color="#3DC5B5" />
+          <Text style={{ color: '#3DC5B5', fontSize: 20, fontWeight: '700' }}>Rename chat</Text>
+        </View>
+        <TextInput
+          value={value}
+          onChangeText={setValue}
+          autoFocus
+          selectTextOnFocus
+          maxLength={60}
+          returnKeyType="done"
+          onSubmitEditing={() => { if (trimmed) onSave(trimmed); }}
+          placeholder="Chat name"
+          placeholderTextColor="rgba(216, 255, 250, 0.5)"
+          accessibilityLabel="Chat name"
+          style={{
+            color: '#F4FFFD',
+            fontSize: 15,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: 'rgba(173, 255, 240, 0.45)',
+            backgroundColor: 'rgba(1, 48, 45, 0.6)',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+          }}
+        />
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+          <TouchableOpacity
+            onPress={onCancel}
+            style={{
+              flex: 1,
+              height: 44,
+              borderRadius: 22,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(173, 255, 240, 0.55)',
+              backgroundColor: 'rgba(1, 48, 45, 0.6)',
+            }}
+          >
+            <Text style={{ color: '#BEE7E1', fontSize: 15, fontWeight: '700' }}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={!trimmed} onPress={() => onSave(trimmed)} style={{ flex: 1, opacity: trimmed ? 1 : 0.5 }}>
+            <LinearGradient
+              colors={['#3DC5B5', '#1DAFB2']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={{ height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Text style={{ color: '#003C37', fontSize: 15, fontWeight: '800' }}>Save</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </View>
   );
 }
 
@@ -349,10 +467,12 @@ export function ChatHistoryModal({
   onSelectSession,
   onTogglePin,
   onDeleteSession,
+  onRenameSession,
 }: ChatHistoryModalProps) {
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingDeleteSession, setPendingDeleteSession] = useState<ChatSessionListItem | null>(null);
+  const [pendingRenameSession, setPendingRenameSession] = useState<ChatSessionListItem | null>(null);
 
   useEffect(() => {
     if (visible) return;
@@ -508,12 +628,25 @@ export function ChatHistoryModal({
                 searchQuery={searchQuery}
                 showSummaries={showSummaries}
                 onDeleteSession={(sessionId) => setPendingDeleteSession(sessions.find((item) => item.id === sessionId) ?? null)}
+                onRenameRequest={onRenameSession
+                  ? (sessionId) => setPendingRenameSession(sessions.find((item) => item.id === sessionId) ?? null)
+                  : undefined}
                 onSelectSession={onSelectSession}
                 onTogglePin={onTogglePin}
               />
             ))}
           </ScrollViewWithBar>
         </View>
+        {pendingRenameSession && onRenameSession && (
+          <RenameChatDialog
+            initialTitle={pendingRenameSession.title || ''}
+            onCancel={() => setPendingRenameSession(null)}
+            onSave={(title) => {
+              onRenameSession(pendingRenameSession.id, title);
+              setPendingRenameSession(null);
+            }}
+          />
+        )}
         {pendingDeleteSession && (
           <DeleteChatConfirm
             chatTitle={pendingDeleteSession.title || 'New Chat'}

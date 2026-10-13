@@ -168,6 +168,41 @@ function GoalReviewCard({
   );
 }
 
+/** The one preference question the app asks in a user's first chats, under a useful reply. */
+function PreferenceQuestionPrompt({
+  question,
+  onChoose,
+}: {
+  question: { question: string; options: string[] };
+  onChoose: AssistantMessageActionHandlers['onChoose'];
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  return (
+    <View style={cardStyle}>
+      <Text style={{ color: '#E8FFFA', fontSize: 14, lineHeight: 19 }}>{question.question}</Text>
+      {chosen ? (
+        <Text style={{ marginTop: 8, color: 'rgba(232, 255, 250, 0.72)', fontSize: 12 }}>{chosen}</Text>
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+          {question.options.map((option) => (
+            <Pressable
+              key={option}
+              accessibilityRole="button"
+              onPress={() => {
+                setChosen(option);
+                onChoose(option);
+              }}
+              style={({ pressed }) => chipStyle(pressed)}
+            >
+              <Text style={chipTextStyle}>{option}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function RememberPrompt({
   remember,
   onRemember,
@@ -231,6 +266,7 @@ export default function AssistantMessageActions({
   showRememberPrompt,
   savedPreferenceNotice,
   rememberSuggestion,
+  preferenceQuestion,
   handlers,
 }: {
   extras: AssistantMessageExtras;
@@ -242,6 +278,8 @@ export default function AssistantMessageActions({
   savedPreferenceNotice?: string | null;
   /** A "remember this?" prompt the app adds after the user picked a preference answer. */
   rememberSuggestion?: AssistantMessageExtras['remember'];
+  /** A preference question the app adds under this reply (first chats only). */
+  preferenceQuestion?: { question: string; options: string[] } | null;
   handlers: AssistantMessageActionHandlers;
 }) {
   const [chosenOption, setChosenOption] = useState<string | null>(null);
@@ -251,7 +289,7 @@ export default function AssistantMessageActions({
   const showOptions = isLatest && options.length > 0 && !chosenOption;
   const remember = extras.remember ?? rememberSuggestion ?? null;
   const showCopy = extras.copyable && !!extras.text;
-  if (!showOptions && !showCopy && !extras.tasks.length && !extras.goal && !(remember && showRememberPrompt) && !savedPreferenceNotice) {
+  if (!showOptions && !showCopy && !extras.tasks.length && !extras.goal && !(remember && showRememberPrompt) && !savedPreferenceNotice && !preferenceQuestion) {
     return null;
   }
 
@@ -263,6 +301,7 @@ export default function AssistantMessageActions({
       {extras.tasks.length > 0 && <TaskReviewCard tasks={extras.tasks} onAddTasks={handlers.onAddTasks} />}
       {!!extras.goal && <GoalReviewCard goal={extras.goal} onSaveGoal={handlers.onSaveGoal} />}
       {!!remember && showRememberPrompt && <RememberPrompt remember={remember} onRemember={handlers.onRemember} />}
+      {!!preferenceQuestion && <PreferenceQuestionPrompt question={preferenceQuestion} onChoose={handlers.onChoose} />}
       {(showOptions || showCopy) && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {showCopy && (

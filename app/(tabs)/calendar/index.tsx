@@ -53,6 +53,7 @@ import { useCompactVoiceInput } from '@/lib/useCompactVoiceInput';
 import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
 import { getCalendarBackGuidanceTargetId, getCalendarControlGuidanceTargetId } from '@/lib/navigationHelp';
 import { showGuidanceTab, useGuidance } from '@/components/guidance/GuidanceProvider';
+import { deleteGoogleCalendarEventById } from '@/lib/googleCalendarDelete';
 import { getShortcutForGuidanceTarget, type GuidanceTarget } from '@/lib/navigationHelp';
 import { setGuidanceActiveTab } from '@/lib/guidanceActiveTab';
 import { useLeftHandedMode } from '@/lib/useLeftHandedMode';
@@ -3416,29 +3417,7 @@ const CalendarScreen: React.FC = () => {
     }
 
     try {
-      const response = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(googleEventId)}`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      if (response.ok || response.status === 404 || response.status === 410) {
-        return;
-      }
-
-      const errorText = await response.text().catch(() => '');
-      console.error('Google Calendar delete failed:', response.status, errorText);
-      if (response.status === 401) {
-        throw new Error('GOOGLE_AUTH_REQUIRED');
-      }
-      if (response.status === 403) {
-        throw new Error('GOOGLE_DELETE_FORBIDDEN');
-      }
-      throw Object.assign(new Error('GOOGLE_DELETE_FAILED'), { status: response.status });
+      await deleteGoogleCalendarEventById(googleEventId, accessToken);
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (
@@ -3623,8 +3602,17 @@ const CalendarScreen: React.FC = () => {
           }
         }
 
+        let googleDeleteError: unknown = null;
         if (linkedGoogleEventId) {
-          await deleteGoogleCalendarEvent(linkedGoogleEventId);
+          try {
+            await deleteGoogleCalendarEvent(linkedGoogleEventId);
+          } catch (error) {
+            // An event that only lives on Google can't be removed without it. One that is
+            // also in Eazee is still removed here, so the user is never stuck with it.
+            const message = error instanceof Error ? error.message : '';
+            if (event.isGoogleEvent || message === 'GOOGLE_AUTH_REQUIRED') throw error;
+            googleDeleteError = error;
+          }
         }
 
         if (!event.isGoogleEvent) {
@@ -3632,6 +3620,9 @@ const CalendarScreen: React.FC = () => {
           if (!success) {
             throw new Error('LOCAL_DELETE_FAILED');
           }
+        }
+        if (googleDeleteError) {
+          Alert.alert('Deleted from Eazee', "Google Calendar didn't accept the delete, so it may still be in Google Calendar.");
         }
 
         // If we get here, the deletion was successful
@@ -3653,11 +3644,12 @@ const CalendarScreen: React.FC = () => {
         Alert.alert('Read-only event', "This Google Calendar event can't be deleted from Eazee.");
       } else if (message === 'GOOGLE_DELETE_FAILED') {
         // Say which part failed, so a report shows whether it was Google or this phone.
-        const status = (error as { status?: number }).status;
+        const { status, reason } = error as { status?: number; reason?: string };
         Alert.alert(
           "Couldn't delete the event",
           status
-            ? `Google Calendar didn't accept the delete (error ${status}). Please try again.`
+            // Google's own reason makes a report from the field diagnosable.
+            ? `Google Calendar didn't accept the delete (error ${status}${reason ? `: ${reason}` : ''}). Please try again.`
             : "Google Calendar couldn't be reached. Check your connection and try again."
         );
       } else if (message === 'LOCAL_DELETE_FAILED') {

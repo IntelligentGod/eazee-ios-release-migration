@@ -26,3 +26,29 @@ describe('preference follow-ups in the first chats', () => {
     expect(await readPreferencePromptChatIds(null)).toEqual([]);
   });
 });
+
+describe('which preference question the app asks', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { pickPreferenceQuestion } = require('@/lib/preferencePromptChats');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { findPreferenceForAnswer } = require('@/lib/aiSavedPreferences');
+  const pick = (userText: string, extra: Record<string, unknown> = {}) =>
+    pickPreferenceQuestion({ intent: null, userText, isDraft: false, isPlan: false, ...extra }).field;
+
+  it('asks about tone for writing, plan style for planning, otherwise how much at once', () => {
+    expect(pick('Write a message to my landlord')).toBe('tone');
+    expect(pick('anything', { isDraft: true })).toBe('tone');
+    expect(pick('Help me plan my week')).toBe('planStyle');
+    expect(pick('I keep putting off my taxes')).toBe('detail');
+    expect(pick('hi', { intent: 'write' })).toBe('tone');
+  });
+
+  it('offers answers the remember prompt recognises', () => {
+    for (const userText of ['Write an email', 'Plan my day', 'Do my taxes']) {
+      const question = pickPreferenceQuestion({ intent: null, userText, isDraft: false, isPlan: false });
+      for (const option of question.options) {
+        expect(findPreferenceForAnswer(option)?.field).toBe(question.field);
+      }
+    }
+  });
+});

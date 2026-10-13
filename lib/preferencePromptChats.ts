@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { SavedPreferenceField } from '@/lib/aiSavedPreferences';
+
 /**
  * The preference follow-ups ("Timed schedule or flexible list?" then "Should I remember
  * that you prefer …?") run in each of an account's first few chats, then stop. Existing
@@ -7,7 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 export const PREFERENCE_PROMPT_CHAT_LIMIT = 3;
 
-const storageKey = (userId: string) => `preferencePromptChats:v1:${userId}`;
+// v2: everyone, testers included, gets three fresh chats with the app-asked question.
+const storageKey = (userId: string) => `preferencePromptChats:v3:${userId}`;
 
 export async function readPreferencePromptChatIds(userId?: string | null): Promise<string[]> {
   if (!userId) return [];
@@ -41,3 +44,39 @@ export const PREFERENCE_FOLLOW_UP_SYSTEM_MESSAGE = [
   'Skip the question when the user already said it or a saved preference covers it, and never interrupt useful work to collect profile information. Apply the answer to this task only; do not treat a task choice as a permanent trait.',
   'After you deliver the result, you may ask once whether to remember the preference the user chose, with [[remember: ...]]. Do not save it yourself unless they explicitly ask.',
 ].join('\n');
+
+export type PreferenceQuestion = { field: SavedPreferenceField; question: string; options: string[] };
+
+/** The answers match the saved-preference labels, so a tap can be offered for remembering. */
+export const PREFERENCE_QUESTIONS: Record<'planStyle' | 'detail' | 'tone', PreferenceQuestion> = {
+  planStyle: {
+    field: 'planStyle',
+    question: 'Quick question: do you like plans as a timed schedule or a flexible priority list?',
+    options: ['Timed schedule', 'Flexible priority list'],
+  },
+  detail: {
+    field: 'detail',
+    question: 'Quick question: would you rather start with one small step, or see the full plan?',
+    options: ['One small step', 'The full plan'],
+  },
+  tone: {
+    field: 'tone',
+    question: 'Quick question: should messages like this sound professional, friendly or direct?',
+    options: ['Professional', 'Friendly', 'Direct'],
+  },
+};
+
+const WRITING_RE = /\b(write|draft|message|email|e-mail|text|reply|letter|post|caption|note to)\b/i;
+const PLANNING_RE = /\b(plan|schedule|day|week|today|tomorrow|routine|calendar|tasks?|to-?dos?)\b/i;
+
+/** Which question fits the chat: tone for writing, plan style for planning, otherwise how much at once. */
+export function pickPreferenceQuestion(input: {
+  intent?: string | null;
+  userText: string;
+  isDraft: boolean;
+  isPlan: boolean;
+}): PreferenceQuestion {
+  if (input.intent === 'write' || input.isDraft || WRITING_RE.test(input.userText)) return PREFERENCE_QUESTIONS.tone;
+  if (input.intent === 'plan_day' || input.isPlan || PLANNING_RE.test(input.userText)) return PREFERENCE_QUESTIONS.planStyle;
+  return PREFERENCE_QUESTIONS.detail;
+}

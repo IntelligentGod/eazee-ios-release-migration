@@ -5,6 +5,7 @@ import { getAccessTokenStatic, getGoogleConnectionStatusStatic } from '@/app/con
 import type { ToolHandler } from './todo';
 import { formatCalendarDateOnly, parseCalendarDateValue } from '@/utils/calendarDates';
 import { normalizeCalendarDetailsText, WAVE_EVENT_DESCRIPTION_SENTINEL } from '@/utils/calendarDetails';
+import { deleteGoogleCalendarEventById } from '@/lib/googleCalendarDelete';
 
 type SourceType = 'google' | 'local';
 
@@ -715,13 +716,9 @@ const calendar_delete: ToolHandler = async (args: any) => {
 
   if (googleId && token) {
     try {
-      const resp = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(googleId)}`,
-        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!resp.ok && resp.status !== 404) throw new Error('GOOGLE_DELETE_FAILED');
-    } catch {
-      throw new Error('GOOGLE_DELETE_FAILED');
+      await deleteGoogleCalendarEventById(googleId, token);
+    } catch (error) {
+      throw new Error(error instanceof Error && error.message === 'GOOGLE_AUTH_REQUIRED' ? 'GOOGLE_AUTH_REQUIRED' : 'GOOGLE_DELETE_FAILED');
     }
   }
 
