@@ -245,7 +245,8 @@ export function buildChatSystemMessages(context: ChatPromptContext) {
         "For todos with an explicit time, use dueDate as a full ISO 8601 datetime with timezone offset and set hasDueTime to true.\n" +
         "Do not put the todo's date or time into details when it belongs in dueDate.\n" +
         "For calendar start/end values, use full ISO 8601 datetimes with timezone offsets.\n" +
-        "For event creation, use calendar_create. It will create a Google-synced event when Google Calendar access is active, otherwise it will create a local app event.\n" +
+        "For event creation, use calendar_create for one event. It will create a Google-synced event when Google Calendar access is active, otherwise it will create a local app event.\n" +
+        "For two or more events (a work roster, shifts, a class timetable, a list), call calendar_create_many once with every event; never add only the first. For a regular schedule (shifts, classes, every week), set repeatWeekly on each event; if it is unclear whether it repeats, ask 'Every week, or just this once?' first.\n" +
         "For calendar events, put notes, agenda, links, or context in the details field. Use calendar_update with details when the user edits event details.\n" +
         "Generic event nouns like meeting, call, lunch, coffee, appointment, interview, birthday, or event are valid event titles. Do not ask to clarify the title when the user's wording already implies one of those titles. Prefer clarifying date or time instead.\n" +
         "When mentioning dates to the user, say today, tomorrow, or yesterday when accurate. Otherwise format dates as D Month, YYYY, for example 20 March, 2026. Do not use YYYY-MM-DD or raw ISO dates unless the user asked for that exact format.\n" +

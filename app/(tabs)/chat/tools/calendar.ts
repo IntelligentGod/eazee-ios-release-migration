@@ -6,6 +6,7 @@ import type { ToolHandler } from './todo';
 import { formatCalendarDateOnly, parseCalendarDateValue } from '@/utils/calendarDates';
 import { normalizeCalendarDetailsText, WAVE_EVENT_DESCRIPTION_SENTINEL } from '@/utils/calendarDetails';
 import { deleteGoogleCalendarEventById } from '@/lib/googleCalendarDelete';
+import { createWeeklyEventSeries } from '@/lib/eventSeries';
 
 type SourceType = 'google' | 'local';
 
@@ -519,6 +520,60 @@ const calendar_create: ToolHandler = async (args: any) => {
   return createCalendarEvent(args);
 };
 
+/**
+ * A list of events in one go (a work roster, a timetable), so none are left out. Each can
+ * repeat weekly, as the same kind of repeating event Fix my life saves (on Google too).
+ */
+const calendar_create_many: ToolHandler = async (args: any) => {
+  const events: any[] = (Array.isArray(args?.events) ? args.events : []).slice(0, 20);
+  if (!events.length) throw new Error('MISSING_PARAMS');
+
+  const items: any[] = [];
+  const failed: string[] = [];
+  let syncedToGoogle = false;
+  let repeatingCount = 0;
+  for (const event of events) {
+    const title = String(event?.title || '').trim();
+    try {
+      if (event?.repeatWeekly === true) {
+        const created = await createWeeklyEventSeries({
+          title,
+          start: String(event?.start || ''),
+          end: String(event?.end || ''),
+          location: typeof event?.location === 'string' ? event.location : undefined,
+          details: typeof event?.details === 'string' ? event.details : undefined,
+        });
+        repeatingCount += 1;
+        syncedToGoogle ||= !!created.googleEventId;
+        items.push({
+          id: created.firstEventId,
+          title,
+          startDate: String(event.start),
+          endDate: String(event.end),
+          source: 'local' as const,
+          location: typeof event?.location === 'string' ? event.location : undefined,
+          repeatWeekly: true,
+        });
+      } else {
+        const created: any = await createCalendarEvent(event);
+        syncedToGoogle ||= created?.syncTarget === 'google';
+        if (created?.item) items.push(created.item);
+      }
+    } catch {
+      failed.push(title || 'Untitled event');
+    }
+  }
+
+  if (!items.length) throw new Error('CREATE_FAILED');
+  return {
+    created: true,
+    items,
+    repeatingCount,
+    failed,
+    syncTarget: syncedToGoogle ? 'google' : 'local',
+  };
+};
+
 const calendar_update: ToolHandler = async (args: any) => {
   const id = String(args?.id || '');
   const source: SourceType = args?.source === 'google' ? 'google' : 'local';
@@ -739,6 +794,7 @@ export const calendarToolHandlers: Record<string, ToolHandler> = {
   calendar_search,
   calendar_get_details,
   calendar_create,
+  calendar_create_many,
   calendar_update,
   calendar_delete,
 };

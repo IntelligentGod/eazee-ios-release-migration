@@ -268,7 +268,7 @@ const isWishlistTutorialCreateTool = (toolName: unknown) =>
 
 const didCreateChatTutorialScheduleItem = (toolName: unknown, result: any) => {
   const name = String(toolName || '').trim();
-  if (name === 'calendar_create') {
+  if (name === 'calendar_create' || name === 'calendar_create_many') {
     return result?.created === true || !!result?.item?.id;
   }
 
@@ -4826,6 +4826,8 @@ export default function ChatScreen() {
         clientId: cid || undefined,
         clientRequestId,
         aiPersonalization,
+        // App-run tools this build has; the server only offers these to builds that list them.
+        clientCapabilities: ['calendar_create_many'],
         messages: [
           ...buildChatSystemMessages({
             userTimezone: tz,
