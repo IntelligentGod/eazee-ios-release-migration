@@ -18,6 +18,8 @@ export type LifeGraphNode = {
 
 export type LifeGraphSettings = {
   faceVisible: boolean;
+  /** Life-area lobes on the Droplet; off shows the plain fluid drop. */
+  lifeGraphEnabled: boolean;
   nodes: LifeGraphNode[];
 };
 
@@ -27,6 +29,7 @@ export const LIFE_GRAPH_MAX_NAME_LENGTH = 24;
 
 export const DEFAULT_LIFE_GRAPH_SETTINGS: LifeGraphSettings = {
   faceVisible: true,
+  lifeGraphEnabled: false,
   nodes: [
     { id: 'health', enabled: true, name: 'Health', keywords: ['gym', 'workout', 'run', 'walk', 'doctor', 'meditate'], weeklyTarget: 5 },
     { id: 'relationships', enabled: true, name: 'Relationships', keywords: ['call', 'family', 'friend', 'date', 'visit'], weeklyTarget: 5 },
@@ -59,6 +62,9 @@ export function normalizeLifeGraphSettings(value: unknown): LifeGraphSettings {
 
   return {
     faceVisible: typeof stored.faceVisible === 'boolean' ? stored.faceVisible : DEFAULT_LIFE_GRAPH_SETTINGS.faceVisible,
+    lifeGraphEnabled: typeof stored.lifeGraphEnabled === 'boolean'
+      ? stored.lifeGraphEnabled
+      : DEFAULT_LIFE_GRAPH_SETTINGS.lifeGraphEnabled,
     nodes: DEFAULT_LIFE_GRAPH_SETTINGS.nodes.map((defaultNode) => {
       const storedNode = storedNodes.find((node) => node?.id === defaultNode.id);
       if (!storedNode) return defaultNode;
@@ -152,7 +158,7 @@ export function getLifeGraphLobeStrengths(
   return Object.fromEntries(
     settings.nodes.map((node) => [
       node.id,
-      node.enabled
+      settings.lifeGraphEnabled && node.enabled
         ? LIFE_GRAPH_LOBE_STRENGTH_MIN + (LIFE_GRAPH_LOBE_STRENGTH_MAX - LIFE_GRAPH_LOBE_STRENGTH_MIN) * progress[node.id].growth
         : 0,
     ])

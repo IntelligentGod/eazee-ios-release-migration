@@ -628,6 +628,22 @@ function AiPersonalizationPanel({
           </Text>
         </Pressable>
 
+        {!!userId && (
+          <View style={{ gap: 8, marginTop: 10 }}>
+            <Text style={styles.settingLabel}>About me</Text>
+            <Text style={styles.homePersonalizationHint}>
+              Your answers about yourself, how you like help, and your personality result.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/about-me', params: { entry: 'settings' } })}
+              style={styles.saveButton}
+            >
+              <Text style={styles.saveButtonText}>About me</Text>
+            </Pressable>
+          </View>
+        )}
+
         <SavedPreferencesSection userId={userId} />
       </ScrollViewWithBar>
     </View>

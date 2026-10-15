@@ -1,3 +1,4 @@
+import { getPlanLegendKinds } from '../cards/PlanLegendCard';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { getToolHandler } from '.';
 import { presentTodoResult, presentCalendarResult, presentGoogleResult, presentGuidanceResult, presentAppNavigationResult } from './presenters';
@@ -109,11 +110,14 @@ export async function executeToolCall(
         const saveBlockedReason = typeof result?.saveBlockedReason === 'string' ? result.saveBlockedReason : undefined;
         const card = { type: 'dayPlan', draftId, date, calendarItems, todoItems, timelineItems, saveBlockedReason };
         setLastDayPlan({ draftId, date, calendarItems, todoItems, timelineItems, saveBlockedReason });
+        // A day plan shows only its new items, so the key leaves out "already in your calendar".
+        const legendKinds = getPlanLegendKinds([timelineItems || []]).filter((kind) => kind !== 'blocker');
         messages = [
           {
             role: 'assistant',
             content: "Here's your plan. Say 'looks good' to save it, or reply with edits.",
           },
+          ...(legendKinds.length ? [{ role: 'assistant' as const, content: '', card: { type: 'planLegend', kinds: legendKinds } }] : []),
           {
             role: 'assistant',
             content: '',
@@ -149,6 +153,11 @@ export async function executeToolCall(
                 : []),
             ].join(' '),
           },
+          // One colour key for the whole week, above its day cards.
+          ...(() => {
+            const kinds = getPlanLegendKinds(cards.map((card) => card.timelineItems || []));
+            return kinds.length ? [{ role: 'assistant' as const, content: '', card: { type: 'planLegend', kinds } }] : [];
+          })(),
           ...cards.map((card) => ({ role: 'assistant' as const, content: '', card })),
           ...(cards.length > 1
             ? [{

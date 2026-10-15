@@ -145,7 +145,7 @@ function NodeTick({ label, checked, onToggle }: { label: string; checked: boolea
 const toDraftNodes = (settings: LifeGraphSettings): DraftNode[] =>
   settings.nodes.map(({ keywords, ...node }) => ({ ...node, keywordsText: keywords.join(', ') }));
 
-/** Face, node on/off and weekly targets apply right away, like the Home settings; names and keywords save with Save. */
+/** Face, life graph, node on/off and weekly targets apply right away, like the Home settings; names and keywords save with Save. */
 function LifeGraphSettingsForm({
   settings,
   progress,
@@ -248,11 +248,24 @@ function LifeGraphSettingsForm({
               accessibilityLabel="Show Droplet face"
             />
           </View>
+          <View style={styles.faceRow}>
+            <Text style={styles.faceLabel}>Life graph</Text>
+            <Switch
+              value={current.lifeGraphEnabled}
+              onValueChange={(lifeGraphEnabled) => apply({ ...current, lifeGraphEnabled })}
+              trackColor={SWITCH_TRACK_COLORS}
+              thumbColor={current.lifeGraphEnabled ? '#4D4A3B' : '#F6F2E3'}
+              accessibilityLabel="Show life graph on the Droplet"
+            />
+          </View>
         </View>
       </View>
 
       {/* Centred as one block; the two columns are sized to their names, so they sit close together. */}
-      <View style={styles.nodesBlock}>
+      <View
+        style={[styles.nodesBlock, !current.lifeGraphEnabled && styles.lifeGraphOff]}
+        pointerEvents={current.lifeGraphEnabled ? 'auto' : 'none'}
+      >
         <Text style={styles.sectionLabel}>Nodes</Text>
         <View style={styles.tickGrid}>
           {[0, 1].map((column) => (
@@ -268,8 +281,9 @@ function LifeGraphSettingsForm({
       <Pressable
         accessibilityRole="button"
         onPress={() => setDraftNodes(toDraftNodes(current))}
+        disabled={!current.lifeGraphEnabled}
         hitSlop={6}
-        style={({ pressed }) => [styles.editLink, pressed && styles.saveButtonPressed]}
+        style={({ pressed }) => [styles.editLink, pressed && styles.saveButtonPressed, !current.lifeGraphEnabled && styles.lifeGraphOff]}
       >
         <Text style={styles.editLinkText}>Edit nodes</Text>
         <MaterialCommunityIcons name="chevron-right" size={18} color="#F6F2E3" />
@@ -312,6 +326,10 @@ export default function LifeGraphSettingsModal({
 const PANEL_COLORS = ['rgba(140, 130, 104, 0.94)', 'rgba(77, 74, 59, 0.94)'] as const;
 
 const styles = StyleSheet.create({
+  // Life graph off: its areas stay visible for reference but can't be changed.
+  lifeGraphOff: {
+    opacity: 0.4,
+  },
   overlay: {
     flex: 1,
     alignItems: 'center',

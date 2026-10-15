@@ -357,6 +357,18 @@ export default Sentry.wrap(function RootLayout() {
                       }}
                     />
                     <Stack.Screen
+                      name="about-me"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
+                      name="personality-card"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
                       name="(admin)"
                       options={{
                         headerShown: false

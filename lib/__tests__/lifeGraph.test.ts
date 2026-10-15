@@ -52,8 +52,16 @@ describe('life graph', () => {
     expect(progress.work).toEqual({ completedCount: 0, growth: 0 });
   });
 
+  it('shows the plain fluid Droplet while the life graph is off (the default)', () => {
+    const settings = withHealthTarget(4, true);
+    expect(settings.lifeGraphEnabled).toBe(false);
+    const progress = computeLifeGraphProgress(settings, [{ text: 'Gym', completedAt: new Date(2026, 8, 29) }], new Date(2026, 8, 28));
+    expect(Object.values(getLifeGraphLobeStrengths(settings, progress)).every((strength) => strength === 0)).toBe(true);
+    expect(normalizeLifeGraphSettings({ lifeGraphEnabled: true }).lifeGraphEnabled).toBe(true);
+  });
+
   it('hides disabled nodes and keeps enabled ones visible at zero growth', () => {
-    const settings = withHealthTarget(4, false);
+    const settings = { ...withHealthTarget(4, false), lifeGraphEnabled: true };
     const progress = computeLifeGraphProgress(settings, [
       { text: 'Gym', completedAt: new Date(2026, 8, 29) },
       { text: 'Read a book', completedAt: new Date(2026, 8, 29) },

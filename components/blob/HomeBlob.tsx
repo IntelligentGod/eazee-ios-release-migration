@@ -208,7 +208,9 @@ const _IS_EMULATOR = _detectEmulatorEarly();
 /** Android and iOS should match the Android emulator reference look. */
 const BLOB_REFERENCE_LOOK = Platform.OS === 'android' || Platform.OS === 'ios';
 const BLOB_ANDROID_RUNTIME_ROOM_ENVIRONMENT = Platform.OS === 'android' && _IS_EMULATOR;
-const BLOB_BAKED_ROOM_ENVIRONMENT = (Platform.OS === 'android' && !_IS_EMULATOR) || Platform.OS === 'ios';
+// The emulator loads the same baked reflection as phones: building it live needs float render
+// targets, which some emulator GPU translators (e.g. Intel UHD) can't do, leaving the gold black.
+const BLOB_BAKED_ROOM_ENVIRONMENT = Platform.OS === 'android' || Platform.OS === 'ios';
 /** Kept for non-reference mobile paths. Android and iOS now use the reference look instead. */
 const BLOB_ANDROID_DEVICE_CONTRAST = Platform.OS === 'android' && !BLOB_REFERENCE_LOOK;
 
@@ -689,6 +691,12 @@ const RIPPLE_TAP_REAL_SEC = 6.2;
 const SMOOTH_VISUAL_ALPHA_RATE = 6;
 
 const BLOB_VIEW_HEIGHT = 200;
+/** Fluid Droplet proportions (grid units of the marching-cubes field). */
+const FLUID_STRETCH = 0.22;
+const FLUID_SLIM = 0.08;
+const FLUID_TOP_OFFSET = 0.1;
+const FLUID_BASE_OFFSET = 0.045;
+const FLUID_WANDER = 0.05;
 const BLOB_VIEW_HEIGHT_MAX = BLOB_VIEW_HEIGHT * 2;
 /**
  * Base `top` % for the face overlay (aligned to normal blob height). In max-size mode,
@@ -780,7 +788,13 @@ export function BlobMesh({
   onFirstVisualReady,
   visualVisible = true,
   appearancePresetId = DEFAULT_BLOB_APPEARANCE_ID,
+  fluid = true,
 }: {
+  /**
+   * The fluid Droplet (default): a taller, egg-like liquid drop whose inside drifts slowly,
+   * so the surface swells and settles like liquid.
+   */
+  fluid?: boolean;
   mood: BlobMood;
   areas: AreaIntensities;
   /**
@@ -890,15 +904,15 @@ export function BlobMesh({
     // studio HDRI from PolyHaven) for higher visual quality without code changes.
     environmentReadyRef.current = false;
     const pmrem = new THREE.PMREMGenerator(gl);
-    let envRT: THREE.WebGLRenderTarget;
+    let envRT: THREE.WebGLRenderTarget | null = null;
     let equiTex: THREE.DataTexture | null = null;
-    if (BLOB_ANDROID_RUNTIME_ROOM_ENVIRONMENT) {
-      envRT = pmrem.fromScene(new RoomEnvironment(), 0.02);
-    } else {
+    if (!BLOB_ANDROID_RUNTIME_ROOM_ENVIRONMENT) {
       equiTex = buildStudioRoomEquirect();
       envRT = pmrem.fromEquirectangular(equiTex);
     }
-    scene.environment = envRT.texture;
+    // On the emulator the baked reflection below is the only one; the Droplet stays hidden
+    // until it loads, so a failed live build never shows as a black blob.
+    scene.environment = envRT?.texture ?? null;
     scene.background = null;
     equiTex?.dispose();
 
@@ -1072,8 +1086,8 @@ export function BlobMesh({
         hdrTex.dispose();
         const oldRT = envRT;
         envRT = hdrRT;
-        scene.environment = envRT.texture;
-        oldRT.dispose();
+        scene.environment = hdrRT.texture;
+        oldRT?.dispose();
         console.log('[blob] HDR studio env loaded and applied.');
         markEnvironmentReady();
       } catch (err) {
@@ -1097,7 +1111,7 @@ export function BlobMesh({
       cancelled = true;
       environmentReadyRef.current = false;
       scene.environment = null;
-      envRT.dispose();
+      envRT?.dispose();
       bakedEnvTexture?.dispose();
       pmrem.dispose();
       scene.remove(ambient);
@@ -1388,7 +1402,14 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
     }
 
     const scaleCompensate = 1 / (1 - 2 * MARGIN_GRID);
-    mc.scale.setScalar(2.025 * 0.6 * breatheForHeart * scaleCompensate * volumeCompensation);
+    const bodyScale = 2.025 * 0.6 * breatheForHeart * scaleCompensate * volumeCompensation;
+    if (fluid) {
+      // A drop is taller than it is wide; the heart morph keeps its own proportions.
+      const stretch = 1 - heartMorph;
+      mc.scale.set(bodyScale * (1 - FLUID_SLIM * stretch), bodyScale * (1 + FLUID_STRETCH * stretch), bodyScale * (1 - FLUID_SLIM * stretch));
+    } else {
+      mc.scale.setScalar(bodyScale);
+    }
     mc.position.y = 0;
 
     const shouldRebuildField = t - lastFieldBuildAtRef.current >= BLOB_FIELD_UPDATE_INTERVAL_SEC;
@@ -1426,6 +1447,26 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
       mc.addBall(cpx, cpy, cpz, coreStrength, subtract);
       const [ccx, ccy, ccz] = clampToGrid(0.5, 0.5, 0.5);
       mc.addBall(ccx, ccy, ccz, strength * CORE_INNER_BUMP_MUL * blobWeight, subtract);
+
+      if (fluid) {
+        // A narrower top and a fuller base give the teardrop/egg outline; a small blob
+        // wandering inside makes the surface swell and settle slowly, like liquid.
+        const fluidWeight = coreStrength * blobWeight;
+        const [ftx, fty, ftz] = clampToGrid(
+          0.5 + 0.012 * Math.sin(tSlow * 0.21),
+          0.5 + FLUID_TOP_OFFSET + 0.012 * Math.sin(tSlow * 0.17 + 1.3),
+          0.5 + 0.012 * Math.cos(tSlow * 0.19)
+        );
+        mc.addBall(ftx, fty, ftz, fluidWeight * 0.34, subtract);
+        const [fbx, fby, fbz] = clampToGrid(0.5, 0.5 - FLUID_BASE_OFFSET, 0.5);
+        mc.addBall(fbx, fby, fbz, fluidWeight * 0.42, subtract);
+        const [fwx, fwy, fwz] = clampToGrid(
+          0.5 + FLUID_WANDER * Math.cos(tSlow * 0.33),
+          0.5 + FLUID_WANDER * 0.8 * Math.sin(tSlow * 0.27 + 0.6),
+          0.5 + FLUID_WANDER * Math.sin(tSlow * 0.33)
+        );
+        mc.addBall(fwx, fwy, fwz, fluidWeight * 0.2, subtract);
+      }
 
     const baseLobeStrength = strength * 0.88 * 1.5 * blobWeight * LOBE_FIELD_SCALE;
     const lobeAnchorReach = CHILD_OFFSET * LOBE_REACH_MUL;
@@ -1714,8 +1755,15 @@ type HomeBlobProps = {
   /** Direct metaball strength per lobe (0 = hidden); see `BlobMesh`. */
   lobeStrengths?: Record<LifeAreaLobeKey, number>;
   faceVisible?: boolean;
+  /** The fluid Droplet look (default). */
+  fluid?: boolean;
   /** Fires when the Droplet is held without dragging. */
   onLongPress?: () => void;
+  /**
+   * False pauses the render loop but keeps the scene, so coming back to Home resumes at
+   * once instead of rebuilding the GL context, shaders and lighting.
+   */
+  active?: boolean;
 };
 
 export default function HomeBlob({
@@ -1735,6 +1783,8 @@ export default function HomeBlob({
   lobeStrengths,
   faceVisible: faceVisibleProp = true,
   onLongPress,
+  active = true,
+  fluid = true,
 }: HomeBlobProps = {}) {
   const faceMoods = faceMoodsProp ?? ['happy', 'mouth_1'];
 
@@ -1864,6 +1914,7 @@ export default function HomeBlob({
           pointerEvents="none"
           style={styles.blobCanvas}
           dpr={BLOB_CANVAS_DPR}
+          frameloop={active ? 'always' : 'never'}
           gl={{
             alpha: true,
             antialias: false,
@@ -1898,6 +1949,7 @@ export default function HomeBlob({
               showHeroCape={faceMoods.includes('cape')}
               showCrown2={faceMoods.includes('crown2')}
               showThrone={showThrone}
+              fluid={fluid}
               appearancePresetId={blobAppearancePresetId}
               onFps={showFpsCounter ? reportFps : undefined}
               {...(blobVisualMeaning && {

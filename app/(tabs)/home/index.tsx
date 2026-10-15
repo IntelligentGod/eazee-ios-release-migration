@@ -264,6 +264,16 @@ const mergeHomeEventCompletionsIntoSnapshot = (
     : snapshot;
 };
 
+/** A freshly loaded local snapshot, keeping the Google events already fetched until Google answers again. */
+function keepFetchedGoogleEvents(snapshot: HomeSnapshot, current: HomeSnapshot) {
+  const existingGoogleEvents = current.upcomingEvents.filter(isFetchedGoogleHomeEvent);
+  const existingSuggestionGoogleEvents = current.suggestionEvents.filter(isFetchedGoogleHomeEvent);
+  if (existingGoogleEvents.length > 0 || existingSuggestionGoogleEvents.length > 0) {
+    return mergeGoogleEventsIntoHomeSnapshot(snapshot, existingGoogleEvents, existingSuggestionGoogleEvents);
+  }
+  return snapshot;
+}
+
 export default function HomePage() {
   const { manageAccount, manageAccountSection, manageAccountNonce, settings, settingsNonce, settingsPanel, planDate, navNonce } = useLocalSearchParams<{
     /** Open the plan card on this day (yyyy-MM-dd) and scroll to it, e.g. from a saved chat plan. */
@@ -515,6 +525,14 @@ export default function HomePage() {
   const todayHandledScrollOffset = useSharedValue(0);
   const isAiComposerActive = isKeyboardVisible || isAiInputFocused;
   const shouldRenderHomeCanvases = isFocused && !isSettingsVisible && !isManageAccountVisible;
+  // The Droplet stays mounted once shown and only pauses on other tabs: rebuilding its 3D
+  // scene on every return made coming back to Home stutter. It still unmounts under the
+  // Settings and Manage Account sheets, which sit over it.
+  const [hasShownHomeBlob, setHasShownHomeBlob] = useState(false);
+  useEffect(() => {
+    if (shouldRenderHomeCanvases) setHasShownHomeBlob(true);
+  }, [shouldRenderHomeCanvases]);
+  const shouldMountHomeBlob = (hasShownHomeBlob || shouldRenderHomeCanvases) && !isSettingsVisible && !isManageAccountVisible;
   const aiInputKeyboardBottom = Platform.OS === 'android' && isAiComposerActive ? ANDROID_HOME_KEYBOARD_GAP : aiInputBottom;
   const todayCardHeaderHeight = 50;
   const todayHandledRowHeight = 34;
@@ -1013,35 +1031,27 @@ export default function HomePage() {
 
   const reloadLocalData = useCallback(async () => {
     const snapshot = await loadLocalHomeSnapshot();
-    setHomeSnapshot(current => {
-      const existingGoogleEvents = current.upcomingEvents.filter(isFetchedGoogleHomeEvent);
-      const existingSuggestionGoogleEvents = current.suggestionEvents.filter(isFetchedGoogleHomeEvent);
-      if (existingGoogleEvents.length > 0 || existingSuggestionGoogleEvents.length > 0) {
-        return mergeGoogleEventsIntoHomeSnapshot(
-          snapshot,
-          existingGoogleEvents,
-          existingSuggestionGoogleEvents
-        );
-      }
-      return snapshot;
-    });
+    setHomeSnapshot((current) => keepFetchedGoogleEvents(snapshot, current));
   }, [loadLocalHomeSnapshot]);
 
   compactMutationRefreshRef.current = reloadLocalData;
 
   useEffect(() => {
+    // Coming back to Home refreshes in the background: what is on screen stays (the
+    // Google events already fetched, Suggestions for the same day) until fresh data
+    // arrives, so the cards don't reshuffle on every visit.
     if (!isFocused) {
-      setHomeCalendarLoadState({ dayKey: homeDayKey, ready: false });
       return;
     }
 
     let cancelled = false;
-    setHomeCalendarLoadState({ dayKey: homeDayKey, ready: false });
+    setHomeCalendarLoadState((current) =>
+      current.dayKey === homeDayKey ? current : { dayKey: homeDayKey, ready: false });
 
     (async () => {
       const snapshot = await loadLocalHomeSnapshot();
       if (cancelled) return;
-      setHomeSnapshot(snapshot);
+      setHomeSnapshot((current) => keepFetchedGoogleEvents(snapshot, current));
       setIsInitialHomeLoading(false);
 
       if (isAuthLoading || isTokenLoading) return;
@@ -2745,8 +2755,9 @@ export default function HomePage() {
               right={isLeftHanded ? undefined : settingsHeaderButton}
             />
             <View className="mb-0.5" style={{ position: 'relative', zIndex: 200, elevation: 200 }}>
-              {shouldRenderHomeCanvases ? (
+              {shouldMountHomeBlob ? (
                 <HomeBlob
+                  active={shouldRenderHomeCanvases}
                   faceMoods={activeFaceMoods}
                   breathingEnabled={blobBreathingOn}
                   showThrone={showThrone}

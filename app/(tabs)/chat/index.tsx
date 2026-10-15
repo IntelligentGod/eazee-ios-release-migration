@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import Markdown, { MarkdownIt, renderRules } from 'react-native-markdown-display';
 import type { ASTNode, RenderRules } from 'react-native-markdown-display';
-import { TodoCard, CalendarListCard, CalendarDetailCard, DailyOverviewCard, DayPlanCard, NavigationShortcutCard, GoalQuotaScheduleCard, RecipeTodoOfferCard, type RecipeTodoOfferCardValue } from './cards';
+import { TodoCard, CalendarListCard, CalendarDetailCard, DailyOverviewCard, DayPlanCard, NavigationShortcutCard, GoalQuotaScheduleCard, PlanLegendCard, RecipeTodoOfferCard, type RecipeTodoOfferCardValue } from './cards';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFloatingTabBarInset } from '@/components/navigation/floatingTabBar';
 import AIInputBox from '@/components/AIInputBox';
@@ -56,7 +56,14 @@ import { setGuidanceActiveTab } from '@/lib/guidanceActiveTab';
 import { GuidedTarget, showGuidanceTab, useGuidance } from '@/components/guidance/GuidanceProvider';
 import { getChatAiBarGuidanceTargetId, getChatEazeeButtonGuidanceTargetId, getChatHeaderGuidanceTargetId, getChatPlanDayComposerGuidanceTargetId, getChatWishlistMessageGuidanceTargetId } from '@/lib/navigationHelp';
 import { useLeftHandedMode } from '@/lib/useLeftHandedMode';
-import { readAiPersonalizationSettings } from '@/lib/aiPersonalization';
+import {
+  AI_BASE_PERSONALIZATION_OPTIONS,
+  DEFAULT_AI_PERSONALIZATION_SETTINGS,
+  readAiPersonalizationSettings,
+  subscribeAiPersonalizationSettings,
+  writeAiPersonalizationSettings,
+  type AiBasePersonalization,
+} from '@/lib/aiPersonalization';
 import FirstChatWelcome from '@/components/chat/FirstChatWelcome';
 import AssistantMessageActions, { type AssistantMessageActionHandlers } from '@/components/chat/AssistantMessageActions';
 import {
@@ -95,6 +102,18 @@ import { getFirebaseAppCheckHeaders } from '@/lib/firebaseAppCheck';
 import { getAiRequestHeaders } from '@/lib/aiRequest';
 import { requestAiDataSharingConsent } from '@/lib/aiDataSharingConsent';
 import { useAuthSession } from '@/app/context/AuthSessionContext';
+import {
+  buildAboutMeChatContext,
+  canShowAboutMeInvite,
+  hasAboutMeContent,
+  readAboutMeInviteState,
+  readCachedAboutMeProfile,
+  refreshAboutMeProfile,
+  subscribeAboutMeProfile,
+  trackAboutMeEvent,
+  writeAboutMeInviteState,
+  type AboutMeInviteState,
+} from '@/lib/aboutMe/profile';
 import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 import {
   PREFERENCE_FOLLOW_UP_SYSTEM_MESSAGE,
@@ -829,7 +848,7 @@ function serializeTitleMessage(message: ChatUIMessage) {
   if (content) return content;
   const cardType = typeof message.card?.type === 'string' ? message.card.type : '';
   // A plan card says nothing about the topic, and would end up as the title.
-  if (cardType === 'dayPlan' || cardType === 'weekPlanSaveAll') return '';
+  if (cardType === 'dayPlan' || cardType === 'weekPlanSaveAll' || cardType === 'planLegend') return '';
   return cardType ? `${cardType} card` : '';
 }
 
@@ -1624,6 +1643,11 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
             />
           </View>
         )}
+        {message.card?.type === 'planLegend' && (
+          <View style={{ marginBottom: 4 }}>
+            <PlanLegendCard kinds={Array.isArray(message.card.kinds) ? message.card.kinds : []} />
+          </View>
+        )}
         {message.card?.type === 'weekPlanSaveAll' && (
           <WeekPlanSaveAllButton
             draftIds={Array.isArray(message.card.draftIds) ? message.card.draftIds : []}
@@ -1969,6 +1993,28 @@ export default function ChatScreen() {
       .catch(() => {});
   }, [authUser?.uid]);
   preferencePromptChatIdsRef.current = preferencePromptChatIds;
+  // "Get to know me": the invitation shown once Eazee has helped, and whether a profile exists.
+  const [aboutMeInvite, setAboutMeInvite] = useState<AboutMeInviteState>({ status: 'dismissed', sessionIds: [] });
+  const [hasAboutMeProfile, setHasAboutMeProfile] = useState(true);
+  useEffect(() => {
+    const uid = authUser?.uid;
+    if (!uid || !isFocused) return;
+    let cancelled = false;
+    void Promise.all([readAboutMeInviteState(uid), readCachedAboutMeProfile(uid)]).then(([invite, profile]) => {
+      if (cancelled) return;
+      setAboutMeInvite(invite);
+      setHasAboutMeProfile(hasAboutMeContent(profile));
+    });
+    // Picks up changes made on another device.
+    void refreshAboutMeProfile(uid).catch(() => {});
+    const unsubscribe = subscribeAboutMeProfile((profile, changedUserId) => {
+      if (changedUserId === uid) setHasAboutMeProfile(hasAboutMeContent(profile));
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [authUser?.uid, isFocused]);
   useEffect(() => {
     let cancelled = false;
     void readPreferencePromptChatIds(authUser?.uid).then((ids) => {
@@ -2348,6 +2394,36 @@ export default function ChatScreen() {
   const [activeSessionSummary, setActiveSessionSummary] = useState('');
   const [isHistoryModalVisible, setIsHistoryModalVisible] = useState(false);
   const [isRenamingActiveChat, setIsRenamingActiveChat] = useState(false);
+  // The AI's personality (Positive / Neutral / Roast), the same setting as in Settings.
+  const [isPersonalityMenuOpen, setIsPersonalityMenuOpen] = useState(false);
+  const [aiBaseStyle, setAiBaseStyle] = useState<AiBasePersonalization>(DEFAULT_AI_PERSONALIZATION_SETTINGS.baseStyle);
+  useEffect(() => {
+    let cancelled = false;
+    const uid = authUser?.uid || null;
+    void readAiPersonalizationSettings(uid).then((settings) => {
+      if (!cancelled) setAiBaseStyle(settings.baseStyle);
+    });
+    // A change in Settings shows here too.
+    const unsubscribe = subscribeAiPersonalizationSettings((settings, settingsUserId) => {
+      if (settingsUserId === (uid || 'guest')) setAiBaseStyle(settings.baseStyle);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [authUser?.uid]);
+  const handleSelectAiBaseStyle = useCallback(async (baseStyle: AiBasePersonalization) => {
+    setIsPersonalityMenuOpen(false);
+    setAiBaseStyle(baseStyle);
+    void Haptics.selectionAsync().catch(() => {});
+    const uid = authUser?.uid || null;
+    try {
+      const current = await readAiPersonalizationSettings(uid);
+      await writeAiPersonalizationSettings({ ...current, baseStyle }, uid);
+    } catch {
+      showToast('Could not change the personality. Please try again.');
+    }
+  }, [authUser?.uid, showToast]);
   const isChatSwipeDisabled = isAiComposerActive || isHistoryModalVisible;
   const [isSummaryTestMode, setIsSummaryTestMode] = useState(false);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
@@ -4809,6 +4885,8 @@ export default function ChatScreen() {
         trackFirstChatEvent('custom_request', { intent: 'custom' });
       }
       const savedPreferencesMessage = buildSavedPreferencesSystemMessage(await readSavedPreferences(requestUserId));
+      // The enabled parts of the "Get to know me" profile; the server turns them into instructions.
+      const aboutMeContext = buildAboutMeChatContext(await readCachedAboutMeProfile(requestUserId));
       // While the account has preference chats left, the AI may ask one (the first-use flow
       // has its own version). A chat only counts once a question is actually shown.
       const preferenceChatIds = requestUserId ? await readPreferencePromptChatIds(requestUserId) : [];
@@ -4837,6 +4915,7 @@ export default function ChatScreen() {
         aiPersonalization,
         // App-run tools this build has; the server only offers these to builds that list them.
         clientCapabilities: ['calendar_create_many'],
+        aboutMe: aboutMeContext,
         messages: [
           ...buildChatSystemMessages({
             userTimezone: tz,
@@ -5738,6 +5817,52 @@ export default function ChatScreen() {
     />
   ), [assistantActionHandlers, isPreferencePromptChat, preferenceQuestions, rememberSuggestions, firstChatState.preferencePromptMessageId, firstChatState.preferencePromptShown, isFirstChatSession, lastChatMessageId, savedPreferenceNotices, saveAllDayPlanCards, weekPlanPendingDraftIds, appendVisibleChatMessages, buyingWishlistTodoId, cancelDayPlanCard, clearPendingGoalQuotaDate, handleBuyWishlistTodo, handleDecideGoalQuotaLater, handleDismissRecipeTodoOffer, handleDoGoalQuotaToday, handleOpenRecipeTodoOffer, handlePickGoalQuotaDate, handleRetryMessage, persistDayPlanCardState, resolvedGoalQuotaPlanIds, router, saveDayPlanCard, setAssistantTypingForActiveSession]);
 
+  // Invite the user to "Get to know me" after Eazee has helped, never in the middle of a task:
+  // not while a reply is coming, a question or plan is waiting on them, or another prompt shows.
+  const lastChatMessage = chatMessages[chatMessages.length - 1];
+  const showAboutMeInvite = useMemo(() => {
+    if (!authUser?.uid || hasAboutMeProfile || !canShowAboutMeInvite(aboutMeInvite, activeSessionId)) return false;
+    if (isCurrentSessionTyping || isChatDayPlanTutorialPending) return false;
+    if (weekPlanContextRef.current?.sessionId && weekPlanContextRef.current.sessionId === activeSessionId) return false;
+    if (!lastChatMessage || lastChatMessage.role !== 'assistant' || lastChatMessage.isStreaming || lastChatMessage.card) return false;
+    const replyKey = getReplyKey(lastChatMessage);
+    if (rememberSuggestions[replyKey] || preferenceQuestions[replyKey]) return false;
+    const extras = parseAssistantMessageExtras(lastChatMessage.content);
+    if (extras.options.length || extras.remember || extras.tasks.length || extras.goal || !extras.text || extras.text.trim().endsWith('?')) return false;
+    const helpfulReplies = chatMessages.filter((message) => message.role === 'assistant'
+      && !message.isStreaming
+      && (!!message.card || !!parseAssistantMessageExtras(message.content).text)).length;
+    return helpfulReplies >= 2;
+  }, [
+    aboutMeInvite,
+    activeSessionId,
+    authUser?.uid,
+    chatMessages,
+    hasAboutMeProfile,
+    isChatDayPlanTutorialPending,
+    isCurrentSessionTyping,
+    lastChatMessage,
+    preferenceQuestions,
+    rememberSuggestions,
+  ]);
+  useEffect(() => {
+    const uid = authUser?.uid;
+    if (!showAboutMeInvite || !uid || !activeSessionId || aboutMeInvite.sessionIds.includes(activeSessionId)) return;
+    const next = { ...aboutMeInvite, sessionIds: [...aboutMeInvite.sessionIds, activeSessionId] };
+    setAboutMeInvite(next);
+    void writeAboutMeInviteState(uid, next);
+    trackAboutMeEvent('invite_shown', { entry: 'chat' });
+  }, [aboutMeInvite, activeSessionId, authUser?.uid, showAboutMeInvite]);
+  const answerAboutMeInvite = useCallback((accepted: boolean) => {
+    const uid = authUser?.uid;
+    if (!uid) return;
+    const next: AboutMeInviteState = { ...aboutMeInvite, status: accepted ? 'accepted' : 'dismissed' };
+    setAboutMeInvite(next);
+    void writeAboutMeInviteState(uid, next);
+    trackAboutMeEvent(accepted ? 'invite_accepted' : 'invite_dismissed', { entry: 'chat' });
+    if (accepted) router.push({ pathname: '/about-me', params: { entry: 'chat' } });
+  }, [aboutMeInvite, authUser?.uid, router]);
+
   const renderChatFooter = useCallback(() => {
     const logoBounceStyle = {
       opacity: typingAnim.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] }),
@@ -5767,9 +5892,32 @@ export default function ChatScreen() {
             </View>
           </View>
         )}
+        {showAboutMeInvite && (
+          <View style={styles.aboutMeInvite}>
+            <Text style={styles.aboutMeInviteText}>
+              Want Eazee to get you a little better? Tell me about yourself and discover your Eazee personality.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => answerAboutMeInvite(true)}
+                style={[styles.aboutMeInviteButton, { backgroundColor: '#AEFFE8' }]}
+              >
+                <Text style={[styles.aboutMeInviteButtonText, { color: '#04403A' }]}>Get to know me</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => answerAboutMeInvite(false)}
+                style={[styles.aboutMeInviteButton, { borderWidth: 1, borderColor: 'rgba(173, 255, 240, 0.45)' }]}
+              >
+                <Text style={styles.aboutMeInviteButtonText}>Maybe later</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     );
-  }, [handleChatFooterLayout, isBootstrappingCompactHandoff, isCurrentSessionTyping, typingAnim]);
+  }, [answerAboutMeInvite, handleChatFooterLayout, isBootstrappingCompactHandoff, isCurrentSessionTyping, showAboutMeInvite, typingAnim]);
 
   const showChatPanel = showCompactHandoffLoader || isCurrentSessionTyping || chatMessages.length > 0;
   const isVoiceInputActive = isVoiceMessageRecording || isVoiceMessageFinalizing || !!voiceMessageDraft;
@@ -5823,6 +5971,38 @@ export default function ChatScreen() {
           </View>
         </LiquidGlassIconButton>
       </GuidedTarget>
+    </View>
+  );
+  const personalityHeaderButton = (
+    <View className="mt-2">
+    <LiquidGlassIconButton
+      debugLabel="chat:header:personality"
+      accessibilityLabel={`AI personality: ${AI_BASE_PERSONALIZATION_OPTIONS.find((option) => option.value === aiBaseStyle)?.label || ''}. Change it`}
+      size={CHAT_HEADER_GLASS_BUTTON_SIZE}
+      colorScheme="dark"
+      tintColor={CHAT_HEADER_GLASS_TINT_COLOR}
+      fallbackTint="dark"
+      fallbackBackgroundColor={CHAT_HEADER_GLASS_FALLBACK_BACKGROUND}
+      fallbackBorderColor={CHAT_HEADER_GLASS_FALLBACK_BORDER}
+      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+      onPress={() => setIsPersonalityMenuOpen(true)}
+    >
+      <View style={{ width: 22 }}>
+        {[0, 1, 2].map((bar) => (
+          <View
+            key={bar}
+            style={{ height: 3.5, borderRadius: 999, backgroundColor: CHAT_HEADER_GLASS_ICON_COLOR, marginTop: bar ? 4 : 0 }}
+          />
+        ))}
+      </View>
+    </LiquidGlassIconButton>
+    </View>
+  );
+  // The personality button sits beside chat history, on whichever side history is.
+  const historyAndPersonalityHeaderButtons = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      {isLeftHanded ? personalityHeaderButton : chatHistoryHeaderButton}
+      {isLeftHanded ? chatHistoryHeaderButton : personalityHeaderButton}
     </View>
   );
   const newChatHeaderButton = (
@@ -5917,8 +6097,8 @@ export default function ChatScreen() {
         <ScreenHeader
           title="AI Chat"
           titleColor="#C8FFFB"
-          left={isLeftHanded ? newChatHeaderButton : chatHistoryHeaderButton}
-          right={isLeftHanded ? chatHistoryHeaderButton : newChatHeaderButton}
+          left={isLeftHanded ? newChatHeaderButton : historyAndPersonalityHeaderButtons}
+          right={isLeftHanded ? historyAndPersonalityHeaderButtons : newChatHeaderButton}
         />
         {!!visibleChatTitle && (
           <TouchableOpacity
@@ -6224,6 +6404,63 @@ export default function ChatScreen() {
         />
         <Modal
           transparent
+          visible={isPersonalityMenuOpen}
+          animationType="fade"
+          onRequestClose={() => setIsPersonalityMenuOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setIsPersonalityMenuOpen(false)}
+            style={{ flex: 1, backgroundColor: 'rgba(0, 20, 18, 0.25)' }}
+          >
+            <View
+              style={{
+                position: 'absolute',
+                top: insets.top + 64,
+                ...(isLeftHanded ? { right: 16 } : { left: 16 }),
+                minWidth: 220,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: 'rgba(173, 255, 240, 0.55)',
+                backgroundColor: '#05504A',
+                paddingVertical: 6,
+                elevation: 12,
+                shadowColor: '#001A17',
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 6 },
+              }}
+            >
+              <Text style={{ color: 'rgba(216, 255, 250, 0.7)', fontSize: 12, fontWeight: '700', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 }}>
+                AI personality
+              </Text>
+              {AI_BASE_PERSONALIZATION_OPTIONS.map((option) => {
+                const selected = option.value === aiBaseStyle;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    accessibilityRole="menuitem"
+                    accessibilityState={{ selected }}
+                    onPress={() => { void handleSelectAiBaseStyle(option.value); }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingHorizontal: 16,
+                      paddingVertical: 11,
+                      backgroundColor: selected ? 'rgba(174, 255, 232, 0.12)' : 'transparent',
+                    }}
+                  >
+                    <Text style={{ color: '#F4FFFD', fontSize: 15, fontWeight: selected ? '800' : '600' }}>{option.label}</Text>
+                    {selected && <MIcon name="check" size={18} color="#AEFFE8" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+        <Modal
+          transparent
           visible={isRenamingActiveChat}
           animationType="fade"
           onRequestClose={() => setIsRenamingActiveChat(false)}
@@ -6252,3 +6489,19 @@ export default function ChatScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  aboutMeInvite: {
+    marginTop: 10,
+    marginBottom: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 255, 240, 0.35)',
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    padding: 14,
+    gap: 12,
+  },
+  aboutMeInviteText: { color: '#E8FFFA', fontSize: 15, lineHeight: 21, fontWeight: '600' },
+  aboutMeInviteButton: { flex: 1, borderRadius: 999, paddingVertical: 11, alignItems: 'center' },
+  aboutMeInviteButtonText: { color: '#E8FFFA', fontSize: 15, fontWeight: '800' },
+});

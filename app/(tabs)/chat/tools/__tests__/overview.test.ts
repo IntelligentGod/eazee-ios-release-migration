@@ -78,6 +78,8 @@ const { setLastDayPlan } = require('../memory');
 const { getAccessTokenStatic } = require('@/app/context/TokenContext');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { database } = require('../../../../../database/database');
+/** The plan cards and text, without the colour key shown above plans. */
+const withoutLegend = (messages: any[]) => messages.filter((message) => message?.card?.type !== 'planLegend');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createTodos, updateTodos } = require('@/lib/todoMutations');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -519,17 +521,19 @@ describe('plan_my_day', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.messages).toHaveLength(2);
-    expect(result.messages[0]).toMatchObject({
+    expect(withoutLegend(result.messages)).toHaveLength(2);
+    // The colour key sits between the text and the card, naming only what the plan has.
+    expect(result.messages[1]?.card).toEqual({ type: 'planLegend', kinds: ['task'] });
+    expect(withoutLegend(result.messages)[0]).toMatchObject({
       role: 'assistant',
       content: "Here's your plan. Say 'looks good' to save it, or reply with edits.",
     });
-    expect(result.messages[1]?.content).toBe('');
-    expect(result.messages[1]?.card).toMatchObject({
+    expect(withoutLegend(result.messages)[1]?.content).toBe('');
+    expect(withoutLegend(result.messages)[1]?.card).toMatchObject({
       type: 'dayPlan',
       date: '2026-03-18',
     });
-    expect(result.messages[1]?.card?.todoItems?.[0]).toMatchObject({
+    expect(withoutLegend(result.messages)[1]?.card?.todoItems?.[0]).toMatchObject({
       text: 'Finish report',
       priority: 'high',
       hasDueTime: true,
@@ -553,15 +557,17 @@ describe('plan_my_day', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.messages).toHaveLength(4);
-    expect(result.messages[3]?.card).toMatchObject({ type: 'weekPlanSaveAll', draftIds: expect.any(Array) });
-    expect(result.messages[3]?.card?.draftIds).toHaveLength(2);
-    expect(result.messages[0]?.content).toContain('2 days');
-    expect(result.messages.slice(1, 3).map((message: any) => [message.card?.date, message.card?.mainGoal])).toEqual([
+    expect(withoutLegend(result.messages)).toHaveLength(4);
+    // One key for the whole week, right after the intro.
+    expect(result.messages[1]?.card).toMatchObject({ type: 'planLegend', kinds: ['event'] });
+    expect(withoutLegend(result.messages)[3]?.card).toMatchObject({ type: 'weekPlanSaveAll', draftIds: expect.any(Array) });
+    expect(withoutLegend(result.messages)[3]?.card?.draftIds).toHaveLength(2);
+    expect(withoutLegend(result.messages)[0]?.content).toContain('2 days');
+    expect(withoutLegend(result.messages).slice(1, 3).map((message: any) => [message.card?.date, message.card?.mainGoal])).toEqual([
       ['2026-03-18', 'Record pronunciation baseline'],
       ['2026-03-19', 'Practice vowel sounds'],
     ]);
-    const card = result.messages[1]?.card;
+    const card = withoutLegend(result.messages)[1]?.card;
     expect(card?.todoItems).toEqual([]);
     expect(card?.calendarItems).toEqual([
       expect.objectContaining({ title: 'Record pronunciation baseline', start: expect.any(String), end: expect.any(String) }),
@@ -585,7 +591,7 @@ describe('plan_my_day', () => {
     );
 
     expect(result.success).toBe(true);
-    const card = result.messages[1]?.card;
+    const card = withoutLegend(result.messages)[1]?.card;
     expect(card?.mainGoal).toBe('Step 1');
     const blocks = card?.timelineItems?.filter((item: any) => item.source === 'draft');
     expect(blocks.map((item: any) => [item.kind, item.title])).toEqual(
@@ -623,7 +629,7 @@ describe('plan_my_day', () => {
       { serverUrl: 'http://localhost' }
     );
 
-    const card = result.messages[1]?.card;
+    const card = withoutLegend(result.messages)[1]?.card;
     expect(card?.calendarItems.map((item: any) => item.title)).toEqual(['Sports app outline']);
     expect(card?.timelineItems.filter((item: any) => item.kind === 'blocker').map((item: any) => item.title)).toEqual(['Learning the guitar']);
   });
@@ -659,7 +665,7 @@ describe('plan_my_day', () => {
       { serverUrl: 'http://localhost' }
     );
 
-    const titlesOn = (date: string) => result.messages
+    const titlesOn = (date: string) => withoutLegend(result.messages)
       .map((message: any) => message.card)
       .find((card: any) => card?.date === date)
       ?.calendarItems.map((item: any) => item.title);
@@ -670,7 +676,7 @@ describe('plan_my_day', () => {
     // Goals are planned through goal steps, and a timed task is already fixed on its day.
     expect(allTitles).not.toContain('Learn Spanish');
     expect(allTitles).not.toContain('Dentist');
-    expect(result.messages[0]?.content).not.toContain("didn't fit");
+    expect(withoutLegend(result.messages)[0]?.content).not.toContain("didn't fit");
   });
 
   it('never saves the week goal as a goal', async () => {
@@ -731,7 +737,7 @@ describe('plan_my_day', () => {
 
     expect(result.success).toBe(true);
     expect(createTodos).not.toHaveBeenCalled();
-    expect(result.messages.slice(1, -1).every((message: any) => message.card?.type === 'dayPlan' && message.card?.saved !== true)).toBe(true);
+    expect(withoutLegend(result.messages).slice(1, -1).every((message: any) => message.card?.type === 'dayPlan' && message.card?.saved !== true)).toBe(true);
     expect(result.messages[0]?.content).toContain('Save all');
   });
 

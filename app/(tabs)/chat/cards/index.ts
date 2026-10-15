@@ -7,3 +7,4 @@ export { NavigationShortcutCard } from './NavigationShortcutCard';
 export { GoalQuotaScheduleCard } from './GoalQuotaScheduleCard';
 export { RecipeTodoOfferCard } from './RecipeTodoOfferCard';
 export type { RecipeTodoOfferCardValue } from './RecipeTodoOfferCard';
+export { PlanLegendCard } from './PlanLegendCard';
