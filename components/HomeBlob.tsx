@@ -8,6 +8,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import type { BlobVisualMeaning } from '@/src/blob/blobMeaning';
 
+import { guardExpoGlShaderLogs } from '@/lib/expoGlGuards';
 export type BlobMood = 'calm' | 'normal' | 'stressed';
 
 export type LifeArea =
@@ -649,6 +650,7 @@ function HomeBlob({
         <Canvas
           gl={{ alpha: true }}
           onCreated={({ gl }) => {
+            guardExpoGlShaderLogs(gl);
             gl.setClearColor(0x000000, 0);
             gl.toneMapping = THREE.ACESFilmicToneMapping;
             gl.toneMappingExposure = 1.1;

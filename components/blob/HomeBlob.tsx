@@ -48,6 +48,7 @@ import Crown2Mesh from '@/components/blob/Crown2Mesh';
 import HeroCapeMesh from '@/components/blob/HeroCapeMesh';
 import ThroneMesh from '@/components/blob/ThroneMesh';
 
+import { guardExpoGlShaderLogs } from '@/lib/expoGlGuards';
 type BlobCanvasProps = React.ComponentProps<typeof Canvas> & {
   dpr?: number | readonly [number, number];
 };
@@ -1921,6 +1922,7 @@ export default function HomeBlob({
             powerPreference: 'high-performance',
           }}
           onCreated={({ gl }) => {
+            guardExpoGlShaderLogs(gl);
             gl.setClearColor(0x000000, 0);
             gl.toneMapping = THREE.ACESFilmicToneMapping;
             gl.toneMappingExposure = BLOB_ANDROID_DEVICE_CONTRAST ? 1.14 : 1.0;

@@ -4511,6 +4511,7 @@ const CalendarScreen: React.FC = () => {
         <View style={styles.tutorialHint} accessibilityRole="text">
           <Text style={styles.tutorialHintLabel}>Walkthrough</Text>
           <Text style={styles.tutorialHintText}>Add a title, then tap Save to create your event and finish this step.</Text>
+          {calendarTutorialHintActions}
         </View>
       )}
       <BottomSheetTextInput
@@ -4876,6 +4877,50 @@ const CalendarScreen: React.FC = () => {
 
 
   const isCalendarTutorialCreating = isCalendarTutorialPending && calendarTutorialStage === 'waiting-event';
+  // The walkthrough banners shown while the event is being made have the same back / next /
+  // skip all as the walkthrough card. Next only moves on once an event is made.
+  const leaveCalendarTutorialHint = () => {
+    Keyboard.dismiss();
+    if (createSheetIndex !== -1) closeCreateSheet();
+  };
+  const calendarTutorialHintActions = (
+    <View style={styles.tutorialHintActions}>
+      <Pressable
+        accessibilityRole="button"
+        hitSlop={12}
+        onPress={() => {
+          leaveCalendarTutorialHint();
+          showCalendarTutorialCreate();
+        }}
+        style={styles.tutorialHintAction}
+      >
+        <Text style={styles.tutorialHintActionText}>back</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        hitSlop={12}
+        disabled={!hasMadeCalendarTutorialEventRef.current}
+        onPress={() => {
+          leaveCalendarTutorialHint();
+          void showCalendarTutorialEventCreated();
+        }}
+        style={[styles.tutorialHintAction, !hasMadeCalendarTutorialEventRef.current && styles.tutorialHintActionDisabled]}
+      >
+        <Text style={styles.tutorialHintActionText}>next</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        hitSlop={12}
+        onPress={() => {
+          leaveCalendarTutorialHint();
+          void completeCalendarTutorialAndStartHome();
+        }}
+        style={styles.tutorialHintAction}
+      >
+        <Text style={styles.tutorialHintActionText}>skip all</Text>
+      </Pressable>
+    </View>
+  );
   // While the AI bar is used for the walkthrough's event, say what to type (the AI's own
   // questions show in their own card, so this steps aside for them).
   const calendarTutorialAiHint = isCalendarTutorialCreating && createSheetIndex === -1 && !aiNotice && (isAiInputFocused || isAiRunning)
@@ -5192,10 +5237,11 @@ const CalendarScreen: React.FC = () => {
         </View>
       )}
       {!!calendarTutorialAiHint && (
-        <View pointerEvents="none" style={[styles.tutorialHintFloating, { top: (insets?.top || 0) + 76 }]}>
+        <View pointerEvents="box-none" style={[styles.tutorialHintFloating, { top: (insets?.top || 0) + 76 }]}>
           <View style={styles.tutorialHint}>
             <Text style={styles.tutorialHintLabel}>Walkthrough</Text>
             <Text style={styles.tutorialHintText}>{calendarTutorialAiHint}</Text>
+            {calendarTutorialHintActions}
           </View>
         </View>
       )}
@@ -5362,6 +5408,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '700',
+  },
+  tutorialHintActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 6,
+  },
+  tutorialHintAction: {
+    minHeight: 30,
+    justifyContent: 'center',
+  },
+  tutorialHintActionText: {
+    color: '#AEFFE8',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  tutorialHintActionDisabled: {
+    opacity: 0.35,
   },
   tutorialHintFloating: {
     position: 'absolute',

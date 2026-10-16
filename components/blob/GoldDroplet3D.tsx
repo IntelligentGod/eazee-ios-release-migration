@@ -8,6 +8,7 @@ import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
 import { buildStudioRoomEquirect } from '@/components/blob/HomeBlob';
 import { getBlobAppearancePreset } from '@/src/blob/blobAppearancePresets';
 
+import { guardExpoGlShaderLogs } from '@/lib/expoGlGuards';
 /** Small grid: the droplet is only drawn at thumbnail size, so 24³ cells look smooth and stay cheap. */
 const GRID_RESOLUTION = 24;
 const MAX_POLYGONS = 20_000;
@@ -103,6 +104,7 @@ export default function GoldDroplet3D() {
       camera={{ position: [0, 0, 1.8], fov: 40 }}
       gl={{ alpha: true, antialias: true }}
       onCreated={({ gl }) => {
+        guardExpoGlShaderLogs(gl);
         gl.setClearColor(0x000000, 0);
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.outputColorSpace = THREE.SRGBColorSpace;

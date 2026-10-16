@@ -207,9 +207,6 @@ import {
   type GoalQuotaBehavior,
 } from '@/lib/goalBehavior';
 import {
-  GOAL_TUTORIAL_ACCEPT_PLAN_MESSAGE,
-  TODO_TUTORIAL_ACCEPT_PLAN_MESSAGE,
-  TODO_TUTORIAL_PICK_VIDEO_MESSAGE,
   TODO_TUTORIAL_VIDEO_READY_MESSAGE,
   TUTORIAL_DEMO_GOAL_DETAILS,
   TUTORIAL_DEMO_GOAL_TITLE,
@@ -2660,14 +2657,19 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     forwardStages: TodoGuidanceTutorialStage[] = []
   ) => {
     todoGuidanceTutorialStageRef.current = stage;
-    const readingMessage = stage === 'pick-video'
-      ? TODO_TUTORIAL_PICK_VIDEO_MESSAGE
-      : stage === 'video-ready'
-        ? TODO_TUTORIAL_VIDEO_READY_MESSAGE
-        : stage === 'accept-plan'
-          ? TODO_TUTORIAL_ACCEPT_PLAN_MESSAGE
-          : '';
-    const hideCardAfterMs = readingMessage ? getTutorialReadingTimeMs(readingMessage) : undefined;
+    // Steps that wait for the user (pick a video, Accept plan) keep their card until they act;
+    // only the "video steps are ready" note moves on by itself.
+    const hideCardAfterMs = stage === 'video-ready' ? getTutorialReadingTimeMs(TODO_TUTORIAL_VIDEO_READY_MESSAGE) : undefined;
+    // These steps talk about the AI Guidance and Video Guidance buttons, which sit low in
+    // the details: bring them into view above the tutorial card.
+    if (stage === 'actions' || stage === 'video' || stage === 'choice') {
+      const scrollToChoice = () => {
+        detailsScrollRef.current?.scrollTo({ y: Math.max(0, guidancePathChoiceYRef.current - 12), animated: true });
+      };
+      scrollToChoice();
+      setTimeout(scrollToChoice, 260);
+      setTimeout(scrollToChoice, 700);
+    }
     const todoAction =
       stage === 'actions'
         ? 'tutorial-actions'
@@ -2811,6 +2813,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   const keyboardOffset = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
   const detailsScrollRef = useRef<ScrollView>(null);
+  /** Where the "Guidance path" card (AI Guidance / Video Guidance) sits in the details. */
+  const guidancePathChoiceYRef = useRef(0);
   const goalGuidanceSectionYRef = useRef(0);
   const recipeGuidanceSectionYRef = useRef(0);
   const skillGuidanceSectionYRef = useRef(0);
@@ -7384,9 +7388,6 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                     ? 'goal tasks'
                     : 'tutorial complete',
       {
-        hideCardAfterMs: stage === 'accept-plan'
-          ? getTutorialReadingTimeMs(GOAL_TUTORIAL_ACCEPT_PLAN_MESSAGE)
-          : undefined,
         onBack: stage === 'question'
             ? () => restoreTodoTutorialStepRef.current('goal-actions')
             : stage === 'ai-bar'
@@ -10651,8 +10652,11 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       });
     };
 
+    // The new plan lays out over a few frames; keep scrolling until Accept plan sits above the card.
     scrollToAcceptPlan();
     setTimeout(scrollToAcceptPlan, 260);
+    setTimeout(scrollToAcceptPlan, 700);
+    setTimeout(scrollToAcceptPlan, 1200);
     showTodoGuidanceTutorialStage('accept-plan');
   }, [
     isDetailsModalVisible,
@@ -10836,6 +10840,9 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
     updateTodoStateEverywhere,
   ]);
 
+  const isTutorialGuidanceChoiceStep =
+    activeTarget?.type === 'screen'
+    && ['tutorial-actions', 'tutorial-video', 'tutorial-choice'].includes(String(activeTarget.params?.todoAction || ''));
   const renderGuidancePathChoice = () => {
     if (!shouldShowGuidancePathChoice || !selectedTodoForDetails) {
       return null;
@@ -10879,6 +10886,9 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={styles.detailsModalGradientCard}
+        onLayout={(event) => {
+          guidancePathChoiceYRef.current = event.nativeEvent.layout.y;
+        }}
       >
         <View style={styles.goalGuidanceSectionHeader}>
           <View style={styles.detailsModalMetaLead}>
@@ -14161,7 +14171,11 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                   >
                     <ScrollViewWithBar
                       ref={detailsScrollRef}
-                      contentContainerStyle={styles.detailsModalScrollContainer}
+                      contentContainerStyle={[
+                        styles.detailsModalScrollContainer,
+                        // Room to lift the Guidance path card above the tutorial card.
+                        isTutorialGuidanceChoiceStep && { paddingBottom: 420 },
+                      ]}
                     >
                       <View style={styles.detailsModalScrollContent}>
                       <View style={styles.detailsModalTitleRow}>
