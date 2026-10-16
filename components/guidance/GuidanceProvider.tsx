@@ -1476,7 +1476,11 @@ function GuidanceOverlay({
   const pulse = usePulseAnimation(!!step);
   const swipeProgress = useSwipeHintAnimation(!!step?.showSwipeHint);
   const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
-  const cardHeight = 152;
+  const minCardHeight = 152;
+  // Longer messages (and the button row) make the card taller: place it by its real height
+  // so it never runs into the input bar or covers its target.
+  const [measuredCardHeight, setMeasuredCardHeight] = useState(minCardHeight);
+  const cardHeight = Math.max(minCardHeight, measuredCardHeight);
   const isTodoTab = activeTab === 'todo';
   const isTodoMainCardTarget = !!step?.targetId?.startsWith('todo:item:');
   const isGoalTutorialCardTarget = [
@@ -1502,7 +1506,8 @@ function GuidanceOverlay({
     isGoalTutorialCardTarget ||
     isTodoAcceptPlanTutorialCardTarget;
   const fixedCardBottom = 160;
-  const defaultCardTop = Math.max(58, windowHeight - (usesFixedBottomCard ? fixedCardBottom + cardHeight : isTodoTab ? 402 : 354));
+  // The card's bottom edge stays where a short card's always was, so taller cards grow upward.
+  const defaultCardTop = Math.max(58, windowHeight - (usesFixedBottomCard ? fixedCardBottom : isTodoTab ? 250 : 202) - cardHeight);
   // The card must never cover what it asks the user to tap: when it would, it
   // moves above the target, or below it when there is no room above.
   const cardTop = (() => {
@@ -1643,34 +1648,41 @@ function GuidanceOverlay({
           style={[
             styles.instructionCard,
             usesFixedBottomCard && !movedAwayFromTarget
-              ? { bottom: fixedCardBottom, minHeight: cardHeight, borderRadius: cardRadius }
-              : { top: animatedCardTop, minHeight: cardHeight, borderRadius: cardRadius },
+              ? { bottom: fixedCardBottom, minHeight: minCardHeight, borderRadius: cardRadius }
+              : { top: animatedCardTop, minHeight: minCardHeight, borderRadius: cardRadius },
           ]}
+          onLayout={(event) => {
+            const height = Math.round(event.nativeEvent.layout.height);
+            setMeasuredCardHeight((current) => (Math.abs(current - height) > 1 ? height : current));
+          }}
         >
-          <Text style={styles.instructionText}>{step.message}</Text>
+          <Text style={[styles.instructionText, onSkipSegment && styles.instructionTextWithPills]}>{step.message}</Text>
           {!step.hideActions || onSkipSegment ? (
-            <View style={styles.instructionActions}>
+            <View style={[styles.instructionActions, onSkipSegment && styles.tutorialActions]}>
               {onSkipSegment ? (
                 <>
+                  {/* back on the left; skip all and next on the right, as separate pills. */}
                   <Pressable
                     disabled={!onBack}
                     onPress={onBack}
-                    style={[styles.skipButton, !onBack && styles.instructionButtonDisabled]}
-                    hitSlop={12}
+                    style={[styles.tutorialPill, !onBack && styles.instructionButtonDisabled]}
+                    hitSlop={8}
                   >
-                    <Text style={styles.skipButtonText}>back</Text>
+                    <Text style={styles.tutorialPillText}>back</Text>
                   </Pressable>
-                  <Pressable
-                    disabled={!onNext}
-                    onPress={onNext}
-                    style={[styles.nextButton, !onNext && styles.instructionButtonDisabled]}
-                    hitSlop={12}
-                  >
-                    <Text style={styles.nextButtonText}>next</Text>
-                  </Pressable>
-                  <Pressable onPress={onSkipSegment} style={styles.skipButton} hitSlop={12}>
-                    <Text style={styles.skipButtonText}>skip all</Text>
-                  </Pressable>
+                  <View style={styles.tutorialPillGroup}>
+                    <Pressable onPress={onSkipSegment} style={styles.tutorialPill} hitSlop={8}>
+                      <Text style={styles.tutorialPillText}>skip all</Text>
+                    </Pressable>
+                    <Pressable
+                      disabled={!onNext}
+                      onPress={onNext}
+                      style={[styles.tutorialPill, styles.tutorialPillPrimary, !onNext && styles.instructionButtonDisabled]}
+                      hitSlop={8}
+                    >
+                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>next</Text>
+                    </Pressable>
+                  </View>
                 </>
               ) : (
                 <>
@@ -1735,7 +1747,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 22,
     paddingBottom: 20,
-    backgroundColor: 'rgba(8, 15, 18, 0.8)',
+    backgroundColor: 'rgba(8, 15, 18, 0.93)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.22)',
   },
@@ -1770,6 +1782,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '700',
+  },
+  tutorialActions: {
+    left: 18,
+    bottom: 16,
+    justifyContent: 'space-between',
+  },
+  tutorialPillGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tutorialPill: {
+    minHeight: 38,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(174, 255, 232, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tutorialPillPrimary: {
+    minWidth: 76,
+    backgroundColor: '#AEFFE8',
+    borderColor: '#AEFFE8',
+  },
+  tutorialPillText: {
+    color: '#AEFFE8',
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  tutorialPillPrimaryText: {
+    color: '#04403A',
+  },
+  instructionTextWithPills: {
+    paddingBottom: 58,
   },
   instructionButtonDisabled: {
     opacity: 0.35,

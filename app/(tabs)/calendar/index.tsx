@@ -4884,10 +4884,11 @@ const CalendarScreen: React.FC = () => {
     if (createSheetIndex !== -1) closeCreateSheet();
   };
   const calendarTutorialHintActions = (
+    // Same layout as the walkthrough card: back on the left, skip all and next on the right.
     <View style={styles.tutorialHintActions}>
       <Pressable
         accessibilityRole="button"
-        hitSlop={12}
+        hitSlop={8}
         onPress={() => {
           leaveCalendarTutorialHint();
           showCalendarTutorialCreate();
@@ -4896,29 +4897,35 @@ const CalendarScreen: React.FC = () => {
       >
         <Text style={styles.tutorialHintActionText}>back</Text>
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        hitSlop={12}
-        disabled={!hasMadeCalendarTutorialEventRef.current}
-        onPress={() => {
-          leaveCalendarTutorialHint();
-          void showCalendarTutorialEventCreated();
-        }}
-        style={[styles.tutorialHintAction, !hasMadeCalendarTutorialEventRef.current && styles.tutorialHintActionDisabled]}
-      >
-        <Text style={styles.tutorialHintActionText}>next</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        hitSlop={12}
-        onPress={() => {
-          leaveCalendarTutorialHint();
-          void completeCalendarTutorialAndStartHome();
-        }}
-        style={styles.tutorialHintAction}
-      >
-        <Text style={styles.tutorialHintActionText}>skip all</Text>
-      </Pressable>
+      <View style={styles.tutorialHintActionGroup}>
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => {
+            leaveCalendarTutorialHint();
+            void completeCalendarTutorialAndStartHome();
+          }}
+          style={styles.tutorialHintAction}
+        >
+          <Text style={styles.tutorialHintActionText}>skip all</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          disabled={!hasMadeCalendarTutorialEventRef.current}
+          onPress={() => {
+            leaveCalendarTutorialHint();
+            void showCalendarTutorialEventCreated();
+          }}
+          style={[
+            styles.tutorialHintAction,
+            styles.tutorialHintActionPrimary,
+            !hasMadeCalendarTutorialEventRef.current && styles.tutorialHintActionDisabled,
+          ]}
+        >
+          <Text style={[styles.tutorialHintActionText, styles.tutorialHintActionPrimaryText]}>next</Text>
+        </Pressable>
+      </View>
     </View>
   );
   // While the AI bar is used for the walkthrough's event, say what to type (the AI's own
@@ -5411,20 +5418,37 @@ const styles = StyleSheet.create({
   },
   tutorialHintActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 7,
-    marginTop: 6,
+    marginTop: 14,
+  },
+  tutorialHintActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   tutorialHintAction: {
-    minHeight: 30,
+    minHeight: 38,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(174, 255, 232, 0.45)',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  tutorialHintActionPrimary: {
+    minWidth: 76,
+    backgroundColor: '#AEFFE8',
+    borderColor: '#AEFFE8',
   },
   tutorialHintActionText: {
     color: '#AEFFE8',
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 19,
     fontWeight: '700',
+  },
+  tutorialHintActionPrimaryText: {
+    color: '#04403A',
   },
   tutorialHintActionDisabled: {
     opacity: 0.35,
