@@ -525,17 +525,15 @@ const CalendarScreen: React.FC = () => {
         onSkipSegment: () => {
           void completeCalendarTutorialAndStartHome();
         },
-        onNext: () => {
-          if (hasMadeCalendarTutorialEventRef.current) {
-            void showCalendarTutorialEventCreated();
-            return;
-          }
-          hideCalendarTutorialCreateCard();
-        },
+        // "Create an event to finish this step": next only works once an event exists. Using
+        // the input bar, the Eazee button or a time slot hides this card while they make one.
+        onNext: hasMadeCalendarTutorialEventRef.current
+          ? () => { void showCalendarTutorialEventCreated(); }
+          : undefined,
         restore: () => restoreCalendarTutorialCreateRef.current(),
       }
     );
-  }, [completeCalendarTutorialAndStartHome, hideCalendarTutorialCreateCard, showCalendarTutorialEventCreated, startGuidance, setCalendarTutorialStage]);
+  }, [completeCalendarTutorialAndStartHome, showCalendarTutorialEventCreated, startGuidance, setCalendarTutorialStage]);
 
   // Back from the Home handoff: the calendar part is in progress again, at "create".
   const restoreCalendarTutorialCreateRef = useRef(() => {});
