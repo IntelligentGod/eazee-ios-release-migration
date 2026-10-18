@@ -530,6 +530,8 @@ const CalendarScreen: React.FC = () => {
         onNext: hasMadeCalendarTutorialEventRef.current
           ? () => { void showCalendarTutorialEventCreated(); }
           : undefined,
+        // "skip" moves on to the next step (Home) without making an event.
+        onSkipStep: () => { void showCalendarTutorialEventCreated(); },
         restore: () => restoreCalendarTutorialCreateRef.current(),
       }
     );
@@ -4876,7 +4878,7 @@ const CalendarScreen: React.FC = () => {
 
   const isCalendarTutorialCreating = isCalendarTutorialPending && calendarTutorialStage === 'waiting-event';
   // The walkthrough banners shown while the event is being made have the same back / next /
-  // skip all as the walkthrough card. Next only moves on once an event is made.
+  // skip all as the walkthrough card. Before an event is made, next reads "skip".
   const leaveCalendarTutorialHint = () => {
     Keyboard.dismiss();
     if (createSheetIndex !== -1) closeCreateSheet();
@@ -4907,31 +4909,33 @@ const CalendarScreen: React.FC = () => {
         >
           <Text style={styles.tutorialHintActionText}>skip all</Text>
         </Pressable>
+        {/* next once an event is made; before that, skip moves on without one. */}
         <Pressable
           accessibilityRole="button"
           hitSlop={8}
-          disabled={!hasMadeCalendarTutorialEventRef.current}
           onPress={() => {
             leaveCalendarTutorialHint();
             void showCalendarTutorialEventCreated();
           }}
-          style={[
-            styles.tutorialHintAction,
-            styles.tutorialHintActionPrimary,
-            !hasMadeCalendarTutorialEventRef.current && styles.tutorialHintActionDisabled,
-          ]}
+          style={[styles.tutorialHintAction, styles.tutorialHintActionPrimary]}
         >
-          <Text style={[styles.tutorialHintActionText, styles.tutorialHintActionPrimaryText]}>next</Text>
+          <Text style={[styles.tutorialHintActionText, styles.tutorialHintActionPrimaryText]}>
+            {hasMadeCalendarTutorialEventRef.current ? 'next' : 'skip'}
+          </Text>
         </Pressable>
       </View>
     </View>
   );
   // While the AI bar is used for the walkthrough's event, say what to type (the AI's own
   // questions show in their own card, so this steps aside for them).
-  const calendarTutorialAiHint = isCalendarTutorialCreating && createSheetIndex === -1 && !aiNotice && (isAiInputFocused || isAiRunning)
+  // It also stays up while nothing is open (keyboard closed, form closed without saving), so
+  // the user is never left on this step without knowing what to do.
+  const calendarTutorialAiHint = isCalendarTutorialCreating && createSheetIndex === -1 && !aiNotice
     ? (isAiRunning
         ? 'Creating your event...'
-        : 'Type an event, like "Lunch with Sam tomorrow at 1pm", then tap send to finish this step.')
+        : isAiInputFocused
+          ? 'Type an event, like "Lunch with Sam tomorrow at 1pm", then tap send to finish this step.'
+          : 'Create an event to finish this step: type it in the bar below, use the Eazee button, or tap a time slot.')
     : null;
 
   return (
@@ -5447,9 +5451,6 @@ const styles = StyleSheet.create({
   },
   tutorialHintActionPrimaryText: {
     color: '#04403A',
-  },
-  tutorialHintActionDisabled: {
-    opacity: 0.35,
   },
   tutorialHintFloating: {
     position: 'absolute',

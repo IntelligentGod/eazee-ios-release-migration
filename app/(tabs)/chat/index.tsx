@@ -2299,8 +2299,20 @@ export default function ChatScreen() {
     );
     if (!hasSaveableDayPlan) {
       showChatDayPlanTutorialStage('plan-day');
+      return;
     }
-  }, [showChatDayPlanTutorialStage]);
+    // The plan is here: say what to do with it (saving it finishes this part).
+    startGuidance(
+      { type: 'screen', route: '/(tabs)/chat', params: { chatAction: 'tutorial-save-plan' } },
+      'Save plan',
+      {
+        onSkipSegment: () => { skipChatDayPlanTutorialRef.current(); },
+        // Skipping saving the plan moves on to the To Do part, the next step.
+        onSkipStep: () => { skipChatDayPlanTutorialRef.current(); },
+        onBack: () => showChatDayPlanTutorialStage('plan-day'),
+      }
+    );
+  }, [showChatDayPlanTutorialStage, startGuidance]);
 
   useEffect(() => {
     let isActive = true;
@@ -2977,6 +2989,13 @@ export default function ChatScreen() {
             useTutorialCardPlacement: true,
             onSkipSegment: () => {
               void skipTodoAndGoalTutorialsToCalendar();
+            },
+            // "skip": open the demo task for them; its details show the next step.
+            onSkipStep: () => {
+              router.navigate({
+                pathname: '/(tabs)/todo',
+                params: { openTodoId: demoTodoId, openTodoNonce: `tutorial-skip-${Date.now()}` },
+              });
             },
           }
         );
@@ -5822,7 +5841,8 @@ export default function ChatScreen() {
   const lastChatMessage = chatMessages[chatMessages.length - 1];
   const showAboutMeInvite = useMemo(() => {
     if (!authUser?.uid || hasAboutMeProfile || !canShowAboutMeInvite(aboutMeInvite, activeSessionId)) return false;
-    if (isCurrentSessionTyping || isChatDayPlanTutorialPending) return false;
+    // Never during the walkthrough: it has its own card on screen.
+    if (isCurrentSessionTyping || isChatDayPlanTutorialPending || isTutorialSessionActive(authUser.uid)) return false;
     if (weekPlanContextRef.current?.sessionId && weekPlanContextRef.current.sessionId === activeSessionId) return false;
     if (!lastChatMessage || lastChatMessage.role !== 'assistant' || lastChatMessage.isStreaming || lastChatMessage.card) return false;
     const replyKey = getReplyKey(lastChatMessage);

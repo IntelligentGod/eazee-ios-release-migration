@@ -303,6 +303,7 @@ type RecipeProgress = { completed: number; total: number; ratio: number };
 type SkillProgress = { completed: number; total: number; ratio: number };
 type TaskProgress = { completed: number; total: number; ratio: number; status: TaskGuide['status'] };
 type TodoTutorialRestoreStep =
+  | 'open-demo-task'
   | 'demo-task'
   | 'choice'
   | 'pick-video'
@@ -7306,6 +7307,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       },
       'Calendar',
       {
+        // "Tap back" while the goal is still open: skip closes it ("Tap Calendar" opens the tab).
+        onSkipStep: () => resetDetailsModalStateRef.current(),
         onSkipSegment: () => {
           void (async () => {
             const uid = user?.uid || '';
@@ -7407,6 +7410,10 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                 ? () => restoreTodoTutorialStepRef.current('goal-summary')
                 : undefined,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
+        // "Tap back" after the To Do part: skip closes the details for them.
+        onSkipStep: stage === 'handoff-back'
+          ? () => restoreTodoTutorialStepRef.current('goal-workspace')
+          : undefined,
         onNext: forwardStages.length > 0
           ? () => showGoalGuidanceTutorialStage(forwardStages[0], forwardStages.slice(1))
           : stage === 'timeframes'
@@ -7523,6 +7530,8 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         keepLocatedTargetCard: true,
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
+        // Skip opens the goal at its Actions plan step.
+        onSkipStep: () => restoreTodoTutorialStepRef.current('goal-actions'),
         restore: () => restoreTodoTutorialStepRef.current('goal-target'),
       }
     );
@@ -7541,6 +7550,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
       {
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
+        onSkipStep: () => restoreTodoTutorialStepRef.current('goal-timeframes'),
         restore: () => restoreTodoTutorialStepRef.current('goal-workspace'),
       }
     );
@@ -10497,6 +10507,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         keepLocatedTargetCard: true,
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void finishTodoGuidanceTutorialRef.current(false); },
+        onSkipStep: () => restoreTodoTutorialStepRef.current('open-demo-task'),
       }
     );
   }, [
@@ -13746,6 +13757,12 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
 
     showGuidanceTab('todo');
     switch (step) {
+      case 'open-demo-task':
+        // "skip" on "Tap the demo task": open it; its details show the next step.
+        ensureTodoPartActive();
+        todoGuidanceTutorialStageRef.current = null;
+        openThen(demoTodoId, () => {});
+        return;
       case 'demo-task':
         // The demo task's own effect points back at it once its details close.
         todoGuidanceTutorialStageRef.current = 'actions';

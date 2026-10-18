@@ -6,6 +6,8 @@ import { FlatList } from 'react-native';
 import { format } from 'date-fns';
 import { parseCalendarDateValue } from '@/utils/calendarDates';
 import { CHAT_DOMAIN_COLORS, CHAT_SURFACE_RADIUS } from '../constants';
+import { GuidedTarget } from '@/components/guidance/GuidanceProvider';
+import { getChatSavePlanGuidanceTargetId } from '@/lib/navigationHelp';
 import {
   buildDayPlanCardValue,
   deleteTimelineItem,
@@ -447,6 +449,11 @@ export function DayPlanCard({
             </Text>
           </TouchableOpacity>
           {saveableDraftCount > 0 || saved ? (
+            <GuidedTarget
+              targetId={getChatSavePlanGuidanceTargetId()}
+              label="Save plan"
+              style={{ flex: 1 }}
+            >
             <TouchableOpacity
               activeOpacity={0.86}
               disabled={!canSave}
@@ -472,6 +479,7 @@ export function DayPlanCard({
                 {isSaving ? 'Saving...' : saved ? 'Saved' : 'Save plan'}
               </Text>
             </TouchableOpacity>
+            </GuidedTarget>
           ) : null}
         </View>
 

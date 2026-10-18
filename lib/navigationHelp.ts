@@ -280,6 +280,8 @@ export const getChatEazeeButtonGuidanceTargetId = () => 'chat:eazee-button';
 export const getChatAiBarGuidanceTargetId = () => 'chat:ai-bar';
 
 export const getChatPlanDayComposerGuidanceTargetId = () => 'chat:plan-day-composer';
+/** The Save plan button on the day plan Eazee suggests in the walkthrough. */
+export const getChatSavePlanGuidanceTargetId = () => 'chat:save-plan';
 
 export const getChatWishlistMessageGuidanceTargetId = () => 'chat:wishlist-message';
 

@@ -47,7 +47,9 @@ export const CHAT_TUTORIAL_EAZEE_BUTTON_MESSAGE =
 export const CHAT_TUTORIAL_AI_BAR_MESSAGE =
   'This is where you type to Eazee. You can use either this bar or the Eazee button to send messages.';
 export const CHAT_DAY_PLAN_TUTORIAL_MESSAGE =
-  'Now plan your day. Type your events, tasks, and meetings. Example: 9am standup, lunch with Sara, gym at 6.';
+  'Now plan your day. Type your events, tasks, and meetings, then tap send. Example: 9am standup, lunch with Sara, gym at 6.';
+export const CHAT_DAY_PLAN_SAVE_TUTORIAL_MESSAGE =
+  "Here's your plan. Check the times, then tap Save plan to add it to your day.";
 export const TODO_TUTORIAL_HANDOFF_MESSAGE =
   "Great, your plan is saved. Next, let's head to Todo and see how Eazee can help with a task.";
 export const TODO_TUTORIAL_AI_GUIDANCE_MESSAGE =
@@ -55,7 +57,7 @@ export const TODO_TUTORIAL_AI_GUIDANCE_MESSAGE =
 export const TODO_TUTORIAL_VIDEO_GUIDANCE_MESSAGE =
   'Video Guidance finds helpful videos for the task. Pick one, and Eazee turns it into easier steps with timestamps.';
 export const TODO_TUTORIAL_CHOOSE_GUIDANCE_MESSAGE =
-  'Choose either option.';
+  'Choose AI Guidance or Video Guidance to plan this task.';
 export const TODO_TUTORIAL_PICK_VIDEO_MESSAGE =
   'Pick one video. Eazee will turn it into steps with timestamps.';
 export const TODO_TUTORIAL_ACCEPT_PLAN_MESSAGE =
