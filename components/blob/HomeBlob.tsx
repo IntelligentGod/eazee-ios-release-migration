@@ -789,6 +789,27 @@ function applyBlobAppearanceToMaterial(
   target.needsUpdate = true;
 }
 
+/**
+ * What the Droplet keeps across a rebuild of its 3D scene. On Android the drawing surface is
+ * destroyed while Home is hidden, so the scene is rebuilt when Home comes back; restoring this
+ * lets the Droplet carry on where it was instead of restarting its animation and growth.
+ */
+export type BlobPersistedState = {
+  animationTime: number;
+  smoothT: number;
+  visual: {
+    smoothness: number;
+    lobes: Record<string, number>;
+    lobeStrengths: Record<LifeAreaLobeKey, number>;
+    rippleAmp: number;
+    rippleSpeed: number;
+    suppressLobes: number;
+  };
+  morph: DropMorphState;
+  fluidSizeAvg: number;
+  fluidSizeSamples: number;
+};
+
 export function BlobMesh({
   mood,
   areas,
@@ -816,6 +837,7 @@ export function BlobMesh({
   onFps,
   onFirstVisualReady,
   visualVisible = true,
+  persistRef,
   appearancePresetId = DEFAULT_BLOB_APPEARANCE_ID,
   fluid = true,
 }: {
@@ -863,6 +885,8 @@ export function BlobMesh({
   onFirstVisualReady?: () => void;
   /** Keeps WebGL meshes hidden until the RN face/body reveal is allowed. */
   visualVisible?: boolean;
+  /** Survives rebuilds of the 3D scene; see {@link BlobPersistedState}. */
+  persistRef?: React.MutableRefObject<BlobPersistedState | null>;
   /** Surface + key-light preset from `@/src/blob/blobAppearancePresets`. */
   appearancePresetId?: BlobAppearancePresetId;
 } & Partial<BlobMeshVisualProps>) {
@@ -882,6 +906,7 @@ export function BlobMesh({
   // Fluid Droplet size hold: the size it settled at, and how many updates went into it.
   const fluidSizeAvgRef = useRef(0);
   const fluidSizeSamplesRef = useRef(0);
+  const restoredRef = useRef(false);
   const smoothedVisualRef = useRef({
     smoothness: DEFAULT_VISUAL.smoothness,
     lobes: { ...DEFAULT_VISUAL.lobes },
@@ -892,6 +917,22 @@ export function BlobMesh({
     rippleSpeed: DEFAULT_VISUAL.rippleSpeed,
     suppressLobes: 0,
   });
+  if (!restoredRef.current) {
+    restoredRef.current = true;
+    const saved = persistRef?.current;
+    if (saved) {
+      animationTimeRef.current = saved.animationTime;
+      smoothTRef.current = saved.smoothT;
+      smoothedVisualRef.current = {
+        ...saved.visual,
+        lobes: { ...saved.visual.lobes } as typeof smoothedVisualRef.current.lobes,
+        lobeStrengths: { ...saved.visual.lobeStrengths },
+      };
+      morphRef.current = saved.morph;
+      fluidSizeAvgRef.current = saved.fluidSizeAvg;
+      fluidSizeSamplesRef.current = saved.fluidSizeSamples;
+    }
+  }
   /** Uniform refs filled in MeshPhysicalMaterial.onBeforeCompile — lighting-only ripple (no geometry move). */
   const blobRippleUniformsRef = useRef<{
     uRippleTime?: { value: number };
@@ -914,6 +955,9 @@ export function BlobMesh({
   onFirstVisualReadyRef.current = onFirstVisualReady;
   const environmentReadyRef = useRef(false);
   const firstMeshUpdateReadyRef = useRef(false);
+  // The Droplet stays hidden until its reflection and first shape exist, so a rebuilt scene
+  // never shows a black (unlit) drop for a moment.
+  const [sceneReady, setSceneReady] = useState(false);
   const firstVisualReadyReportedRef = useRef(false);
   const { scene, gl, camera } = useThree();
 
@@ -960,6 +1004,7 @@ export function BlobMesh({
       if (firstMeshUpdateReadyRef.current && !firstVisualReadyReportedRef.current) {
         firstVisualReadyReportedRef.current = true;
         onFirstVisualReadyRef.current?.();
+          setSceneReady(true);
       }
     };
     if (pendingEnvironmentLoads === 0) {
@@ -967,6 +1012,7 @@ export function BlobMesh({
       if (firstMeshUpdateReadyRef.current && !firstVisualReadyReportedRef.current) {
         firstVisualReadyReportedRef.current = true;
         onFirstVisualReadyRef.current?.();
+          setSceneReady(true);
       }
     }
     if (BLOB_BAKED_ROOM_ENVIRONMENT) (async () => {
@@ -1313,6 +1359,16 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
     smoothTRef.current += (t - smoothTRef.current) * blend;
     const tSmooth = smoothTRef.current;
     const tSlow = tSmooth * MOTION_SPEED;
+    if (persistRef) {
+      persistRef.current = {
+        animationTime: t,
+        smoothT: tSmooth,
+        visual: smoothedVisualRef.current,
+        morph: morphRef.current,
+        fluidSizeAvg: fluidSizeAvgRef.current,
+        fluidSizeSamples: fluidSizeSamplesRef.current,
+      };
+    }
 
     if (
       debugHeartResetNonce !== undefined &&
@@ -1711,6 +1767,7 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
         if (environmentReadyRef.current && !firstVisualReadyReportedRef.current) {
           firstVisualReadyReportedRef.current = true;
           onFirstVisualReadyRef.current?.();
+          setSceneReady(true);
         }
       }
       const perfUpdateEnd = (globalThis.performance ?? Date).now();
@@ -1805,7 +1862,7 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
     <>
       <PerspectiveCamera makeDefault position={[0, 0, 4]} fov={75} />
 
-      <group visible={visualVisible}>
+      <group visible={visualVisible && sceneReady}>
         {showHeroCape && <HeroCapeMesh breathScale={breathScaleOut} />}
         {showThrone && <ThroneMesh breathScale={breathScaleOut} />}
 
@@ -1985,6 +2042,9 @@ export default function HomeBlob({
     [clearLongPressTimer]
   );
 
+  // Keeps the Droplet's state while Android rebuilds its 3D scene (see BlobPersistedState).
+  const blobPersistRef = useRef<BlobPersistedState | null>(null);
+
   const blobViewHeight = blobMaxSize ? BLOB_VIEW_HEIGHT_MAX : BLOB_VIEW_HEIGHT;
 
   return (
@@ -2037,6 +2097,7 @@ export default function HomeBlob({
               onMorphDebugFrame={onMorphDebugFrame}
               onFirstVisualReady={handleBlobFirstVisualReady}
               visualVisible={blobVisualReady}
+              persistRef={blobPersistRef}
               showHeroCape={faceMoods.includes('cape')}
               showCrown2={faceMoods.includes('crown2')}
               showThrone={showThrone}
