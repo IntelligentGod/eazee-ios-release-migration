@@ -130,7 +130,6 @@ type GuidanceSession = {
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
-  onSkipStep?: () => void;
   completeAfterMs?: number;
   autoNextAfterMs?: number;
   hideCardAfterMs?: number;
@@ -143,12 +142,6 @@ type GuidanceStartOptions = {
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
-  /**
-   * Tutorial "skip" on a step that waits for the user to do something (no next): moves on
-   * by exactly one step, doing what the step asked for when that is what the next step needs.
-   * "Tap X in the bottom bar" steps don't use it: skip always opens that tab.
-   */
-  onSkipStep?: () => void;
   /**
    * Tutorial "back": puts the screen back the way this step needs it (tab, open panels,
    * choices), then shows this step again. Without it, back only re-shows the card.
@@ -1081,7 +1074,6 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
       onBack,
       onNext: options?.onNext,
       onSkipSegment: options?.onSkipSegment,
-      onSkipStep: options?.onSkipStep,
       completeAfterMs: options?.completeAfterMs,
       autoNextAfterMs: options?.autoNextAfterMs,
       hideCardAfterMs: options?.hideCardAfterMs,
@@ -1110,17 +1102,6 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
     cancelGuidance();
     handleSkipSegment?.();
   }, [cancelGuidance, session]);
-
-  // "skip" (one step) where the step has no next: the step's own skip, or for a
-  // "Tap X in the bottom bar" step, opening that tab.
-  const visibleTabTarget = visibleStep?.targetId?.startsWith('tab:') ? visibleStep.targetId.slice(4) : null;
-  const skipGuidanceStepFromOverlay = useMemo(() => {
-    if (!session?.onSkipSegment || session.onNext) return undefined;
-    if (visibleTabTarget && visibleTabTarget in GUIDANCE_TAB_ROUTES) {
-      return () => showGuidanceTab(visibleTabTarget as GuidanceTab);
-    }
-    return session.onSkipStep;
-  }, [session, visibleTabTarget]);
 
   const registerTarget = useCallback((target: RegisteredTarget) => {
     registryRef.current.set(target.id, target);
@@ -1255,7 +1236,6 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
         onBack={session?.onBack}
         onNext={session?.onNext}
         onSkipSegment={session?.onSkipSegment ? skipGuidanceSegmentFromOverlay : undefined}
-        onSkipStep={skipGuidanceStepFromOverlay}
         showNextButton
         useTutorialCardPlacement={!!session?.useTutorialCardPlacement}
       />
@@ -1489,7 +1469,6 @@ function GuidanceOverlay({
   onBack,
   onNext,
   onSkipSegment,
-  onSkipStep,
   usesLocalHighlight,
   hideInstructionCard,
   showNextButton,
@@ -1505,7 +1484,6 @@ function GuidanceOverlay({
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
-  onSkipStep?: () => void;
   showNextButton: boolean;
   useTutorialCardPlacement: boolean;
 }) {
@@ -1710,14 +1688,13 @@ function GuidanceOverlay({
                     <Pressable onPress={onSkipSegment} style={styles.tutorialPill} hitSlop={8}>
                       <Text style={styles.tutorialPillText}>skip all</Text>
                     </Pressable>
-                    {/* A step that waits for the user offers "skip" (one step) instead of next. */}
                     <Pressable
-                      disabled={!onNext && !onSkipStep}
-                      onPress={onNext ?? onSkipStep}
-                      style={[styles.tutorialPill, styles.tutorialPillPrimary, !onNext && !onSkipStep && styles.instructionButtonDisabled]}
+                      disabled={!onNext}
+                      onPress={onNext}
+                      style={[styles.tutorialPill, styles.tutorialPillPrimary, !onNext && styles.instructionButtonDisabled]}
                       hitSlop={8}
                     >
-                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>{onNext || !onSkipStep ? 'next' : 'skip'}</Text>
+                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>next</Text>
                     </Pressable>
                   </View>
                 </>

@@ -530,8 +530,6 @@ const CalendarScreen: React.FC = () => {
         onNext: hasMadeCalendarTutorialEventRef.current
           ? () => { void showCalendarTutorialEventCreated(); }
           : undefined,
-        // "skip" moves on to the next step (Home) without making an event.
-        onSkipStep: () => { void showCalendarTutorialEventCreated(); },
         restore: () => restoreCalendarTutorialCreateRef.current(),
       }
     );
@@ -4878,7 +4876,7 @@ const CalendarScreen: React.FC = () => {
 
   const isCalendarTutorialCreating = isCalendarTutorialPending && calendarTutorialStage === 'waiting-event';
   // The walkthrough banners shown while the event is being made have the same back / next /
-  // skip all as the walkthrough card. Before an event is made, next reads "skip".
+  // skip all as the walkthrough card. Next only moves on once an event is made.
   const leaveCalendarTutorialHint = () => {
     Keyboard.dismiss();
     if (createSheetIndex !== -1) closeCreateSheet();
@@ -4909,19 +4907,21 @@ const CalendarScreen: React.FC = () => {
         >
           <Text style={styles.tutorialHintActionText}>skip all</Text>
         </Pressable>
-        {/* next once an event is made; before that, skip moves on without one. */}
         <Pressable
           accessibilityRole="button"
           hitSlop={8}
+          disabled={!hasMadeCalendarTutorialEventRef.current}
           onPress={() => {
             leaveCalendarTutorialHint();
             void showCalendarTutorialEventCreated();
           }}
-          style={[styles.tutorialHintAction, styles.tutorialHintActionPrimary]}
+          style={[
+            styles.tutorialHintAction,
+            styles.tutorialHintActionPrimary,
+            !hasMadeCalendarTutorialEventRef.current && styles.tutorialHintActionDisabled,
+          ]}
         >
-          <Text style={[styles.tutorialHintActionText, styles.tutorialHintActionPrimaryText]}>
-            {hasMadeCalendarTutorialEventRef.current ? 'next' : 'skip'}
-          </Text>
+          <Text style={[styles.tutorialHintActionText, styles.tutorialHintActionPrimaryText]}>next</Text>
         </Pressable>
       </View>
     </View>
@@ -5451,6 +5451,9 @@ const styles = StyleSheet.create({
   },
   tutorialHintActionPrimaryText: {
     color: '#04403A',
+  },
+  tutorialHintActionDisabled: {
+    opacity: 0.35,
   },
   tutorialHintFloating: {
     position: 'absolute',

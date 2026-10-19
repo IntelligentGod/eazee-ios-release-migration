@@ -2307,8 +2307,6 @@ export default function ChatScreen() {
       'Save plan',
       {
         onSkipSegment: () => { skipChatDayPlanTutorialRef.current(); },
-        // Skipping saving the plan moves on to the To Do part, the next step.
-        onSkipStep: () => { skipChatDayPlanTutorialRef.current(); },
         onBack: () => showChatDayPlanTutorialStage('plan-day'),
       }
     );
@@ -2989,13 +2987,6 @@ export default function ChatScreen() {
             useTutorialCardPlacement: true,
             onSkipSegment: () => {
               void skipTodoAndGoalTutorialsToCalendar();
-            },
-            // "skip": open the demo task for them; its details show the next step.
-            onSkipStep: () => {
-              router.navigate({
-                pathname: '/(tabs)/todo',
-                params: { openTodoId: demoTodoId, openTodoNonce: `tutorial-skip-${Date.now()}` },
-              });
             },
           }
         );
