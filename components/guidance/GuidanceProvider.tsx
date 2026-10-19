@@ -1547,6 +1547,7 @@ function GuidanceOverlay({
   const animatedCardTop = useAnimatedCardTop(!!step, cardTop);
 
   if (!step) return null;
+  const stepNext = isTabTarget ? undefined : onNext;
   const isSmallIconTarget =
     isTabTarget ||
     step.targetId === getHomeSettingsGuidanceTargetId() ||
@@ -1695,13 +1696,15 @@ function GuidanceOverlay({
                     <Pressable onPress={onSkipSegment} style={styles.tutorialPill} hitSlop={8}>
                       <Text style={styles.tutorialPillText}>skip all</Text>
                     </Pressable>
+                    {/* "Tap X in the bottom bar" waits for that tap: next is greyed out there,
+                        even when the step it leads to has its own next or skip. */}
                     <Pressable
-                      disabled={!onNext}
-                      onPress={onNext}
-                      style={[styles.tutorialPill, styles.tutorialPillPrimary, !onNext && styles.instructionButtonDisabled]}
+                      disabled={!stepNext}
+                      onPress={stepNext}
+                      style={[styles.tutorialPill, styles.tutorialPillPrimary, !stepNext && styles.instructionButtonDisabled]}
                       hitSlop={8}
                     >
-                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>{nextLabel}</Text>
+                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>{stepNext ? nextLabel : 'next'}</Text>
                     </Pressable>
                   </View>
                 </>

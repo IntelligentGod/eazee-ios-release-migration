@@ -5850,7 +5850,9 @@ export default function ChatScreen() {
     const replyKey = getReplyKey(lastChatMessage);
     if (rememberSuggestions[replyKey] || preferenceQuestions[replyKey]) return false;
     const extras = parseAssistantMessageExtras(lastChatMessage.content);
-    if (extras.options.length || extras.remember || extras.tasks.length || extras.goal || !extras.text || extras.text.trim().endsWith('?')) return false;
+    // Waits while Eazee is asking the user something; suggestion buttons and offered tasks
+    // come with almost every answer, so they don't count as an unfinished task.
+    if (extras.remember || !extras.text || extras.text.trim().endsWith('?')) return false;
     const helpfulReplies = chatMessages.filter((message) => message.role === 'assistant'
       && !message.isStreaming
       && (!!message.card || !!parseAssistantMessageExtras(message.content).text)).length;
@@ -5874,7 +5876,9 @@ export default function ChatScreen() {
     setAboutMeInvite(next);
     void writeAboutMeInviteState(uid, next);
     trackAboutMeEvent('invite_shown', { entry: 'chat' });
-  }, [aboutMeInvite, activeSessionId, authUser?.uid, showAboutMeInvite]);
+    // It sits below the last reply, so bring it into view.
+    setTimeout(() => queueScrollToBottom(true), 150);
+  }, [aboutMeInvite, activeSessionId, authUser?.uid, queueScrollToBottom, showAboutMeInvite]);
   const answerAboutMeInvite = useCallback((accepted: boolean) => {
     const uid = authUser?.uid;
     if (!uid) return;
