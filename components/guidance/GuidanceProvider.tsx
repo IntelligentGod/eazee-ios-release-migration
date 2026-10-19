@@ -130,6 +130,7 @@ type GuidanceSession = {
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
+  nextLabel?: string;
   completeAfterMs?: number;
   autoNextAfterMs?: number;
   hideCardAfterMs?: number;
@@ -142,6 +143,8 @@ type GuidanceStartOptions = {
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
+  /** The tutorial card's forward button text (default "next"), e.g. "skip" on a step that waits for the user. */
+  nextLabel?: string;
   /**
    * Tutorial "back": puts the screen back the way this step needs it (tab, open panels,
    * choices), then shows this step again. Without it, back only re-shows the card.
@@ -1074,6 +1077,7 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
       onBack,
       onNext: options?.onNext,
       onSkipSegment: options?.onSkipSegment,
+      nextLabel: options?.nextLabel,
       completeAfterMs: options?.completeAfterMs,
       autoNextAfterMs: options?.autoNextAfterMs,
       hideCardAfterMs: options?.hideCardAfterMs,
@@ -1236,6 +1240,7 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
         onBack={session?.onBack}
         onNext={session?.onNext}
         onSkipSegment={session?.onSkipSegment ? skipGuidanceSegmentFromOverlay : undefined}
+        nextLabel={session?.nextLabel}
         showNextButton
         useTutorialCardPlacement={!!session?.useTutorialCardPlacement}
       />
@@ -1469,6 +1474,7 @@ function GuidanceOverlay({
   onBack,
   onNext,
   onSkipSegment,
+  nextLabel = 'next',
   usesLocalHighlight,
   hideInstructionCard,
   showNextButton,
@@ -1484,6 +1490,7 @@ function GuidanceOverlay({
   onBack?: () => void;
   onNext?: () => void;
   onSkipSegment?: () => void;
+  nextLabel?: string;
   showNextButton: boolean;
   useTutorialCardPlacement: boolean;
 }) {
@@ -1694,7 +1701,7 @@ function GuidanceOverlay({
                       style={[styles.tutorialPill, styles.tutorialPillPrimary, !onNext && styles.instructionButtonDisabled]}
                       hitSlop={8}
                     >
-                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>next</Text>
+                      <Text style={[styles.tutorialPillText, styles.tutorialPillPrimaryText]}>{nextLabel}</Text>
                     </Pressable>
                   </View>
                 </>

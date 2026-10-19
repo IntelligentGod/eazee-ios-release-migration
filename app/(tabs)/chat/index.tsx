@@ -2248,6 +2248,7 @@ export default function ChatScreen() {
           onSkipSegment: () => { skipChatDayPlanTutorialRef.current(); },
           // The last stage waits for a day plan; next moves on without one.
           onNext: nextStage ? () => startChatTutorialStage(nextStage) : () => { skipChatDayPlanTutorialRef.current(); },
+          nextLabel: nextStage ? undefined : 'skip',
           restore: () => {
             showGuidanceTab('chat');
             if (isChatDayPlanTutorialPendingRef.current) {
@@ -2307,6 +2308,9 @@ export default function ChatScreen() {
       'Save plan',
       {
         onSkipSegment: () => { skipChatDayPlanTutorialRef.current(); },
+        // Like the plan-your-day step: skip moves on to the To Do part without saving.
+        onNext: () => { skipChatDayPlanTutorialRef.current(); },
+        nextLabel: 'skip',
         onBack: () => showChatDayPlanTutorialStage('plan-day'),
       }
     );
@@ -2988,6 +2992,16 @@ export default function ChatScreen() {
             onSkipSegment: () => {
               void skipTodoAndGoalTutorialsToCalendar();
             },
+            // "skip": past the To Do part; the To Do screen then starts the Goals part.
+            onNext: () => {
+              showGuidanceTab('todo');
+              startGuidance(
+                { type: 'screen', route: '/(tabs)/todo', params: { todoAction: 'tutorial-skip-personal' } },
+                'Goals',
+                { onSkipSegment: () => { void skipTodoAndGoalTutorialsToCalendar(); } }
+              );
+            },
+            nextLabel: 'skip',
           }
         );
       }
@@ -3150,7 +3164,8 @@ export default function ChatScreen() {
   }, [startAssistantTyping, stopAssistantTyping]);
 
   const handleChatInputFocus = useCallback(() => {
-    hideWishlistTutorialPrompt();
+    // The wishlist step's card stays up while they type (sending closes it), like the
+    // plan-your-day step, so the instruction and example stay in view.
     const tutorialStage = chatDayPlanTutorialStageRef.current;
     if (isChatDayPlanTutorialPendingRef.current && tutorialStage === 'ai-bar') {
       advanceChatDayPlanTutorial('plan-day');
@@ -3179,7 +3194,7 @@ export default function ChatScreen() {
         queueScrollToBottom(false);
       }, 80);
     }
-  }, [advanceChatDayPlanTutorial, hideWishlistTutorialPrompt, lockBottomTemporarily, queuePendingAssistantReadAnchor, queueScrollToBottom]);
+  }, [advanceChatDayPlanTutorial, lockBottomTemporarily, queuePendingAssistantReadAnchor, queueScrollToBottom]);
 
   const appendVisibleChatMessages = useCallback((messages: ChatUIMessage[]) => {
     return appendMessagesToSession(activeSessionIdRef.current, messages, { showInVisibleChat: true });

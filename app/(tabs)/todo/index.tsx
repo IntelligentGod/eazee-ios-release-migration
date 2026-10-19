@@ -2729,23 +2729,27 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
             : stage === 'video'
               ? () => showTodoGuidanceTutorialStage('choice')
               : () => { void finishTodoGuidanceTutorialRef.current(false); },
+        // "Choose AI Guidance or Video Guidance": without choosing, this moves on to Goals.
+        nextLabel: stage === 'choice' && forwardStages.length === 0 ? 'skip' : undefined,
       }
     );
   }, [startGuidance]);
 
   useEffect(() => {
+    // A hand-off from AI Chat's "skip" on the demo task: it never shows a card of its own.
+    // Not tied to the To Do part still being pending, so a part already finished (or not yet
+    // loaded on this screen) can't leave the hand-off stuck on screen.
     if (
       !isFocused ||
       activeTarget?.type !== 'screen' ||
-      activeTarget.params?.todoAction !== 'tutorial-skip-personal' ||
-      !isTodoGuidanceTutorialPending
+      activeTarget.params?.todoAction !== 'tutorial-skip-personal'
     ) {
       return;
     }
 
     cancelGuidance();
     void finishTodoGuidanceTutorialRef.current(false);
-  }, [activeTarget, cancelGuidance, isFocused, isTodoGuidanceTutorialPending]);
+  }, [activeTarget, cancelGuidance, isFocused]);
 
   useEffect(() => {
     let isActive = true;
@@ -7523,10 +7527,16 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         keepLocatedTargetCard: true,
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void skipGoalGuidanceTutorialToCalendar(); },
+        // "skip": past the Goals part, on to Calendar.
+        onNext: () => {
+          cancelGuidance();
+          void skipGoalGuidanceTutorialToCalendar();
+        },
+        nextLabel: 'skip',
         restore: () => restoreTodoTutorialStepRef.current('goal-target'),
       }
     );
-  }, [skipGoalGuidanceTutorialToCalendar, startGuidance]);
+  }, [cancelGuidance, skipGoalGuidanceTutorialToCalendar, startGuidance]);
   startGoalTutorialTargetRef.current = startGoalTutorialTarget;
 
   const showGoalWorkspaceSwipeGuidance = useCallback(() => {
@@ -10497,9 +10507,16 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         keepLocatedTargetCard: true,
         useTutorialCardPlacement: true,
         onSkipSegment: () => { void finishTodoGuidanceTutorialRef.current(false); },
+        // "skip": past the To Do part, on to Goals.
+        onNext: () => {
+          cancelGuidance();
+          void finishTodoGuidanceTutorialRef.current(false);
+        },
+        nextLabel: 'skip',
       }
     );
   }, [
+    cancelGuidance,
     isDetailsModalVisible,
     isFocused,
     isTodoGuidanceTutorialPending,
