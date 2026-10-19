@@ -2692,12 +2692,8 @@ export default function ChatScreen() {
       .filter((card) => card?.type === 'dayPlan' && card.saved !== true && card.cancelled !== true)
       .map((card) => String(card.draftId || ''))
   ), [chatMessages]);
-  // Fix my life and normal AI chats each keep their own history.
-  const isFixMyLifeChat = chatMessages.find((message) => message.role === 'user')?.content?.trim() === FIX_MY_LIFE_PROMPT;
-  const historySessions = useMemo(
-    () => chatSessions.filter((session) => session.isFixMyLife === isFixMyLifeChat),
-    [chatSessions, isFixMyLifeChat]
-  );
+  // The chat history always lists every chat, Fix my life ones included.
+  const historySessions = chatSessions;
   const visibleChatTitle =
     (activeChatSession?.titleGeneratedAt || activeChatSession?.titleManuallySet) &&
     activeChatSession.title &&
@@ -6415,7 +6411,7 @@ export default function ChatScreen() {
         />
         <ChatHistoryModal
           visible={isHistoryModalVisible}
-          title={isFixMyLifeChat ? 'Fix my life chats' : 'Chats'}
+          title="Chats"
           sessions={historySessions}
           activeSessionId={activeSessionId}
           showSummaries={isSummaryTestMode}

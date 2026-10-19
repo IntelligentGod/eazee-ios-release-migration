@@ -1677,22 +1677,24 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
             for (let i = 0; i < layer; i += 1) if (columnMax[i] > iso) outline += 1;
             return Math.sqrt(Math.pow(volume, 2 / 3) * outline);
           };
+          // The first updates measure the drop at the usual surface to set its size; the held
+          // size applies from the very first frame, so the drop never visibly shrinks into it.
+          const isFirstUpdate = fluidSizeSamplesRef.current === 0;
           if (fluidSizeSamplesRef.current < FLUID_SIZE_SETTLE_UPDATES) {
             fluidSizeSamplesRef.current += 1;
             fluidSizeAvgRef.current += (countAbove(ISO) - fluidSizeAvgRef.current) / fluidSizeSamplesRef.current;
-            mc.isolation = ISO;
-          } else {
-            const target = fluidSizeAvgRef.current * FLUID_VOLUME_SHARE;
-            let low = ISO * 0.5;
-            let high = ISO * 2;
-            for (let step = 0; step < 12; step += 1) {
-              const mid = (low + high) / 2;
-              if (countAbove(mid) > target) low = mid;
-              else high = mid;
-            }
-            // Eased, so the surface never jumps between updates.
-            mc.isolation += ((low + high) / 2 - mc.isolation) * 0.4;
           }
+          const target = fluidSizeAvgRef.current * FLUID_VOLUME_SHARE;
+          let low = ISO * 0.5;
+          let high = ISO * 2;
+          for (let step = 0; step < 12; step += 1) {
+            const mid = (low + high) / 2;
+            if (countAbove(mid) > target) low = mid;
+            else high = mid;
+          }
+          // Eased, so the surface never jumps between updates.
+          const solved = (low + high) / 2;
+          mc.isolation = isFirstUpdate ? solved : mc.isolation + (solved - mc.isolation) * 0.4;
         } else {
           mc.isolation += (ISO - mc.isolation) * 0.4;
         }
