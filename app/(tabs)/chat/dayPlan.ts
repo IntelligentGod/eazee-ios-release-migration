@@ -156,14 +156,29 @@ const applyTime = (item: DayPlanTimelineItem, start: Date, timeSource: DayPlanTi
   };
 };
 
+/**
+ * The earliest time Eazee may put something on this day: the start of the day, or for
+ * today, now (rounded up to the next slot), so a plan never uses times already past.
+ */
+export const getEarliestPlanTime = (date: string, now = new Date()) => {
+  const { start: dayStart } = getDayBounds(date);
+  const isToday = dayStart.getFullYear() === now.getFullYear()
+    && dayStart.getMonth() === now.getMonth()
+    && dayStart.getDate() === now.getDate();
+  if (!isToday) return dayStart;
+  const nextSlot = roundUpToSlot(now);
+  return nextSlot > dayStart ? nextSlot : dayStart;
+};
+
 export const replanTimelineItems = (
   items: DayPlanTimelineItem[],
   date: string,
-  options?: { movingId?: string; assignUntimedTasks?: boolean; compactAiTimes?: boolean }
+  options?: { movingId?: string; assignUntimedTasks?: boolean; compactAiTimes?: boolean; now?: Date }
 ) => {
-  const { start: dayStart, end: dayEnd } = getDayBounds(date);
+  const { end: dayEnd } = getDayBounds(date);
   const fixedRanges = getFixedRanges(items, options?.movingId);
-  let cursor = dayStart;
+  // Times the user set stay put; everything Eazee places starts from here.
+  let cursor = getEarliestPlanTime(date, options?.now);
   const nextItems: DayPlanTimelineItem[] = [];
 
   for (const item of items) {

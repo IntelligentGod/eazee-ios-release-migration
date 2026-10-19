@@ -263,3 +263,36 @@ describe('day plan timeline helpers', () => {
     expect(deleted.some((item) => item.id === 'untimed')).toBe(true);
   });
 });
+
+describe('planning today', () => {
+  // Local times, so the test reads the same in any time zone.
+  const at = (hour: number, minute = 0) => new Date(2026, 4, 13, hour, minute);
+  const untimed = (id: string, durationMinutes: number) =>
+    task({ id, title: id, dueDate: '2026-05-13', hasDueTime: false, timeSource: 'none', durationMinutes });
+
+  it('never places anything before now on today', () => {
+    const planned = replanTimelineItems(
+      [untimed('email', 15), untimed('gym', 60), task({ id: 'study', timeSource: 'ai', dueDate: at(9, 30).toISOString() })],
+      date,
+      { assignUntimedTasks: true, now: at(11, 9) }
+    );
+    const starts = planned.map((item) => getDayPlanItemStart(item)!);
+    expect(starts.every((start) => start >= at(11, 15))).toBe(true);
+    expect(starts[0]).toEqual(at(11, 15));
+  });
+
+  it('still starts other days at 9:00', () => {
+    const planned = replanTimelineItems([untimed('email', 15)], date, { assignUntimedTasks: true, now: new Date(2026, 4, 12, 11, 9) });
+    expect(getDayPlanItemStart(planned[0])).toEqual(at(9, 0));
+  });
+
+  it('keeps a time the user set, even if it has passed', () => {
+    const planned = replanTimelineItems(
+      [task({ id: 'standup', timeSource: 'user', dueDate: at(9, 0).toISOString(), durationMinutes: 15 }), untimed('email', 15)],
+      date,
+      { assignUntimedTasks: true, now: at(11, 9) }
+    );
+    expect(getDayPlanItemStart(planned.find((item) => item.id === 'standup')!)).toEqual(at(9, 0));
+    expect(getDayPlanItemStart(planned.find((item) => item.id === 'email')!)).toEqual(at(11, 15));
+  });
+});
