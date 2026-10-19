@@ -246,6 +246,15 @@ const LOBE_PULSE_AMP = (0.52 * 2) / 3;
 const LOBE_ROT_AMP_RAD = 0.1;
 /** Lobe chain length in MC space (not in volume mass estimate; avoids compensation hiding it). */
 const LOBE_RADIAL_SCALE = 1.08;
+/** Life graph arms (grid units from the centre): where they start, their length range, ball
+ * spacing, and the per-ball strength that sets their (fixed) thickness. */
+const LIFE_ARM_START = 0.1;
+const LIFE_ARM_MIN_LENGTH = 0.2;
+const LIFE_ARM_MAX_LENGTH = 0.6;
+const LIFE_ARM_SPACING = 0.012;
+const LIFE_ARM_THICKNESS = 0.2;
+/** A sharper falloff than the body's, so the arm stays thin instead of merging into a bump. */
+const LIFE_ARM_SUBTRACT = 22;
 /**
  * Extends lobe placement along each ray (tips stick out farther). Kept separate from
  * volume bookkeeping so MC scale compensation does not shrink the mesh when lobes get stronger.
@@ -258,7 +267,7 @@ const CORE_INNER_BUMP_MUL = 3.35;
 const DRIFT = 0.05;
 const MARGIN_GRID = 0.12;
 const HONEY_SAG = 0.06;
-const MOTION_SPEED = 0.3;
+const MOTION_SPEED = 3.3;
 const MOTION_SMOOTH_STEPS = 50;
 
 /**
@@ -1526,6 +1535,21 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
       if (lobeStrengths) effectiveLobe = sm.lobeStrengths[key];
 
       const lobeMassMul = 1;
+
+      // Life graph: each area is an arm of equal-strength balls in a row. A bigger value adds
+      // length (more balls toward the tip), never thickness, so arms grow longer, not fatter.
+      if (lobeStrengths) {
+        const value = THREE.MathUtils.clamp(effectiveLobe, 0, 1);
+        if (value <= 0.01) return;
+        const armLength = (LIFE_ARM_MIN_LENGTH + (LIFE_ARM_MAX_LENGTH - LIFE_ARM_MIN_LENGTH) * value)
+          * (1 + (lobePulseMul[i] - 1) * 0.15);
+        const ballStrength = baseLobeStrength * LIFE_ARM_THICKNESS * lobeFieldMul;
+        for (let d = LIFE_ARM_START; d <= LIFE_ARM_START + armLength + 1e-6; d += LIFE_ARM_SPACING) {
+          const [apx, apy, apz] = clampToGrid(0.5 + ax * d, 0.5 + ay * d, 0.5 + az * d);
+          mc.addBall(apx, apy, apz, ballStrength, LIFE_ARM_SUBTRACT);
+        }
+        return;
+      }
 
       const filament = 0;
       const merged = 0;
