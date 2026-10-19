@@ -2767,7 +2767,9 @@ export default function HomePage() {
                   heartTaskThreshold={HEART_TASK_THRESHOLD}
                   showDebugControls={__DEV__ && showBlobDebugPanel}
                   lobeStrengths={lifeGraph.lobeStrengths}
-                  faceVisible={lifeGraph.settings.faceVisible}
+                  faceVisible={lifeGraph.settings.lifeGraphEnabled && lifeGraph.settings.faceVisible}
+                  // Life graph on: the earlier droplet with its life-area lobes. Off: the fluid drop.
+                  fluid={!lifeGraph.settings.lifeGraphEnabled}
                   onLongPress={() => setIsLifeGraphSettingsOpen(true)}
                 />
               ) : null}

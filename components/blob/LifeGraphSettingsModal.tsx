@@ -238,13 +238,15 @@ function LifeGraphSettingsForm({
         </View>
         <View style={styles.dropletInfo}>
           <Text style={styles.dropletTitle}>Droplet Settings</Text>
-          <View style={styles.faceRow}>
+          {/* The face belongs to the life graph droplet: off (and greyed out) without it. */}
+          <View style={[styles.faceRow, !current.lifeGraphEnabled && styles.lifeGraphOff]}>
             <Text style={styles.faceLabel}>Face On/Off</Text>
             <Switch
-              value={current.faceVisible}
+              value={current.lifeGraphEnabled && current.faceVisible}
+              disabled={!current.lifeGraphEnabled}
               onValueChange={(faceVisible) => apply({ ...current, faceVisible })}
               trackColor={SWITCH_TRACK_COLORS}
-              thumbColor={current.faceVisible ? '#4D4A3B' : '#F6F2E3'}
+              thumbColor={current.lifeGraphEnabled && current.faceVisible ? '#4D4A3B' : '#F6F2E3'}
               accessibilityLabel="Show Droplet face"
             />
           </View>

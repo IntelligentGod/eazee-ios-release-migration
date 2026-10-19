@@ -692,12 +692,31 @@ const RIPPLE_TAP_REAL_SEC = 6.2;
 const SMOOTH_VISUAL_ALPHA_RATE = 6;
 
 const BLOB_VIEW_HEIGHT = 200;
-/** Fluid Droplet proportions (grid units of the marching-cubes field). */
-const FLUID_STRETCH = 0.22;
-const FLUID_SLIM = 0.08;
-const FLUID_TOP_OFFSET = 0.1;
-const FLUID_BASE_OFFSET = 0.045;
-const FLUID_WANDER = 0.05;
+/**
+ * Fluid Droplet: a free-form blob of liquid whose outline keeps turning into new shapes
+ * (lumpy, pointed, flat, knobbly). A small solid centre keeps it in one piece; several blobs of
+ * liquid roam inside on their own slow, never-repeating paths. Its size is held steady: the
+ * drop's size measure is kept at the amount it settled at (see the size hold before mc.update).
+ */
+const FLUID_CORE_SHARE = 0.28;
+/** The liquid is kept small enough to fit the drawing grid (else the drop is cut open at the
+ * front) and enlarged on screen by this much. */
+const FLUID_DISPLAY_SCALE = 1.12;
+/** The held size, as a share of the settled one: leaves room around the drop in its grid. */
+const FLUID_VOLUME_SHARE = 0.8;
+const FLUID_BLOB_WEIGHT = 0.8;
+const FLUID_DEPTH_REACH = 0.35;
+const FLUID_SPEED = 0.55;
+/** Each blob: how far it roams on each axis (grid units), its weight, and its own speeds/phases. */
+const FLUID_BLOBS = [
+  { reach: [0.21, 0.23, 0.11], weight: 0.5, speed: [0.31, 0.23, 0.27], phase: [0, 1.7, 0.6] },
+  { reach: [0.22, 0.19, 0.12], weight: 0.42, speed: [0.19, 0.37, 0.29], phase: [2.4, 0.3, 3.1] },
+  { reach: [0.18, 0.24, 0.1], weight: 0.38, speed: [0.41, 0.17, 0.33], phase: [4.2, 2.9, 1.4] },
+  { reach: [0.23, 0.17, 0.12], weight: 0.34, speed: [0.26, 0.29, 0.21], phase: [1.1, 4.6, 5.0] },
+  { reach: [0.16, 0.21, 0.12], weight: 0.3, speed: [0.35, 0.31, 0.39], phase: [5.5, 3.8, 2.2] },
+] as const;
+/** Updates averaged, as the drop forms, to fix the size it holds. */
+const FLUID_SIZE_SETTLE_UPDATES = 40;
 const BLOB_VIEW_HEIGHT_MAX = BLOB_VIEW_HEIGHT * 2;
 /**
  * Base `top` % for the face overlay (aligned to normal blob height). In max-size mode,
@@ -851,6 +870,9 @@ export function BlobMesh({
   const smoothTRef = useRef(0);
   const blobUpdateRef = useRef(0);
   const lastFieldBuildAtRef = useRef(-Infinity);
+  // Fluid Droplet size hold: the size it settled at, and how many updates went into it.
+  const fluidSizeAvgRef = useRef(0);
+  const fluidSizeSamplesRef = useRef(0);
   const smoothedVisualRef = useRef({
     smoothness: DEFAULT_VISUAL.smoothness,
     lobes: { ...DEFAULT_VISUAL.lobes },
@@ -1390,7 +1412,8 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
     const heartLocked = heartMorph >= HEART_LOCK;
     const heartHold = heartMorph * heartMorph;
     const breatheAmp = current.breatheAmp * BREATHE_VISUAL_AMP_MUL;
-    const breatheOsc = breathingEnabledRef.current
+    // The fluid drop keeps one size (only its shape moves), so it doesn't breathe.
+    const breatheOsc = breathingEnabledRef.current && !fluid
       ? Math.sin(t * BREATHE_RAD_PER_SEC) * breatheAmp
       : 0;
     const breathe = 1 + breatheOsc;
@@ -1404,13 +1427,10 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
 
     const scaleCompensate = 1 / (1 - 2 * MARGIN_GRID);
     const bodyScale = 2.025 * 0.6 * breatheForHeart * scaleCompensate * volumeCompensation;
-    if (fluid) {
-      // A drop is taller than it is wide; the heart morph keeps its own proportions.
-      const stretch = 1 - heartMorph;
-      mc.scale.set(bodyScale * (1 - FLUID_SLIM * stretch), bodyScale * (1 + FLUID_STRETCH * stretch), bodyScale * (1 - FLUID_SLIM * stretch));
-    } else {
-      mc.scale.setScalar(bodyScale);
-    }
+    // The fluid drop keeps one size: its shape comes from the liquid blobs moving inside it.
+    mc.scale.setScalar(fluid
+      ? bodyScale * THREE.MathUtils.lerp(FLUID_DISPLAY_SCALE, 1, heartMorph)
+      : bodyScale);
     mc.position.y = 0;
 
     const shouldRebuildField = t - lastFieldBuildAtRef.current >= BLOB_FIELD_UPDATE_INTERVAL_SEC;
@@ -1445,28 +1465,24 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
         0.5 + coreY * coreWobbleScale,
         0.5 + coreZ * coreWobbleScale
       );
-      mc.addBall(cpx, cpy, cpz, coreStrength, subtract);
+      // The fluid drop keeps only part of the round core, so its blobs shape the outline.
+      const coreShare = fluid ? FLUID_CORE_SHARE : 1;
+      mc.addBall(cpx, cpy, cpz, coreStrength * coreShare, subtract);
       const [ccx, ccy, ccz] = clampToGrid(0.5, 0.5, 0.5);
-      mc.addBall(ccx, ccy, ccz, strength * CORE_INNER_BUMP_MUL * blobWeight, subtract);
+      // The small centre ball stays full strength, so the middle never thins into a hole.
+      mc.addBall(ccx, ccy, ccz, strength * CORE_INNER_BUMP_MUL * blobWeight * (fluid ? 1.2 : 1), subtract);
 
       if (fluid) {
-        // A narrower top and a fuller base give the teardrop/egg outline; a small blob
-        // wandering inside makes the surface swell and settle slowly, like liquid.
         const fluidWeight = coreStrength * blobWeight;
-        const [ftx, fty, ftz] = clampToGrid(
-          0.5 + 0.012 * Math.sin(tSlow * 0.21),
-          0.5 + FLUID_TOP_OFFSET + 0.012 * Math.sin(tSlow * 0.17 + 1.3),
-          0.5 + 0.012 * Math.cos(tSlow * 0.19)
-        );
-        mc.addBall(ftx, fty, ftz, fluidWeight * 0.34, subtract);
-        const [fbx, fby, fbz] = clampToGrid(0.5, 0.5 - FLUID_BASE_OFFSET, 0.5);
-        mc.addBall(fbx, fby, fbz, fluidWeight * 0.42, subtract);
-        const [fwx, fwy, fwz] = clampToGrid(
-          0.5 + FLUID_WANDER * Math.cos(tSlow * 0.33),
-          0.5 + FLUID_WANDER * 0.8 * Math.sin(tSlow * 0.27 + 0.6),
-          0.5 + FLUID_WANDER * Math.sin(tSlow * 0.33)
-        );
-        mc.addBall(fwx, fwy, fwz, fluidWeight * 0.2, subtract);
+        const ft = tSmooth * FLUID_SPEED;
+        for (const blob of FLUID_BLOBS) {
+          const [bx, by, bz] = clampToGrid(
+            0.5 + blob.reach[0] * Math.sin(ft * blob.speed[0] + blob.phase[0]),
+            0.5 + blob.reach[1] * Math.sin(ft * blob.speed[1] + blob.phase[1]),
+            0.5 + blob.reach[2] * FLUID_DEPTH_REACH * Math.sin(ft * blob.speed[2] + blob.phase[2])
+          );
+          mc.addBall(bx, by, bz, fluidWeight * blob.weight * FLUID_BLOB_WEIGHT, subtract);
+        }
       }
 
     const baseLobeStrength = strength * 0.88 * 1.5 * blobWeight * LOBE_FIELD_SCALE;
@@ -1616,6 +1632,53 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
       // second O(RES³) pass — often slower than the rest of the frame combined.
       const perfBlurEnd = perfFieldEnd;
 
+      if (fluid) {
+        // Hold the drop's size by moving the surface threshold, so only the shape changes. The
+        // held measure mixes the space its liquid fills with the area of its outline facing the
+        // camera: volume alone lets a drop flattened toward the viewer look bigger, and outline
+        // area alone lets it grow deep enough to be cut open. The first updates set the amount.
+        const field = (mc as any).field as Float32Array | undefined;
+        const gridSize = (mc as any).size as number | undefined;
+        if (field && gridSize && heartMorph < 0.01) {
+          const layer = gridSize * gridSize;
+          const columnMax = new Float32Array(layer);
+          for (let i = 0; i < field.length; i += 1) {
+            const column = i % layer;
+            if (field[i] > columnMax[column]) columnMax[column] = field[i];
+          }
+          const countAbove = (iso: number) => {
+            let volume = 0;
+            for (let i = 0; i < field.length; i += 1) if (field[i] > iso) volume += 1;
+            let outline = 0;
+            for (let i = 0; i < layer; i += 1) if (columnMax[i] > iso) outline += 1;
+            return Math.sqrt(Math.pow(volume, 2 / 3) * outline);
+          };
+          if (fluidSizeSamplesRef.current < FLUID_SIZE_SETTLE_UPDATES) {
+            fluidSizeSamplesRef.current += 1;
+            fluidSizeAvgRef.current += (countAbove(ISO) - fluidSizeAvgRef.current) / fluidSizeSamplesRef.current;
+            mc.isolation = ISO;
+          } else {
+            const target = fluidSizeAvgRef.current * FLUID_VOLUME_SHARE;
+            let low = ISO * 0.5;
+            let high = ISO * 2;
+            for (let step = 0; step < 12; step += 1) {
+              const mid = (low + high) / 2;
+              if (countAbove(mid) > target) low = mid;
+              else high = mid;
+            }
+            // Eased, so the surface never jumps between updates.
+            mc.isolation += ((low + high) / 2 - mc.isolation) * 0.4;
+          }
+        } else {
+          mc.isolation += (ISO - mc.isolation) * 0.4;
+        }
+      } else if (mc.isolation !== ISO) {
+        // Back from the fluid drop (Life graph turned on): the usual surface, and a fresh size
+        // hold for the next time the fluid drop shows.
+        mc.isolation = ISO;
+        fluidSizeSamplesRef.current = 0;
+        fluidSizeAvgRef.current = 0;
+      }
       mc.update();
       if (!firstMeshUpdateReadyRef.current) {
         firstMeshUpdateReadyRef.current = true;

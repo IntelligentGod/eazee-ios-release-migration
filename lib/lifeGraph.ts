@@ -28,7 +28,8 @@ export const LIFE_GRAPH_MAX_WEEKLY_TARGET = 50;
 export const LIFE_GRAPH_MAX_NAME_LENGTH = 24;
 
 export const DEFAULT_LIFE_GRAPH_SETTINGS: LifeGraphSettings = {
-  faceVisible: true,
+  // The plain fluid droplet is the default look; the face can be turned on in its settings.
+  faceVisible: false,
   lifeGraphEnabled: false,
   nodes: [
     { id: 'health', enabled: true, name: 'Health', keywords: ['gym', 'workout', 'run', 'walk', 'doctor', 'meditate'], weeklyTarget: 5 },
