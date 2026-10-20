@@ -4,6 +4,15 @@ import { getToolHandler } from '.';
 import { presentTodoResult, presentCalendarResult, presentGoogleResult, presentGuidanceResult, presentAppNavigationResult } from './presenters';
 import { getLastDayPlan, removeCreatedCalendarItems, removeLastCalendarItems, setLastDayPlan, setLastCalendarItems, setLastQueryItems } from './memory';
 import type { ExecuteResult, ToolCall } from './types';
+import { countAiActionsDone, getAiActionCost } from './aiActionMeter';
+import {
+  AI_ACTIONS_LIMIT_ERROR,
+  AI_ACTIONS_LOW_THRESHOLD,
+  getAiActionsAllowance,
+  getRemainingAiActions,
+  releaseAiActions,
+  reserveAiActions,
+} from '@/lib/aiActions';
 
 type ExecuteToolDeps = {
   serverUrl: string;
@@ -40,7 +49,25 @@ export async function executeToolCall(
   let success = true;
   let result: any = null;
   let error: string | undefined = undefined;
+  // AI actions (lib/aiActions.ts): reserved before anything changes, settled after.
+  const actionCost = getAiActionCost(name, args);
+  let reservedActions = 0;
+  let skippedActions = 0;
+  const remainingBefore = getRemainingAiActions();
   try {
+    if (actionCost) {
+      reservedActions = await reserveAiActions(actionCost.count);
+      const canSplit = !!actionCost.trim || !!actionCost.countAfter;
+      if (reservedActions === 0 || (reservedActions < actionCost.count && !canSplit)) {
+        await releaseAiActions(reservedActions);
+        skippedActions = actionCost.count;
+        reservedActions = 0;
+        throw new Error(AI_ACTIONS_LIMIT_ERROR);
+      }
+      if (reservedActions < actionCost.count && actionCost.trim) {
+        skippedActions = actionCost.count - reservedActions;
+      }
+    }
     if (name === 'chat_rename') {
       const title = typeof args?.title === 'string' ? String(args.title).trim() : '';
       if (!title || !deps.renameChatTitle) {
@@ -55,13 +82,15 @@ export async function executeToolCall(
       } else {
         const handlerArgs = name === 'app_open_screen'
           ? { ...(args && typeof args === 'object' ? args : {}), requestText: deps.requestText || '' }
+          : skippedActions && actionCost?.trim
+          ? actionCost.trim(args, reservedActions)
           : args;
         result = await handler(handlerArgs);
       }
     }
   } catch (e: any) {
     success = false; error = String(e?.message || e || 'Tool execution failed');
-    if (name === 'save_day_plan' && error !== 'DAY_PLAN_TIME_REQUIRED') {
+    if (name === 'save_day_plan' && error !== 'DAY_PLAN_TIME_REQUIRED' && error !== AI_ACTIONS_LIMIT_ERROR) {
       setLastDayPlan(null);
     }
     if (name === 'calendar_get_details' && error === 'EVENT_NOT_FOUND') {
@@ -70,6 +99,28 @@ export async function executeToolCall(
       removeLastCalendarItems(staleItem);
       removeCreatedCalendarItems(staleItem);
     }
+  }
+
+  if (actionCost && error !== AI_ACTIONS_LIMIT_ERROR) {
+    // Only what actually happened counts: failed and skipped items are given back. Changes to
+    // "everything on a day" are counted once known.
+    const done = success ? countAiActionsDone(name, result) : 0;
+    if (done < reservedActions) await releaseAiActions(reservedActions - done);
+    else if (done > reservedActions) await reserveAiActions(done - reservedActions);
+  }
+  const allowance = getAiActionsAllowance();
+  const remainingAfter = getRemainingAiActions(allowance);
+  const limitReached = error === AI_ACTIONS_LIMIT_ERROR;
+  if (limitReached || skippedActions) {
+    // Tells Eazee what happened, so its reply matches.
+    result = {
+      ...(result && typeof result === 'object' ? result : {}),
+      aiActionsLimit: {
+        limit: allowance?.limit ?? null,
+        notDone: skippedActions,
+        note: 'The free daily AI action limit was reached, so these items were not done. The user can still chat as much as they like; Eazee Pro has unlimited AI actions.',
+      },
+    };
   }
 
   // Present results into chat-friendly messages/cards and optional navigation actions
@@ -203,7 +254,9 @@ export async function executeToolCall(
         messages = [{ role: 'assistant', content: 'Done.' }];
       }
     } else {
-      if (name === 'calendar_get_details' && error === 'EVENT_NOT_FOUND') {
+      if (limitReached) {
+        messages = [];
+      } else if (name === 'calendar_get_details' && error === 'EVENT_NOT_FOUND') {
         messages = [{ role: 'assistant', content: 'That event no longer exists.' }];
       } else if (name === 'save_day_plan' && error === 'DAY_PLAN_TIME_REQUIRED') {
         messages = [{ role: 'assistant', content: 'Set a time for every event before saving this plan.' }];
@@ -219,6 +272,19 @@ export async function executeToolCall(
     else if (name === 'calendar_get_details' && error === 'EVENT_NOT_FOUND') messages = [{ role: 'assistant', content: 'That event no longer exists.' }];
     else if (name === 'save_day_plan' && error === 'DAY_PLAN_TIME_REQUIRED') messages = [{ role: 'assistant', content: 'Set a time for every event before saving this plan.' }];
     else messages = [{ role: 'assistant', content: 'Something went wrong while I was doing that.' }];
+  }
+
+  // The limit card when the day's actions run out (or a request did not fit), and a quiet notice
+  // when only a couple are left.
+  if (actionCost && allowance?.limit != null) {
+    if (limitReached || skippedActions || (remainingAfter === 0 && remainingBefore !== 0)) {
+      messages = [...(messages || []), { role: 'assistant', content: '', card: { type: 'aiActionsLimit', limit: allowance.limit, notDone: skippedActions } }];
+    } else if (
+      remainingAfter !== null && remainingAfter > 0 && remainingAfter <= AI_ACTIONS_LOW_THRESHOLD
+      && (remainingBefore === null || remainingBefore > AI_ACTIONS_LOW_THRESHOLD)
+    ) {
+      messages = [...(messages || []), { role: 'assistant', content: '', card: { type: 'aiActionsNotice', remaining: remainingAfter, limit: allowance.limit } }];
+    }
   }
 
   return { success, messages, uiActions, error, result };

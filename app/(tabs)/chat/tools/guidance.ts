@@ -35,7 +35,10 @@ import { SERVER_URL } from '@/config/backend';
 import { readAiPersonalizationSettings } from '@/lib/aiPersonalization';
 import { getAiResponseErrorMessage } from '@/lib/aiAuth';
 import { getAiRequestHeaders as getFirebaseHeaders } from '@/lib/aiRequest';
-import { requestTodoClassification, type GuidancePath, type TodoClassification } from '@/lib/todoClassification';
+import { isClassificationNotOnPlanError, requestTodoClassification, type GuidancePath, type TodoClassification } from '@/lib/todoClassification';
+
+/** A goal on Free, where automatic classification is Pro only. */
+const UNCLASSIFIED_GOAL: TodoClassification = { kind: 'normal', confidence: 0, goalBehavior: null };
 import { isQuotaGoalBehavior, serializeGoalBehavior } from '@/lib/goalBehavior';
 import type { ToolHandler } from './todo';
 
@@ -167,12 +170,15 @@ const goal_create: ToolHandler = async (args: any) => {
       goalTimeframe: timeframe,
     });
   } catch (error: any) {
-    return {
-      created: 0,
-      createdItems: [],
-      error: 'CLASSIFICATION_FAILED',
-      message: String(error?.message || error || 'Could not classify this goal.'),
-    };
+    if (!isClassificationNotOnPlanError(error)) {
+      return {
+        created: 0,
+        createdItems: [],
+        error: 'CLASSIFICATION_FAILED',
+        message: String(error?.message || error || 'Could not classify this goal.'),
+      };
+    }
+    classification = UNCLASSIFIED_GOAL;
   }
 
   const guidancePath: GuidancePath | null =
@@ -228,12 +234,15 @@ const goal_create_with_guidance: ToolHandler = async (args: any) => {
       goalTimeframe: timeframe,
     });
   } catch (error: any) {
-    return {
-      created: 0,
-      createdItems: [],
-      error: 'CLASSIFICATION_FAILED',
-      message: String(error?.message || error || 'Could not classify this goal.'),
-    };
+    if (!isClassificationNotOnPlanError(error)) {
+      return {
+        created: 0,
+        createdItems: [],
+        error: 'CLASSIFICATION_FAILED',
+        message: String(error?.message || error || 'Could not classify this goal.'),
+      };
+    }
+    classification = UNCLASSIFIED_GOAL;
   }
 
   const effectiveGuidancePath: GuidancePath = isQuotaGoalBehavior(classification.goalBehavior) ? 'actions' : guidancePath;

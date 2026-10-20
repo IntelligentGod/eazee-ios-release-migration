@@ -43,22 +43,22 @@ describe('plan comparison table', () => {
   const rowFor = (title: string, limits = DEFAULT_SUBSCRIPTION_LIMITS) =>
     buildPlanComparisonRows(limits).find((row) => row.title === title)!;
 
-  it('shows the free limits the server reports', () => {
-    const limits = { ...DEFAULT_SUBSCRIPTION_LIMITS, free: { ...DEFAULT_SUBSCRIPTION_LIMITS.free, chatMessagesPerDay: 8, voiceMinutesPerDay: 3 } };
-    expect(rowFor('AI actions', limits).free).toEqual({ kind: 'text', label: '8 per day' });
-    expect(rowFor('Voice input', limits).free).toEqual({ kind: 'text', label: '3 min / day' });
-    expect(rowFor('AI actions', limits).pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
+  it('shows AI chat as unlimited and the AI actions the server reports', () => {
+    expect(rowFor('AI Chat').free).toEqual({ kind: 'text', label: 'Unlimited' });
+    expect(rowFor('AI actions').free).toEqual({ kind: 'text', label: '8 / day' });
+    expect(rowFor('AI actions').pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
+    const limits = { ...DEFAULT_SUBSCRIPTION_LIMITS, free: { ...DEFAULT_SUBSCRIPTION_LIMITS.free, aiActionsPerDay: 12 } };
+    expect(rowFor('AI actions', limits).free).toEqual({ kind: 'text', label: '12 / day' });
   });
 
-  it('shows guidance as Pro-only until an admin gives free users some', () => {
-    expect(rowFor('Goal & task guidance').free).toEqual({ kind: 'none' });
-    expect(rowFor('Goal & task guidance').pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
-    expect(rowFor('Recipe & skill generation, video lookup').pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
-    const limits = {
-      ...DEFAULT_SUBSCRIPTION_LIMITS,
-      free: { ...DEFAULT_SUBSCRIPTION_LIMITS.free, guidance: { ...DEFAULT_SUBSCRIPTION_LIMITS.free.guidance, goalGuidance: 2 } },
-    };
-    expect(rowFor('Goal & task guidance', limits).free).toEqual({ kind: 'text', label: 'Up to 2 / day' });
+  it('shows guidance, recipes and skills on both plans, and automatic planning as Pro only', () => {
+    for (const title of ['Goal & task guidance', 'Recipe & skill generation, video lookup']) {
+      expect(rowFor(title).free).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
+      expect(rowFor(title).pro).toEqual({ kind: 'text', label: 'Unlimited\n(fair use)' });
+    }
+    expect(rowFor('Automatic planning & todo classification').free).toEqual({ kind: 'none' });
+    expect(rowFor('Google Calendar sync').free).toEqual({ kind: 'check' });
+    expect(rowFor('Daily home suggestions').free).toEqual({ kind: 'text', label: '3 days / week' });
   });
 });
 
@@ -67,5 +67,14 @@ describe('parseSubscriptionLimits', () => {
     expect(parseSubscriptionLimits(DEFAULT_SUBSCRIPTION_LIMITS)).toEqual(DEFAULT_SUBSCRIPTION_LIMITS);
     expect(parseSubscriptionLimits({ free: DEFAULT_SUBSCRIPTION_LIMITS.free })).toBeNull();
     expect(parseSubscriptionLimits({ ...DEFAULT_SUBSCRIPTION_LIMITS, pro: { ...DEFAULT_SUBSCRIPTION_LIMITS.pro, chatMessagesPerDay: -1 } })).toBeNull();
+  });
+
+  it('gives limits saved before AI actions existed the default allowance', () => {
+    const { aiActionsPerDay: _free, ...oldFree } = DEFAULT_SUBSCRIPTION_LIMITS.free;
+    const { aiActionsPerDay: _pro, ...oldPro } = DEFAULT_SUBSCRIPTION_LIMITS.pro;
+    const parsed = parseSubscriptionLimits({ free: { ...oldFree, guidance: { goalGuidance: 0, taskGuidance: 0, recipeSkillGuide: 0, guidanceQuestions: 0 } }, pro: oldPro });
+    expect(parsed?.free.aiActionsPerDay).toBe(8);
+    expect(parsed?.pro.aiActionsPerDay).toBeNull();
+    expect(parsed?.free.guidance.goalGuidance).toBeNull();
   });
 });

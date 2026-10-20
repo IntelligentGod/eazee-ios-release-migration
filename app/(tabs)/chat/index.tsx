@@ -19,6 +19,8 @@ import { useIsFocused, useNavigation } from '@react-navigation/native';
 import Markdown, { MarkdownIt, renderRules } from 'react-native-markdown-display';
 import type { ASTNode, RenderRules } from 'react-native-markdown-display';
 import { TodoCard, CalendarListCard, CalendarDetailCard, DailyOverviewCard, DayPlanCard, NavigationShortcutCard, GoalQuotaScheduleCard, PlanLegendCard, RecipeTodoOfferCard, type RecipeTodoOfferCardValue } from './cards';
+import { AiActionsLimitCard, AiActionsNotice } from './cards/AiActionsCards';
+import { formatAiActionsRemaining, getAiActionsAllowance, getAiActionsLimitMessage, useAiActionsAllowance, withAiActions } from '@/lib/aiActions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFloatingTabBarInset } from '@/components/navigation/floatingTabBar';
 import AIInputBox from '@/components/AIInputBox';
@@ -855,7 +857,7 @@ function serializeTitleMessage(message: ChatUIMessage) {
   if (content) return content;
   const cardType = typeof message.card?.type === 'string' ? message.card.type : '';
   // A plan card says nothing about the topic, and would end up as the title.
-  if (cardType === 'dayPlan' || cardType === 'weekPlanSaveAll' || cardType === 'planLegend') return '';
+  if (cardType === 'dayPlan' || cardType === 'weekPlanSaveAll' || cardType === 'planLegend' || cardType === 'aiActionsLimit' || cardType === 'aiActionsNotice') return '';
   return cardType ? `${cardType} card` : '';
 }
 
@@ -1650,6 +1652,14 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
             />
           </View>
         )}
+        {message.card?.type === 'aiActionsLimit' && (
+          <View style={{ marginTop: message.content ? 8 : 0 }}>
+            <AiActionsLimitCard limit={message.card.limit} notDone={message.card.notDone} router={router} />
+          </View>
+        )}
+        {message.card?.type === 'aiActionsNotice' && (
+          <AiActionsNotice remaining={message.card.remaining} limit={message.card.limit} />
+        )}
         {message.card?.type === 'planLegend' && (
           <View style={{ marginBottom: 4 }}>
             <PlanLegendCard kinds={Array.isArray(message.card.kinds) ? message.card.kinds : []} />
@@ -1931,6 +1941,8 @@ export default function ChatScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { user: authUser } = useAuthSession();
+  const aiActionsAllowance = useAiActionsAllowance(authUser?.uid);
+  const aiActionsRemainingText = formatAiActionsRemaining(aiActionsAllowance);
   const { activeTarget, cancelGuidance, startGuidance } = useGuidance();
   const getTutorialUserId = useCallback(() => authUser?.uid || auth.currentUser?.uid || '', [authUser?.uid]);
   const { isLeftHanded } = useLeftHandedMode();
@@ -3762,6 +3774,10 @@ export default function ChatScreen() {
       const todoCount = Array.isArray(card.todoItems) ? card.todoItems.length : 0;
       const calendarCount = Array.isArray(card.calendarItems) ? card.calendarItems.length : 0;
       return `Plan for ${date || 'the day'}: ${todoCount} tasks and ${calendarCount} events.`;
+    }
+
+    if (card.type === 'aiActionsLimit') {
+      return 'The free daily AI action limit was reached; chatting is still unlimited.';
     }
 
     if (card.type === 'navigationShortcut') {
@@ -5743,28 +5759,37 @@ export default function ChatScreen() {
             .fetch();
           const existing = new Set(openTodos.map((todo) => String(todo.text || '').trim().toLowerCase()));
           const toAdd = tasks.filter((task) => !existing.has(task.trim().toLowerCase()));
-          for (const text of toAdd) {
-            await createTodo({
-              text,
-              completed: false,
-              dueDate: startOfDay(new Date()),
-              hasDueTime: false,
-              starred: false,
-              workspace: 'Personal',
-              goalTimeframe: null,
-              type: 'basic',
-              progress: 0,
-              isAmazonUrlLoaded: false,
-              amazonUrlLoadAttempts: 0,
-            });
-          }
+          if (!toAdd.length) return { ok: true, message: 'These are already in your To Do.' };
+          // Each task is an AI action; with fewer left than tasks, the first ones are added.
+          const saved = await withAiActions(toAdd.length, async (granted) => {
+            let done = 0;
+            for (const text of toAdd.slice(0, granted)) {
+              await createTodo({
+                text,
+                completed: false,
+                dueDate: startOfDay(new Date()),
+                hasDueTime: false,
+                starred: false,
+                workspace: 'Personal',
+                goalTimeframe: null,
+                type: 'basic',
+                progress: 0,
+                isAmazonUrlLoaded: false,
+                amazonUrlLoadAttempts: 0,
+              });
+              done += 1;
+            }
+            return { value: done, done };
+          });
+          if (!saved) return { ok: false, error: getAiActionsLimitMessage(getAiActionsAllowance()?.limit), limitReached: true };
           if (isOnboardingChat()) trackFirstChatEvent('result_used', { intent: firstChatStateRef.current.intent, kind: 'tasks_saved' });
           const skipped = tasks.length - toAdd.length;
+          const notAdded = toAdd.length - saved.value;
           return {
             ok: true,
-            message: toAdd.length
-              ? `Added ${toAdd.length} to To Do for today.${skipped ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already there.` : ''}`
-              : 'These are already in your To Do.',
+            message: `Added ${saved.value} to To Do for today.${skipped ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already there.` : ''}${
+              notAdded ? ` ${notAdded} more didn't fit in today's free AI actions. Upgrade to Pro for unlimited AI actions.` : ''
+            }`,
           };
         } catch (error) {
           return { ok: false, error: String((error as Error)?.message || 'the tasks could not be saved') };
@@ -5778,7 +5803,12 @@ export default function ChatScreen() {
           if (openGoals.some((todo) => String(todo.text || '').trim().toLowerCase() === goal.title.trim().toLowerCase())) {
             return { ok: true, message: 'This goal is already in your Goals.' };
           }
-          const result = await guidanceToolHandlers.goal_create({ title: goal.title, timeframe: goal.timeframe });
+          const saved = await withAiActions(1, async () => {
+            const created = await guidanceToolHandlers.goal_create({ title: goal.title, timeframe: goal.timeframe });
+            return { value: created, done: Number(created?.created) > 0 ? 1 : 0 };
+          });
+          if (!saved) return { ok: false, error: getAiActionsLimitMessage(getAiActionsAllowance()?.limit), limitReached: true };
+          const result = saved.value;
           if (!result || !(Number(result.created) > 0)) {
             return { ok: false, error: String(result?.message || 'the goal could not be saved') };
           }
@@ -6326,6 +6356,12 @@ export default function ChatScreen() {
                 }],
               }}
             >
+              {!!aiActionsRemainingText && (
+                // Above the composer without moving it: free plans only.
+                <View pointerEvents="none" style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, alignItems: 'center', paddingBottom: 4 }}>
+                  <Text style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 11, fontWeight: '700' }}>{aiActionsRemainingText}</Text>
+                </View>
+              )}
               <GuidedTarget
                 targetId={getChatPlanDayComposerGuidanceTargetId()}
                 label="Chat composer"

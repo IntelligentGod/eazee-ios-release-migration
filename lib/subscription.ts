@@ -118,6 +118,7 @@ export type ComparisonRow = {
     | 'text-box-outline'
     | 'google'
     | 'shimmer'
+    | 'message-text-outline'
     | 'microphone-outline'
     | 'home-outline'
     | 'target'
@@ -160,11 +161,18 @@ export function buildPlanComparisonRows(limits: SubscriptionLimits): ComparisonR
       pro: { kind: 'check' },
     },
     {
+      icon: 'message-text-outline',
+      title: 'AI Chat',
+      description: 'Talk with Eazee as much as you like',
+      free: { kind: 'text', label: 'Unlimited' },
+      pro: { kind: 'text', label: 'Unlimited' },
+    },
+    {
       icon: 'shimmer',
       title: 'AI actions',
-      description: 'Get things done with AI',
-      free: allowanceValue(limits.free.chatMessagesPerDay, 'per day'),
-      pro: allowanceValue(limits.pro.chatMessagesPerDay, 'per day'),
+      description: 'Eazee adds, changes or deletes items for you',
+      free: allowanceValue(limits.free.aiActionsPerDay, '/ day'),
+      pro: allowanceValue(limits.pro.aiActionsPerDay, '/ day'),
     },
     {
       icon: 'microphone-outline',
@@ -189,7 +197,7 @@ export function buildPlanComparisonRows(limits: SubscriptionLimits): ComparisonR
     },
     {
       icon: 'calendar-check-outline',
-      title: 'Day planning & auto todo classification',
+      title: 'Automatic planning & todo classification',
       description: 'Let AI organize your day and tasks',
       free: { kind: 'none' },
       pro: { kind: 'check' },

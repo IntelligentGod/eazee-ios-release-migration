@@ -147,12 +147,9 @@ export function decideAiFeatureAccess(
     return tier === 'pro' ? { allowed: true } : { allowed: false, reason: 'proOnly' };
   }
 
-  // Each guide is counted on the server; here only "not on this plan" is decided.
-  const guidanceLimits = GUIDANCE_LIMITS_BY_FEATURE[feature];
-  if (guidanceLimits) {
-    return tier === 'free' && guidanceLimits.every((key) => limits.guidance[key] === 0)
-      ? { allowed: false, reason: 'proOnly' }
-      : { allowed: true };
+  // Guidance (goals, tasks, recipes, skills) is on every plan.
+  if (GUIDANCE_LIMITS_BY_FEATURE[feature]) {
+    return { allowed: true };
   }
 
   if (feature === 'homeSuggestions') {

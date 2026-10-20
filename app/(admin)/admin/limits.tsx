@@ -77,19 +77,16 @@ function LimitsEditor({ config, onSaved }: { config: AdminConfig; onSaved: (conf
   return (
     <ScrollView keyboardShouldPersistTaps="handled">
       <Text className="px-4 pt-3 text-xs text-gray-600">
-        Empty means unlimited. 0 means not included: for free users the feature shows as Eazee Pro only.
-        Limits reset each day in the user&apos;s time zone.
+        Empty means unlimited. An AI action is one item Eazee creates, changes or deletes for the user;
+        chatting, voice, suggestions and guidance are never counted. Limits reset each day in the user&apos;s time zone.
       </Text>
       <View className="flex-row justify-end px-4 pt-3" style={{ gap: 8 }}>
         <Text className="w-24 text-center text-xs font-bold uppercase text-gray-500">Free</Text>
         <Text className="w-24 text-center text-xs font-bold uppercase text-gray-500">Pro</Text>
       </View>
-      {/* AI chat and voice input are unlimited on every plan, so only guidance has limits. */}
-      <SectionTitle>Guidance</SectionTitle>
+      {/* AI chat, voice input and guidance are unlimited on every plan, so only AI actions have a limit. */}
+      <SectionTitle>AI actions</SectionTitle>
       {rows(LIMIT_FIELDS)}
-      <Text className="px-4 pt-2 text-xs text-gray-500">
-        Recipe and skill video search needs a guide left but is not counted; generating the guide is.
-      </Text>
       {!!config.updatedAt && (
         <Text className="px-4 pt-3 text-xs text-gray-500">
           {`Last changed ${formatSubscriptionDate(config.updatedAt)}${config.updatedBy ? ` by ${config.updatedBy}` : ''}`}

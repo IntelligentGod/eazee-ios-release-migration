@@ -7,7 +7,7 @@ import { advanceGoalGuidanceForCompletedTodo, deleteGoalGuidanceForGoal, fetchGo
 import { fetchTaskGuideForTodo, saveTaskGuide } from '@/lib/taskGuidance';
 import { fetchRecipeGuideForTodo } from '@/lib/recipeGuidance';
 import { fetchSkillGuideForTodo } from '@/lib/skillGuidance';
-import { requestTodoClassification, shouldClassifyTodoWorkspace, type TodoTaskKind } from '@/lib/todoClassification';
+import { isClassificationNotOnPlanError, requestTodoClassification, shouldClassifyTodoWorkspace, type TodoTaskKind } from '@/lib/todoClassification';
 import {
   coerceTodoWorkspaceKey,
   isSupportedTodoWorkspaceKey,
@@ -373,11 +373,13 @@ export const createTodoItems = async (items: any[], options: CreateTodoItemsOpti
           workspace: wsKey || 'Personal',
         });
       } catch (error: any) {
-        skippedItems.push({
-          text,
-          reason: `classification failed: ${String(error?.message || error || 'unknown error')}`,
-        });
-        continue;
+        if (!isClassificationNotOnPlanError(error)) {
+          skippedItems.push({
+            text,
+            reason: `classification failed: ${String(error?.message || error || 'unknown error')}`,
+          });
+          continue;
+        }
       }
     }
     const taskKind = classification?.kind || options.taskKindFallback || null;

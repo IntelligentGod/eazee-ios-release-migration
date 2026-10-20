@@ -7,8 +7,15 @@ export type GuidanceFeature = 'goalGuidance' | 'taskGuidance' | 'recipeSkillGuid
 export type PlanLimits = {
   chatMessagesPerDay: number | null;
   voiceMinutesPerDay: number | null;
+  /** Items Eazee may create, change or delete per day (lib/aiActions.ts). */
+  aiActionsPerDay: number | null;
   guidance: Record<GuidanceFeature, number | null>;
 };
+
+/** Free AI actions per day; matches FREE_AI_ACTIONS_PER_DAY on the server. */
+export const FREE_AI_ACTIONS_PER_DAY = 8;
+
+const UNLIMITED_GUIDANCE: PlanLimits['guidance'] = { goalGuidance: null, taskGuidance: null, recipeSkillGuide: null, guidanceQuestions: null };
 
 export type SubscriptionLimits = { free: PlanLimits; pro: PlanLimits };
 
@@ -21,12 +28,14 @@ export const DEFAULT_SUBSCRIPTION_LIMITS: SubscriptionLimits = {
   free: {
     chatMessagesPerDay: null,
     voiceMinutesPerDay: null,
-    guidance: { goalGuidance: 0, taskGuidance: 0, recipeSkillGuide: 0, guidanceQuestions: 0 },
+    aiActionsPerDay: FREE_AI_ACTIONS_PER_DAY,
+    guidance: UNLIMITED_GUIDANCE,
   },
   pro: {
     chatMessagesPerDay: null,
     voiceMinutesPerDay: null,
-    guidance: { goalGuidance: null, taskGuidance: null, recipeSkillGuide: null, guidanceQuestions: null },
+    aiActionsPerDay: null,
+    guidance: UNLIMITED_GUIDANCE,
   },
 };
 
@@ -40,24 +49,25 @@ export const GUIDANCE_FEATURE_LABELS: Record<GuidanceFeature, string> = {
 const isLimit = (value: unknown): value is number | null =>
   value === null || (typeof value === 'number' && Number.isInteger(value) && value >= 0);
 
-function parsePlanLimits(value: unknown): PlanLimits | null {
+function parsePlanLimits(value: unknown, defaultAiActions: number | null): PlanLimits | null {
   const plan = value as Partial<PlanLimits> | undefined;
   const guidance = plan?.guidance as Partial<PlanLimits['guidance']> | undefined;
   if (!plan || !isLimit(plan.chatMessagesPerDay) || !isLimit(plan.voiceMinutesPerDay) || !guidance) return null;
   const features: GuidanceFeature[] = ['goalGuidance', 'taskGuidance', 'recipeSkillGuide', 'guidanceQuestions'];
   if (!features.every((feature) => isLimit(guidance[feature]))) return null;
-  // AI chat and voice input are unlimited on every plan, even in limits saved before that.
+  // AI chat, voice input and guidance are unlimited on every plan, even in limits saved before that.
   return {
     chatMessagesPerDay: null,
     voiceMinutesPerDay: null,
-    guidance: Object.fromEntries(features.map((feature) => [feature, guidance[feature]])) as PlanLimits['guidance'],
+    aiActionsPerDay: isLimit(plan.aiActionsPerDay) ? plan.aiActionsPerDay : defaultAiActions,
+    guidance: UNLIMITED_GUIDANCE,
   };
 }
 
 export function parseSubscriptionLimits(value: unknown): SubscriptionLimits | null {
   const limits = value as Partial<SubscriptionLimits> | undefined;
-  const free = parsePlanLimits(limits?.free);
-  const pro = parsePlanLimits(limits?.pro);
+  const free = parsePlanLimits(limits?.free, FREE_AI_ACTIONS_PER_DAY);
+  const pro = parsePlanLimits(limits?.pro, null);
   return free && pro ? { free, pro } : null;
 }
 

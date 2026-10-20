@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildCompactActionSystemMessages } from '@/app/(tabs)/chat/prompt';
 import { getToolHandler } from '@/app/(tabs)/chat/tools';
 import { executeToolCall } from '@/app/(tabs)/chat/tools/engine';
+import { AI_ACTIONS_LIMIT_ERROR, getAiActionsLimitMessage } from '@/lib/aiActions';
 import type { UiAction } from '@/app/(tabs)/chat/tools/types';
 import {
   getCompactNoticeTargetForAppScreen,
@@ -462,6 +463,9 @@ const compactOutcomeForTool = (
   surface: CompactSurface = 'home'
 ) => {
   if (!success) {
+    if (error === AI_ACTIONS_LIMIT_ERROR) {
+      return { kind: 'toast' as const, message: getAiActionsLimitMessage(result?.aiActionsLimit?.limit) };
+    }
     if (name === 'calendar_get_details' && error === 'EVENT_NOT_FOUND') {
       return { kind: 'toast' as const, message: 'That event no longer exists.' };
     }

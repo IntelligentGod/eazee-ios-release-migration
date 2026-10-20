@@ -54,6 +54,8 @@ export type ProductDisplaySettings = Record<string, { displayOrder: number; badg
 
 export type ServerUsage = {
   aiActions: number;
+  /** AI actions as the plans count them (lib/aiActions.ts); missing on older servers. */
+  aiItemActions?: number;
   voiceSeconds: number;
   guidanceGoal: number;
   guidanceTask: number;

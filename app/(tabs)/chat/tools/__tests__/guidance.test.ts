@@ -93,6 +93,7 @@ jest.mock('../../../../../lib/todoMutations', () => ({
 
 jest.mock('@/lib/todoClassification', () => ({
   requestTodoClassification: (input: any) => mockRequestTodoClassification(input),
+  isClassificationNotOnPlanError: (error: any) => error?.name === 'SubscriptionRequiredError',
 }));
 
 jest.mock('@/firebaseConfig', () => ({

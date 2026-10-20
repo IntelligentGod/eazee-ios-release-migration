@@ -40,6 +40,7 @@ import {
 } from '@/lib/subscriptionApi';
 import { writeCachedSubscriptionLimits } from '@/lib/subscriptionLimits';
 import { mergeServerUsage } from '@/lib/subscriptionUsage';
+import { setAiActionsAllowanceFromStatus } from '@/lib/aiActions';
 import { FALLBACK_STORE_PRODUCTS, loadStoreProducts, type StoreProduct } from '@/lib/subscriptionProducts';
 
 /**
@@ -254,6 +255,7 @@ async function cacheSubscriptionOverview(userId: string, overview: SubscriptionO
     writeCachedSubscriptionLimits(userId, overview.limits),
     mergeServerUsage(userId, overview.usage),
   ]);
+  setAiActionsAllowanceFromStatus(overview.planLimits?.aiActionsPerDay ?? overview.limits[overview.subscription.isPro ? 'pro' : 'free'].aiActionsPerDay, overview.usage?.aiItemActions);
 }
 
 export async function restorePurchases(): Promise<BillingOutcome> {

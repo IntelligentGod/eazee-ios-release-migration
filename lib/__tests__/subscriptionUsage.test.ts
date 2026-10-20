@@ -193,7 +193,8 @@ describe('usage accounting', () => {
     await expect(
       checkAiFeatureAccess('user-1', 'guidance', ' Developer_Sandbox@eazee.ai ')
     ).resolves.toEqual({ allowed: true });
-    await expect(checkAiFeatureAccess('user-1', 'guidance', 'someone@eazee.ai')).resolves.toEqual({
+    await expect(checkAiFeatureAccess('user-1', 'dayPlanning', ' Developer_Sandbox@eazee.ai ')).resolves.toEqual({ allowed: true });
+    await expect(checkAiFeatureAccess('user-1', 'dayPlanning', 'someone@eazee.ai')).resolves.toEqual({
       allowed: false,
       reason: 'proOnly',
     });
@@ -227,13 +228,11 @@ describe('limits from the server', () => {
       .toEqual({ allowed: false, reason: 'aiActionsExhausted' });
   });
 
-  it('keeps guidance Pro-only on free while every related limit is 0, and allows it once one is raised', () => {
-    expect(decideAiFeatureAccess('free', 'guidance', usage(), SUGGESTION_DAY, freeLimits()))
-      .toEqual({ allowed: false, reason: 'proOnly' });
-    const goalAllowed = freeLimits({ guidance: { ...DEFAULT_SUBSCRIPTION_LIMITS.free.guidance, goalGuidance: 1 } });
-    expect(decideAiFeatureAccess('free', 'guidance', usage(), SUGGESTION_DAY, goalAllowed)).toEqual({ allowed: true });
-    expect(decideAiFeatureAccess('free', 'recipeAndSkill', usage(), SUGGESTION_DAY, goalAllowed))
-      .toEqual({ allowed: false, reason: 'proOnly' });
+  it('allows guidance, recipes and skills on free, even with an old limit of 0', () => {
+    const oldLimits = freeLimits({ guidance: { goalGuidance: 0, taskGuidance: 0, recipeSkillGuide: 0, guidanceQuestions: 0 } });
+    expect(decideAiFeatureAccess('free', 'guidance', usage(), SUGGESTION_DAY, oldLimits)).toEqual({ allowed: true });
+    expect(decideAiFeatureAccess('free', 'recipeAndSkill', usage(), SUGGESTION_DAY, oldLimits)).toEqual({ allowed: true });
+    expect(decideAiFeatureAccess('free', 'dayPlanning', usage(), SUGGESTION_DAY, oldLimits)).toEqual({ allowed: false, reason: 'proOnly' });
   });
 
   it('reads the cached limits when checking access, ignoring an old chat limit', async () => {

@@ -2,6 +2,7 @@ import { auth } from '@/firebaseConfig';
 import { SERVER_URL } from '@/config/backend';
 import { createAiAuthRequiredError, getAiResponseErrorMessage, isAiAuthRequiredError } from '@/lib/aiAuth';
 import { getAiRequestHeaders as getFirebaseHeaders } from '@/lib/aiRequest';
+import { isProRequiredMessage, isSubscriptionRequiredError } from '@/lib/subscriptionAccess';
 import {
   createQuotaGoalBehavior,
   createStandardGoalBehavior,
@@ -11,6 +12,13 @@ import {
 
 export type TodoTaskKind = 'normal' | 'recipe' | 'skill';
 export type GuidancePath = 'actions' | 'video';
+
+/**
+ * Automatic classification is Eazee Pro only. On Free the item is still created, as a normal
+ * task (like adding it in To Do), instead of being skipped.
+ */
+export const isClassificationNotOnPlanError = (error: unknown) =>
+  isSubscriptionRequiredError(error) || isProRequiredMessage((error as any)?.message);
 
 export type TodoClassification = {
   kind: TodoTaskKind;

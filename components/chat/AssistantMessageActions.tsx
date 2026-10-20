@@ -5,7 +5,8 @@ import type { AssistantMessageExtras, GoalTimeframe } from '@/lib/assistantMessa
 import { getSavedPreferenceLabel, SAVED_PREFERENCE_FIELDS, type SavedPreferenceField } from '@/lib/aiSavedPreferences';
 
 /** What a save reported. A failure keeps the proposal on screen so it can be retried. */
-export type AssistantActionResult = { ok: true; message?: string } | { ok: false; error: string };
+/** `limitReached`: nothing was saved because today's free AI actions are used up; `error` is the whole message. */
+export type AssistantActionResult = { ok: true; message?: string } | { ok: false; error: string; limitReached?: boolean };
 
 export type AssistantMessageActionHandlers = {
   onChoose: (text: string) => void;
@@ -54,7 +55,7 @@ const primaryButtonStyle = (pressed: boolean, disabled?: boolean) => ({
   opacity: disabled ? 0.55 : 1,
 });
 
-type SaveState = { status: 'idle' | 'saving' | 'saved' | 'error'; message?: string };
+type SaveState = { status: 'idle' | 'saving' | 'saved' | 'error' | 'limit'; message?: string };
 
 /** Runs a save once at a time; repeated taps while it runs are ignored. */
 function useSave() {
@@ -66,7 +67,9 @@ function useSave() {
     setState({ status: 'saving' });
     try {
       const result = await action();
-      setState(result.ok ? { status: 'saved', message: result.message } : { status: 'error', message: result.error });
+      setState(result.ok
+        ? { status: 'saved', message: result.message }
+        : { status: result.limitReached ? 'limit' : 'error', message: result.error });
     } catch (error) {
       setState({ status: 'error', message: String((error as Error)?.message || 'That was not saved.') });
     } finally {
@@ -79,6 +82,9 @@ function useSave() {
 function StatusLine({ state, savedText }: { state: SaveState; savedText: string }) {
   if (state.status === 'saved') {
     return <Text style={{ marginTop: 8, color: '#9EF5E4', fontSize: 12, fontWeight: '700' }}>{state.message || savedText}</Text>;
+  }
+  if (state.status === 'limit') {
+    return <Text style={{ marginTop: 8, color: '#FFE7B3', fontSize: 12, fontWeight: '700' }}>{state.message}</Text>;
   }
   if (state.status === 'error') {
     return (

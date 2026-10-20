@@ -93,6 +93,7 @@ jest.mock('@/lib/skillGuidance', () => ({
 jest.mock('@/lib/todoClassification', () => ({
   requestTodoClassification: (input: any) => mockRequestTodoClassification(input),
   shouldClassifyTodoWorkspace: (workspace?: string | null) => workspace === 'Personal' || workspace === 'Goals',
+  isClassificationNotOnPlanError: (error: any) => error?.name === 'SubscriptionRequiredError',
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -339,6 +340,17 @@ describe('todo tools', () => {
     expect(result.skippedItems).toEqual([expect.objectContaining({
       text: 'Practice scales',
     })]);
+  });
+
+  it('still creates the todo on Free, where automatic classification is Pro only', async () => {
+    mockRequestTodoClassification.mockRejectedValueOnce(Object.assign(new Error('Pro only'), { name: 'SubscriptionRequiredError' }));
+
+    const result = await todoToolHandlers.todo_create_many({
+      items: [{ text: 'Practice scales', workspace: 'Personal' }],
+    });
+
+    expect(mockCreateTodos.mock.calls[0][0]).toEqual([expect.objectContaining({ text: 'Practice scales', taskKind: null })]);
+    expect(result.skippedItems).toEqual([]);
   });
 
   it('skips unsupported recurrence edits instead of turning repeat off', async () => {
