@@ -103,6 +103,13 @@ import { getAiRequestHeaders } from '@/lib/aiRequest';
 import { requestAiDataSharingConsent } from '@/lib/aiDataSharingConsent';
 import { useAuthSession } from '@/app/context/AuthSessionContext';
 import {
+  addMemory,
+  buildChatMemories,
+  forgetMemory,
+  readCachedMemories,
+  refreshMemories,
+} from '@/lib/memories';
+import {
   buildAboutMeChatContext,
   canShowAboutMeInvite,
   hasAboutMeContent,
@@ -2007,6 +2014,7 @@ export default function ChatScreen() {
     });
     // Picks up changes made on another device.
     void refreshAboutMeProfile(uid).catch(() => {});
+    void refreshMemories(uid).catch(() => {});
     const unsubscribe = subscribeAboutMeProfile((profile, changedUserId) => {
       if (changedUserId === uid) setHasAboutMeProfile(hasAboutMeContent(profile));
     });
@@ -4908,6 +4916,10 @@ export default function ChatScreen() {
       const savedPreferencesMessage = buildSavedPreferencesSystemMessage(await readSavedPreferences(requestUserId));
       // The enabled parts of the "Get to know me" profile; the server turns them into instructions.
       const aboutMeContext = buildAboutMeChatContext(await readCachedAboutMeProfile(requestUserId));
+      // Persistent memory: what Eazee remembers about the user (absent while memory is off).
+      const chatMemories = requestUserId && !isFixMyLifeRequest
+        ? buildChatMemories(await readCachedMemories(requestUserId))
+        : undefined;
       // While the account has preference chats left, the AI may ask one (the first-use flow
       // has its own version). A chat only counts once a question is actually shown.
       const preferenceChatIds = requestUserId ? await readPreferencePromptChatIds(requestUserId) : [];
@@ -4937,6 +4949,7 @@ export default function ChatScreen() {
         // App-run tools this build has; the server only offers these to builds that list them.
         clientCapabilities: ['calendar_create_many'],
         aboutMe: aboutMeContext,
+        memories: chatMemories,
         messages: [
           ...buildChatSystemMessages({
             userTimezone: tz,
@@ -5642,6 +5655,29 @@ export default function ChatScreen() {
           setPreferenceQuestions((current) => ({ ...current, [replyKey]: question }));
           countPreferencePromptChat(sessionKey);
         });
+      }
+      // Persistent memory: facts Eazee chose to remember (or forget). Saving is automatic; a small
+      // note under the reply says what was remembered, and Settings → Memory lists everything.
+      if (uid && (extras.memories.length || extras.forget.length)) {
+        const replyKey = getReplyKey(message);
+        void (async () => {
+          const remembered: string[] = [];
+          let forgot = 0;
+          for (const fact of extras.forget) {
+            const result = await forgetMemory(uid, fact).catch(() => null);
+            if (result) forgot += 1;
+          }
+          for (const fact of extras.memories) {
+            const result = await addMemory(uid, fact).catch(() => null);
+            if (result) remembered.push(fact);
+          }
+          const note = remembered.length
+            ? `Remembered: ${remembered.join(' · ')}. Manage in Settings → Memory.`
+            : forgot
+              ? 'Forgotten. Manage in Settings → Memory.'
+              : null;
+          if (note) setSavedPreferenceNotices((current) => ({ ...current, [replyKey]: note }));
+        })();
       }
       for (const preference of extras.savePreferences) {
         const label = `${SAVED_PREFERENCE_FIELDS[preference.field].label}: ${getSavedPreferenceLabel(preference.field, preference.value)}`;

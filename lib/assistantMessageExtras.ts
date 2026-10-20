@@ -17,6 +17,9 @@ export type AssistantMessageExtras = {
   goal: { title: string; timeframe: GoalTimeframe } | null;
   remember: { field: SavedPreferenceField; value: string; question: string } | null;
   savePreferences: { field: SavedPreferenceField; value: string }[];
+  /** Lasting facts to remember ([[memory: ...]]) and ones to forget ([[forget: ...]]). */
+  memories: string[];
+  forget: string[];
   result: AssistantResultKind | null;
   copyable: boolean;
 };
@@ -48,15 +51,19 @@ export const EMPTY_ASSISTANT_EXTRAS: Omit<AssistantMessageExtras, 'text'> = {
   goal: null,
   remember: null,
   savePreferences: [],
+  memories: [],
+  forget: [],
   result: null,
   copyable: false,
 };
+const MAX_MEMORIES_PER_REPLY = 2;
+const MAX_MEMORY_LENGTH = 200;
 
 export function parseAssistantMessageExtras(content: string | undefined | null): AssistantMessageExtras {
   const raw = String(content || '');
   if (!raw.includes('[[')) return { ...EMPTY_ASSISTANT_EXTRAS, text: raw };
 
-  const extras: Omit<AssistantMessageExtras, 'text'> = { ...EMPTY_ASSISTANT_EXTRAS, savePreferences: [] };
+  const extras: Omit<AssistantMessageExtras, 'text'> = { ...EMPTY_ASSISTANT_EXTRAS, savePreferences: [], memories: [], forget: [] };
   const withoutMarkers = raw.replace(MARKER_PATTERN, (_match, rawName: string, rawValue: string | undefined) => {
     const name = rawName.toLowerCase();
     const value = (rawValue || '').trim();
@@ -80,6 +87,11 @@ export function parseAssistantMessageExtras(content: string | undefined | null):
     if (name === 'save_preference') {
       const parsed = parsePreference(value);
       if (parsed) extras.savePreferences.push(parsed);
+    }
+    if ((name === 'memory' || name === 'forget') && value.length >= 2) {
+      const list = name === 'memory' ? extras.memories : extras.forget;
+      const fact = value.replace(/\s+/g, ' ').slice(0, MAX_MEMORY_LENGTH);
+      if (list.length < MAX_MEMORIES_PER_REPLY && !list.some((item) => item.toLowerCase() === fact.toLowerCase())) list.push(fact);
     }
     if (name === 'result' && RESULT_KINDS.includes(value as AssistantResultKind)) extras.result = value as AssistantResultKind;
     if (name === 'copy') extras.copyable = true;

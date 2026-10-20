@@ -630,6 +630,22 @@ function AiPersonalizationPanel({
 
         {!!userId && (
           <View style={{ gap: 8, marginTop: 10 }}>
+            <Text style={styles.settingLabel}>Memory</Text>
+            <Text style={styles.homePersonalizationHint}>
+              Lasting things Eazee remembers about you from your chats.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/memories')}
+              style={styles.saveButton}
+            >
+              <Text style={styles.saveButtonText}>Memory</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!!userId && (
+          <View style={{ gap: 8, marginTop: 10 }}>
             <Text style={styles.settingLabel}>About me</Text>
             <Text style={styles.homePersonalizationHint}>
               Your answers about yourself, how you like help, and your personality result.

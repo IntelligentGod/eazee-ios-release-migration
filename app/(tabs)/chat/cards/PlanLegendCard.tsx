@@ -3,21 +3,27 @@ import { CHAT_DOMAIN_COLORS, CHAT_SURFACE_RADIUS } from '../constants';
 
 export type PlanLegendKind = 'event' | 'task' | 'blocker';
 
-/** Same colours as the rows in DayPlanCard. */
+/** Every swatch is outlined so it stands out from the key's background. */
+const SWATCH_OUTLINE = 'rgba(232, 255, 250, 0.7)';
+
+/** Same colours as the rows in DayPlanCard, as they appear on the plan card. */
 const LEGEND_ROWS: Record<PlanLegendKind, { color: string; borderColor?: string; label: string; hint: string }> = {
   event: {
     color: CHAT_DOMAIN_COLORS.calendar.card,
+    borderColor: SWATCH_OUTLINE,
     label: 'New calendar event',
     hint: 'Added to your calendar when you save',
   },
   task: {
     color: CHAT_DOMAIN_COLORS.tasks.card,
+    borderColor: SWATCH_OUTLINE,
     label: 'Task',
     hint: 'From your To Do, given a time',
   },
   blocker: {
-    color: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(140, 161, 161, 0.7)',
+    // Solid: these rows are see-through on the plan's dark card, so they read as this dark teal.
+    color: '#2A4849',
+    borderColor: SWATCH_OUTLINE,
     label: 'Already in your calendar',
     hint: 'Shown so you see the whole day; nothing changes',
   },
@@ -54,7 +60,7 @@ export function PlanLegendCard({ kinds }: { kinds: PlanLegendKind[] }) {
                 height: 14,
                 borderRadius: 5,
                 backgroundColor: row.color,
-                borderWidth: row.borderColor ? 1 : 0,
+                borderWidth: row.borderColor ? 1.5 : 0,
                 borderColor: row.borderColor,
               }}
             />

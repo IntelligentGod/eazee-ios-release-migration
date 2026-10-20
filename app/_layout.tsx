@@ -369,6 +369,12 @@ export default Sentry.wrap(function RootLayout() {
                       }}
                     />
                     <Stack.Screen
+                      name="memories"
+                      options={{
+                        headerShown: false
+                      }}
+                    />
+                    <Stack.Screen
                       name="(admin)"
                       options={{
                         headerShown: false
