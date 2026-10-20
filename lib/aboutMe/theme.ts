@@ -1,22 +1,21 @@
 /**
- * Colours for the "Get to know me" and personality card screens: the app's dark teal glass
- * look (AI Chat, walkthrough cards) rather than the light account-page style.
+ * Colours for the About me, personality test and card screens: the sand Settings look
+ * (Settings → Intelligence Personalization, Memory), glass cards and cream controls.
  */
 export const ABOUT_ME_COLORS = {
-  background: ['#1BB8AF', '#0A4B46'] as [string, string],
-  card: 'rgba(4, 38, 36, 0.62)',
-  cardBorder: 'rgba(174, 255, 232, 0.22)',
-  title: '#F2FFFC',
-  body: 'rgba(232, 255, 250, 0.9)',
-  hint: 'rgba(174, 255, 232, 0.78)',
-  accent: '#AEFFE8',
-  onAccent: '#04403A',
-  chip: 'rgba(255, 255, 255, 0.07)',
-  chipBorder: 'rgba(174, 255, 232, 0.32)',
-  input: 'rgba(0, 0, 0, 0.22)',
-  placeholder: 'rgba(232, 255, 250, 0.42)',
-  secondary: 'rgba(255, 255, 255, 0.1)',
-  divider: 'rgba(174, 255, 232, 0.14)',
-  danger: '#FF9E8F',
-  switchOff: 'rgba(255, 255, 255, 0.18)',
+  card: 'rgba(46, 45, 34, 0.32)',
+  cardBorder: 'rgba(255, 255, 255, 0.18)',
+  title: '#FFFFFF',
+  body: 'rgba(255, 255, 255, 0.86)',
+  hint: 'rgba(255, 255, 255, 0.66)',
+  accent: 'rgba(246, 242, 227, 0.94)',
+  onAccent: '#4D4A3B',
+  chip: 'rgba(46, 45, 34, 0.30)',
+  chipBorder: 'rgba(255, 255, 255, 0.22)',
+  input: 'rgba(46, 45, 34, 0.38)',
+  placeholder: 'rgba(255, 255, 255, 0.55)',
+  secondary: 'rgba(46, 45, 34, 0.30)',
+  divider: 'rgba(255, 255, 255, 0.14)',
+  danger: '#FFD9CF',
+  switchOff: 'rgba(46, 45, 34, 0.30)',
 };

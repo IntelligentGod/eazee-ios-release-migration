@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { router } from 'expo-router';
-import SimpleScreen from '@/components/SimpleScreen';
+import SettingsScreenFrame from '@/components/SettingsScreenFrame';
 import PersonalityCardView from '@/components/aboutMe/PersonalityCardView';
 import { useAuthSession } from './context/AuthSessionContext';
 import {
@@ -27,7 +27,6 @@ import {
 } from '@/lib/aboutMe/profile';
 import { getCardBasis, getCardCaption, pickCardTheme, type CardHumour } from '@/lib/aboutMe/personalityCard';
 
-const ACCENT = C.accent;
 const IMAGE_SIZE = { width: 1080, height: 1350 };
 
 /**
@@ -189,16 +188,16 @@ export default function PersonalityCardScreen() {
 
   if (!uid || profile === undefined) {
     return (
-      <SimpleScreen tone="dark" title="Your Eazee personality">
-        <View style={styles.center}>{uid ? <ActivityIndicator color={ACCENT} /> : <Text style={styles.body}>Sign in to see your card.</Text>}</View>
-      </SimpleScreen>
+      <SettingsScreenFrame title="Your Eazee personality">
+        <View style={styles.center}>{uid ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.body}>Sign in to see your card.</Text>}</View>
+      </SettingsScreenFrame>
     );
   }
 
   if (!basis.ok || !content) {
     const reason = basis.ok ? 'none' : basis.reason;
     return (
-      <SimpleScreen tone="dark" title="Your Eazee personality">
+      <SettingsScreenFrame title="Your Eazee personality">
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.body}>
@@ -214,12 +213,12 @@ export default function PersonalityCardScreen() {
             : <PrimaryButton label="Take the quick test" onPress={() => openAboutMe('test')} />}
           {reason !== 'incomplete' && <SecondaryButton label="Add a result I already have" onPress={() => openAboutMe()} />}
         </ScrollView>
-      </SimpleScreen>
+      </SettingsScreenFrame>
     );
   }
 
   return (
-    <SimpleScreen tone="dark" title="Your Eazee personality" subtitle="Just for fun">
+    <SettingsScreenFrame title="Your Eazee personality" subtitle="Just for fun">
       <ScrollView contentContainerStyle={[styles.content, { alignItems: 'center' }]}>
         <PersonalityCardView ref={cardRef} content={content} width={cardWidth} />
 
@@ -258,7 +257,7 @@ export default function PersonalityCardScreen() {
           {!!savedCard && <SecondaryButton label="Delete my saved card" destructive onPress={handleDeleteSaved} />}
         </View>
       </ScrollView>
-    </SimpleScreen>
+    </SettingsScreenFrame>
   );
 }
 
@@ -280,17 +279,17 @@ function SecondaryButton({ label, onPress, destructive }: { label: string; onPre
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  content: { padding: 16, gap: 14, paddingBottom: 40 },
+  content: { paddingTop: 18, gap: 14, paddingBottom: 40 },
   card: { backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.cardBorder, padding: 16, gap: 10 },
   body: { fontSize: 15, lineHeight: 21, color: C.body },
-  hint: { fontSize: 13, lineHeight: 18, color: C.hint, textAlign: 'center' },
+  hint: { fontSize: 13, lineHeight: 18, color: C.hint, fontWeight: '700', textAlign: 'center' },
   segment: { flexDirection: 'row', backgroundColor: C.secondary, borderWidth: 1, borderColor: C.cardBorder, borderRadius: 999, padding: 4 },
   segmentItem: { flex: 1, borderRadius: 999, paddingVertical: 10, alignItems: 'center' },
   segmentItemSelected: { backgroundColor: C.accent },
-  segmentText: { fontSize: 15, fontWeight: '700', color: C.body },
+  segmentText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
   segmentTextSelected: { color: C.onAccent },
   primary: { backgroundColor: C.accent, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
   primaryText: { color: C.onAccent, fontSize: 16, fontWeight: '800' },
   secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: C.secondary, borderWidth: 1, borderColor: C.cardBorder },
-  secondaryText: { color: C.accent, fontSize: 15, fontWeight: '700' },
+  secondaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
 });

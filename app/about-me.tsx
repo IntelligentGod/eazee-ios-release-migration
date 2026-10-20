@@ -9,14 +9,14 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Q } from '@nozbe/watermelondb';
-import SimpleScreen from '@/components/SimpleScreen';
+import SettingsScreenFrame from '@/components/SettingsScreenFrame';
 import { useAuthSession } from './context/AuthSessionContext';
 import { database } from '../database/database';
 import TodoModel from '../database/models/TodoModel';
@@ -76,7 +76,6 @@ const INTRO_COPY =
   'Your answers help Eazee tailor explanations, plans, and suggestions. Skip anything you like. You can edit or delete your answers in Settings.';
 const REVIEW_COPY = 'This is a starting point, not a fixed label. Your instructions always matter more than a personality result.';
 
-const ACCENT = C.accent;
 
 type Mode = 'loading' | 'intro' | 'flow' | 'done' | 'manage';
 
@@ -367,23 +366,23 @@ export default function AboutMeScreen() {
 
   if (!uid) {
     return (
-      <SimpleScreen tone="dark" title="About me">
+      <SettingsScreenFrame title="About me">
         <View style={styles.center}><Text style={styles.body}>Sign in to tell Eazee about yourself.</Text></View>
-      </SimpleScreen>
+      </SettingsScreenFrame>
     );
   }
 
   if (mode === 'loading') {
     return (
-      <SimpleScreen tone="dark" title="About me">
-        <View style={styles.center}><ActivityIndicator color={ACCENT} /></View>
-      </SimpleScreen>
+      <SettingsScreenFrame title="About me">
+        <View style={styles.center}><ActivityIndicator color="#FFFFFF" /></View>
+      </SettingsScreenFrame>
     );
   }
 
   if (mode === 'manage' && profile) {
     return (
-      <SimpleScreen tone="dark" title="About me" subtitle="What Eazee knows about you">
+      <SettingsScreenFrame title="About me" subtitle="What Eazee knows about you">
         <ScrollView contentContainerStyle={styles.content}>
           <ProfileSummary
             profile={profile}
@@ -394,36 +393,37 @@ export default function AboutMeScreen() {
             assessment={profile.personality_assessments.active}
             onFinish={() => void startDraft({ step: 'tipi_1' })}
           />
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Your Eazee personality</Text>
-            <Text style={styles.hint}>A playful, shareable card made from your result. Just for fun.</Text>
-            <ActionButton label="See, change or delete my card" onPress={() => router.push('/personality-card')} />
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Personality result</Text>
-            <ActionButton label="Retake the test" onPress={retake} />
+          <Section emoji="✨" title="Your Eazee personality">
+            <LinkRow
+              label="See my personality card"
+              detail="A playful, shareable card made from your result"
+              onPress={() => router.push('/personality-card')}
+            />
+          </Section>
+          <Section emoji="🧪" title="Personality result">
+            <LinkRow label="Retake the test" onPress={retake} />
             {profile.personality_assessments.active?.kind === 'tipi' && (
-              <ActionButton label="Review my test answers" onPress={() => void startDraft({ step: 'tipi_1' })} />
+              <LinkRow divider label="Review my test answers" onPress={() => void startDraft({ step: 'tipi_1' })} />
             )}
-            <ActionButton label="Add or correct a result I already have" onPress={() => void startDraft({ step: 'q1', editFromSettings: true })} />
-            {!!profile.personality_assessments.active && <ActionButton label="Delete my result" destructive onPress={deleteResult} />}
-          </View>
+            <LinkRow divider label="Add or correct a result I already have" onPress={() => void startDraft({ step: 'q1', editFromSettings: true })} />
+            {!!profile.personality_assessments.active && <LinkRow divider destructive label="Delete my result" onPress={deleteResult} />}
+          </Section>
           <ControlsCard
             controls={controls}
             onChange={(nextControls) => void saveProfileChange((current) => ({ ...current, personalisation_controls: nextControls }))}
           />
-          <View style={styles.card}>
-            <ActionButton label="Go through all the questions again" onPress={() => void startDraft({ step: 'q1' })} />
-            <ActionButton label="Delete my whole profile" destructive onPress={deleteProfile} />
-          </View>
+          <Section emoji="🗂️" title="Manage">
+            <LinkRow label="Go through all the questions again" onPress={() => void startDraft({ step: 'q1' })} />
+            <LinkRow divider destructive label="Delete my whole profile" onPress={deleteProfile} />
+          </Section>
         </ScrollView>
-      </SimpleScreen>
+      </SettingsScreenFrame>
     );
   }
 
   if (mode === 'done') {
     return (
-      <SimpleScreen tone="dark" title="About me" onBack={() => setMode('manage')}>
+      <SettingsScreenFrame title="About me" onBack={() => setMode('manage')}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.title}>Saved ✨</Text>
@@ -443,13 +443,13 @@ export default function AboutMeScreen() {
           <PrimaryButton label="Back to Eazee" onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))} />
           <ActionButton label="See what I saved" onPress={() => setMode('manage')} />
         </ScrollView>
-      </SimpleScreen>
+      </SettingsScreenFrame>
     );
   }
 
   if (mode === 'intro' || !draft) {
     return (
-      <SimpleScreen tone="dark" title="Get to know me">
+      <SettingsScreenFrame title="Get to know me">
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.title}>Tell Eazee about yourself</Text>
@@ -467,7 +467,7 @@ export default function AboutMeScreen() {
           )}
           {hasAboutMeContent(profile) && <ActionButton label="See what I saved" onPress={() => setMode('manage')} />}
         </ScrollView>
-      </SimpleScreen>
+      </SettingsScreenFrame>
     );
   }
 
@@ -483,7 +483,7 @@ export default function AboutMeScreen() {
         : `Question ${QUESTION_STEPS.indexOf(step) + 1} of 10`;
 
   return (
-    <SimpleScreen tone="dark"
+    <SettingsScreenFrame
       title={step === 'review' ? 'Review' : 'Get to know me'}
       subtitle={step === 'review' ? undefined : progressLabel}
       onBack={back}
@@ -555,7 +555,7 @@ export default function AboutMeScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
-    </SimpleScreen>
+    </SettingsScreenFrame>
   );
 }
 
@@ -893,18 +893,25 @@ function ProfileSummary({
         ['About you', 'about_me'],
         ['How Eazee should help', 'assistant_preferences'],
       ] as const).map(([title, section]) => (
-        <View key={section} style={styles.card}>
-          <Text style={styles.cardTitle}>{title}</Text>
-          {rows(section).map((question) => (
-            <Pressable key={question.id} accessibilityRole="button" onPress={() => onEdit(question.id)} style={styles.summaryRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.summaryLabel}>{question.title}</Text>
-                <Text style={styles.summaryValue}>{describe(question)}</Text>
-              </View>
-              <Text style={styles.link}>Edit</Text>
-            </Pressable>
+        <Section key={section} emoji={section === 'about_me' ? '🙋' : '💬'} title={title}>
+          {rows(section).map((question, index) => (
+            <View key={question.id}>
+              {index > 0 && <View style={styles.divider} />}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Edit: ${question.title}`}
+                onPress={() => onEdit(question.id)}
+                style={({ pressed }) => [styles.summaryRow, pressed && { opacity: 0.6 }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.summaryLabel}>{question.title}</Text>
+                  <Text style={[styles.summaryValue, describe(question) === 'Skipped' && styles.skippedValue]}>{describe(question)}</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="rgba(255, 255, 255, 0.8)" />
+              </Pressable>
+            </View>
           ))}
-        </View>
+        </Section>
       ))}
     </>
   );
@@ -920,14 +927,15 @@ function PersonalitySnapshot({
   onFinish: () => void;
 }) {
   return (
-    <View style={styles.card}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={[styles.cardTitle, { flex: 1 }]}>Personality snapshot</Text>
-        {!!onEdit && (
-          <Pressable accessibilityRole="button" onPress={onEdit} hitSlop={8}><Text style={styles.link}>Edit</Text></Pressable>
-        )}
-      </View>
-      {!assessment && <Text style={styles.summaryValue}>No personality result.</Text>}
+    <Section
+      emoji="🧭"
+      title="Personality snapshot"
+      right={onEdit ? (
+        <Pressable accessibilityRole="button" onPress={onEdit} hitSlop={8}><Text style={styles.link}>Edit</Text></Pressable>
+      ) : undefined}
+    >
+      <View style={{ paddingVertical: 10, gap: 10 }}>
+      {!assessment && <Text style={styles.summaryValue}>No personality result yet.</Text>}
       {assessment?.kind === 'tipi' && (() => {
         const scores = scoreTipi(assessment.responses);
         const complete = isTipiComplete(assessment.responses);
@@ -974,7 +982,8 @@ function PersonalitySnapshot({
       {assessment?.kind === 'other' && (
         <Text style={styles.body}>{`Self-reported, from ${assessment.testName}: ${assessment.resultText}`}</Text>
       )}
-    </View>
+      </View>
+    </Section>
   );
 }
 
@@ -985,19 +994,60 @@ function ControlsCard({ controls, onChange }: { controls: PersonalisationControl
     { key: 'personality', label: 'Use my personality result' },
   ];
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>What Eazee uses</Text>
-      {rows.map((row) => (
-        <View key={row.key} style={styles.switchRow}>
-          <Text style={[styles.body, { flex: 1 }]}>{row.label}</Text>
-          <Switch
-            value={controls[row.key]}
-            onValueChange={(value) => onChange({ ...controls, [row.key]: value })}
-            trackColor={{ true: C.accent, false: C.switchOff }}
-            thumbColor={controls[row.key] ? C.onAccent : '#FFFFFF'}
-          />
+    <Section emoji="🎛️" title="What Eazee uses">
+      {rows.map((row, index) => (
+        <View key={row.key}>
+          {index > 0 && <View style={styles.divider} />}
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: controls[row.key] }}
+            onPress={() => onChange({ ...controls, [row.key]: !controls[row.key] })}
+            style={styles.switchRow}
+          >
+            <Text style={[styles.body, { flex: 1 }]}>{row.label}</Text>
+            <Toggle enabled={controls[row.key]} />
+          </Pressable>
         </View>
       ))}
+    </Section>
+  );
+}
+
+/** A titled group: an emoji and small heading above a glass card, like Settings. */
+function Section({ emoji, title, right, children }: { emoji: string; title: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionEmoji}>{emoji}</Text>
+        <Text style={[styles.sectionTitle, { flex: 1 }]}>{title}</Text>
+        {right}
+      </View>
+      <View style={styles.groupCard}>{children}</View>
+    </View>
+  );
+}
+
+/** A tappable row with an arrow, inside a Section. */
+function LinkRow({ label, detail, onPress, destructive, divider }: { label: string; detail?: string; onPress: () => void; destructive?: boolean; divider?: boolean }) {
+  return (
+    <View>
+      {divider && <View style={styles.divider} />}
+      <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.6 }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.linkLabel, destructive && { color: C.danger }]}>{label}</Text>
+          {!!detail && <Text style={styles.hint}>{detail}</Text>}
+        </View>
+        {!destructive && <MaterialCommunityIcons name="chevron-right" size={24} color="rgba(255, 255, 255, 0.8)" />}
+      </Pressable>
+    </View>
+  );
+}
+
+/** The Settings on/off switch. */
+function Toggle({ enabled }: { enabled: boolean }) {
+  return (
+    <View style={[styles.toggle, enabled && styles.toggleOn]}>
+      <View style={[styles.toggleKnob, enabled && styles.toggleKnobOn]} />
     </View>
   );
 }
@@ -1033,7 +1083,36 @@ function ActionButton({ label, onPress, destructive }: { label: string; onPress:
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  content: { padding: 16, gap: 14, paddingBottom: 40 },
+  content: { paddingTop: 18, gap: 18, paddingBottom: 40 },
+  section: { gap: 10 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  sectionEmoji: { fontSize: 20 },
+  sectionTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
+  groupCard: {
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+  },
+  divider: { height: 1, backgroundColor: C.divider },
+  linkRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  linkLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  skippedValue: { color: C.hint, fontStyle: 'italic' },
+  toggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    padding: 3,
+    justifyContent: 'center',
+    backgroundColor: C.switchOff,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+  },
+  toggleOn: { backgroundColor: C.accent },
+  toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(246, 242, 227, 0.72)' },
+  toggleKnobOn: { backgroundColor: C.onAccent, transform: [{ translateX: 20 }] },
   card: {
     backgroundColor: C.card,
     borderRadius: 20,
@@ -1042,13 +1121,13 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
-  title: { fontSize: 20, fontWeight: '800', color: C.title },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: C.title },
-  body: { fontSize: 15, lineHeight: 21, color: C.body },
-  hint: { fontSize: 13, lineHeight: 18, color: C.hint },
-  label: { fontSize: 14, fontWeight: '700', color: C.title, marginTop: 4 },
+  title: { fontSize: 20, fontWeight: '900', color: C.title },
+  cardTitle: { fontSize: 16, fontWeight: '900', color: C.title },
+  body: { fontSize: 15, lineHeight: 21, color: C.body, fontWeight: '700' },
+  hint: { fontSize: 13, lineHeight: 18, color: C.hint, fontWeight: '700' },
+  label: { fontSize: 14, fontWeight: '900', color: C.title, marginTop: 4 },
   error: { fontSize: 13, color: C.danger, textAlign: 'center' },
-  link: { fontSize: 14, fontWeight: '700', color: C.accent },
+  link: { fontSize: 14, fontWeight: '900', color: '#FFFFFF', textDecorationLine: 'underline' },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
@@ -1061,7 +1140,7 @@ const styles = StyleSheet.create({
   },
   chipCompact: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10 },
   chipSelected: { backgroundColor: C.accent, borderColor: C.accent },
-  chipText: { fontSize: 15, color: C.body, fontWeight: '600' },
+  chipText: { fontSize: 15, color: '#FFFFFF', fontWeight: '800' },
   chipTextSelected: { color: C.onAccent },
   input: {
     borderRadius: 12,
@@ -1078,13 +1157,13 @@ const styles = StyleSheet.create({
   skipButton: { paddingHorizontal: 18, paddingVertical: 14 },
   skipText: { fontSize: 16, fontWeight: '700', color: C.accent },
   primary: { backgroundColor: C.accent, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
-  primaryText: { color: C.onAccent, fontSize: 16, fontWeight: '800' },
+  primaryText: { color: C.onAccent, fontSize: 16, fontWeight: '900' },
   secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: C.secondary, borderWidth: 1, borderColor: C.cardBorder },
-  secondaryText: { color: C.accent, fontSize: 15, fontWeight: '700' },
-  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  summaryLabel: { fontSize: 13, color: C.hint, fontWeight: '600' },
-  summaryValue: { fontSize: 15, color: C.body },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  secondaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  summaryLabel: { fontSize: 12, color: C.hint, fontWeight: '800' },
+  summaryValue: { marginTop: 3, fontSize: 15, color: '#FFFFFF', fontWeight: '800' },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   barTrack: { height: 8, borderRadius: 4, backgroundColor: C.divider, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: 4, backgroundColor: C.accent },
 });
