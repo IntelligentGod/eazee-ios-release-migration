@@ -1,6 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import SimpleScreen from '@/components/SimpleScreen';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ScreenHeader from '@/components/ScreenHeader';
+import LiquidGlassIconButton from '@/components/LiquidGlassIconButton';
 import { useAuthSession } from './context/AuthSessionContext';
 import {
   addMemory,
@@ -15,11 +32,22 @@ import {
   type MemoryState,
 } from '@/lib/memories';
 
-const ACCENT = '#0F5A4D';
-const ACCENT_SOFT = '#0B7A69';
+/** The same sand look as Settings → Intelligence Personalization, which opens this screen. */
+const BACKGROUND_COLORS: [string, string] = ['#F1ECCE', '#8C8268'];
+const CREAM = 'rgba(246, 242, 227, 0.94)';
+const CREAM_TEXT = '#4D4A3B';
 
-/** Settings → Memory: what Eazee remembers about the user, to review, edit or delete. */
+function Toggle({ enabled }: { enabled: boolean }) {
+  return (
+    <View style={[styles.toggle, enabled && styles.toggleOn]}>
+      <View style={[styles.toggleKnob, enabled && styles.toggleKnobOn]} />
+    </View>
+  );
+}
+
+/** Settings → Intelligence Personalization → Memory: what Eazee remembers about the user. */
 export default function MemoriesScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuthSession();
   const uid = user?.uid ?? null;
   const [state, setState] = useState<MemoryState | null>(null);
@@ -39,7 +67,7 @@ export default function MemoriesScreen() {
         if (!cancelled) setState(latest);
       })
       .catch(() => {
-        if (!cancelled) setLoadError('Couldn’t load your memories right now. Showing what’s saved on this phone.');
+        if (!cancelled) setLoadError('Couldn’t reach Eazee right now. Showing what’s saved on this phone.');
       });
     const unsubscribe = subscribeMemories((value, changedUserId) => {
       if (changedUserId === uid) setState(value);
@@ -54,170 +82,308 @@ export default function MemoriesScreen() {
     void action().catch((error) => Alert.alert('Not saved', (error as Error)?.message || 'Please try again.'));
   };
 
-  if (!uid || !state) {
-    return (
-      <SimpleScreen title="Memory">
-        <View style={styles.center}>
-          {uid ? <ActivityIndicator color={ACCENT} /> : <Text style={styles.body}>Sign in to use memory.</Text>}
-        </View>
-      </SimpleScreen>
-    );
-  }
-
-  const sorted = [...state.memories].sort((a, b) => b.updatedAt - a.updatedAt);
-
   const saveEdit = (memory: Memory) => {
     const text = draft.trim();
     setEditingId(null);
-    if (!text || text === memory.text) return;
+    if (!uid || !text || text === memory.text) return;
     run(() => editMemory(uid, memory.id, text));
   };
 
+  const addNew = () => {
+    const text = newMemory.trim();
+    if (!uid || text.length < 2) return;
+    setNewMemory('');
+    run(() => addMemory(uid, text, 'settings'));
+  };
+
+  const sorted = state ? [...state.memories].sort((a, b) => b.updatedAt - a.updatedAt) : [];
+  const enabled = state?.enabled ?? true;
+
   return (
-    <SimpleScreen title="Memory" subtitle="What Eazee remembers about you">
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <View style={styles.switchRow}>
-            <Text style={[styles.cardTitle, { flex: 1 }]}>Remember things about me</Text>
-            <Switch
-              value={state.enabled}
-              onValueChange={(enabled) => run(() => setMemoryEnabled(uid, enabled))}
-              trackColor={{ true: ACCENT_SOFT, false: 'rgba(15, 90, 77, 0.2)' }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-          <Text style={styles.hint}>
-            {state.enabled
-              ? 'Eazee notes lasting things you tell it (your work, people in your life, routines) and uses them in future chats. It never saves sensitive details unless you ask. You’ll see “Remembered: …” under a reply when it saves something.'
-              : 'Memory is off: Eazee won’t remember anything new or use what’s saved. Your saved memories are kept until you delete them.'}
-          </Text>
-        </View>
+    <View style={styles.root}>
+      <LinearGradient colors={BACKGROUND_COLORS} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
+      <View pointerEvents="none" style={styles.waveLayer}>
+        <Image source={require('../assets/images/wave-bg.png')} style={styles.waveImage} resizeMode="cover" />
+      </View>
+      <LinearGradient
+        colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.72)']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        pointerEvents="none"
+        style={styles.shadowLayer}
+      />
 
-        {!!loadError && <Text style={styles.error}>{loadError}</Text>}
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{`Saved memories (${sorted.length})`}</Text>
-          {!sorted.length && (
-            <Text style={styles.hint}>Nothing yet. Tell Eazee about yourself in a chat, or add something below.</Text>
+      <View style={[styles.safeArea, { paddingTop: insets.top + 8 }]}>
+        <ScreenHeader
+          title="Memory"
+          titleColor="#FFFFFF"
+          horizontalPadding={0}
+          titlePlacement="left"
+          left={(
+            <LiquidGlassIconButton
+              debugLabel="memories:back"
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/home'))}
+              size={44}
+              fallbackTint="light"
+              fallbackBackgroundColor="rgba(255, 255, 255, 0.18)"
+              fallbackBorderColor="rgba(255, 255, 255, 0.36)"
+              hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
+            >
+              <MaterialCommunityIcons name="chevron-left" size={38} color="rgba(0, 0, 0, 0.52)" />
+            </LiquidGlassIconButton>
           )}
-          {sorted.map((memory) => (
-            <View key={memory.id} style={styles.memoryRow}>
-              {editingId === memory.id ? (
-                <TextInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  onSubmitEditing={() => saveEdit(memory)}
-                  onBlur={() => saveEdit(memory)}
-                  autoFocus
-                  maxLength={200}
-                  style={[styles.input, { flex: 1 }]}
-                />
-              ) : (
+        />
+
+        {!uid || !state ? (
+          <View style={styles.center}>
+            {uid ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.body}>Sign in to use memory.</Text>}
+          </View>
+        ) : (
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView
+              contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* On/off */}
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityState={{ checked: enabled }}
+                onPress={() => run(() => setMemoryEnabled(uid, !enabled))}
+                style={styles.heroCard}
+              >
+                <View style={styles.heroTop}>
+                  <Text style={styles.heroEmoji}>💭</Text>
+                  <Text style={[styles.title, { flex: 1 }]}>Remember things about me</Text>
+                  <Toggle enabled={enabled} />
+                </View>
+                <Text style={styles.body}>
+                  {enabled
+                    ? 'Eazee notes lasting things you tell it (your work, the people in your life, your routines) and uses them in future chats. It never saves sensitive details unless you ask.'
+                    : 'Memory is off. Eazee won’t remember anything new or use what’s saved. Your memories are kept until you delete them.'}
+                </Text>
+              </Pressable>
+
+              {!!loadError && (
+                <View style={styles.notice}>
+                  <MaterialCommunityIcons name="cloud-off-outline" size={18} color="#FFFFFF" />
+                  <Text style={[styles.meta, { flex: 1, color: '#FFFFFF' }]}>{loadError}</Text>
+                </View>
+              )}
+
+              {/* Saved memories */}
+              <View style={[styles.section, !enabled && styles.dimmed]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionEmoji}>🧠</Text>
+                  <Text style={styles.sectionTitle}>Saved memories</Text>
+                  {sorted.length > 0 && (
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countText}>{sorted.length}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.card}>
+                  {sorted.length === 0 ? (
+                    <View style={styles.empty}>
+                      <Text style={styles.emptyEmoji}>🌱</Text>
+                      <Text style={styles.label}>Nothing remembered yet</Text>
+                      <Text style={[styles.meta, { textAlign: 'center' }]}>
+                        Tell Eazee about yourself in a chat, like “I’m a nursing student”, or add something below.
+                      </Text>
+                    </View>
+                  ) : (
+                    sorted.map((memory, index) => (
+                      <View key={memory.id}>
+                        {index > 0 && <View style={styles.divider} />}
+                        <View style={styles.memoryRow}>
+                          <View style={styles.bullet} />
+                          {editingId === memory.id ? (
+                            <TextInput
+                              value={draft}
+                              onChangeText={setDraft}
+                              onSubmitEditing={() => saveEdit(memory)}
+                              onBlur={() => saveEdit(memory)}
+                              autoFocus
+                              maxLength={200}
+                              returnKeyType="done"
+                              style={[styles.input, { flex: 1 }]}
+                            />
+                          ) : (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Edit memory: ${memory.text}`}
+                              style={{ flex: 1 }}
+                              onPress={() => {
+                                setEditingId(memory.id);
+                                setDraft(memory.text);
+                              }}
+                            >
+                              <Text style={styles.memoryText}>{memory.text}</Text>
+                              <Text style={styles.meta}>
+                                {`${memory.source === 'settings' ? 'Added by you' : 'From chat'} · ${new Date(memory.updatedAt).toLocaleDateString()}`}
+                              </Text>
+                            </Pressable>
+                          )}
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Delete memory: ${memory.text}`}
+                            hitSlop={10}
+                            onPress={() => run(() => deleteMemory(uid, memory.id))}
+                            style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.6 }]}
+                          >
+                            <MaterialCommunityIcons name="trash-can-outline" size={20} color="#FFFFFF" />
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </View>
+                {sorted.length > 0 && <Text style={styles.footnote}>Tap a memory to edit it.</Text>}
+              </View>
+
+              {/* Add */}
+              <View style={[styles.section, !enabled && styles.dimmed]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionEmoji}>✏️</Text>
+                  <Text style={styles.sectionTitle}>Add a memory</Text>
+                </View>
+                <View style={styles.addRow}>
+                  <TextInput
+                    value={newMemory}
+                    onChangeText={setNewMemory}
+                    onSubmitEditing={addNew}
+                    placeholder="e.g. Works night shifts on weekends"
+                    placeholderTextColor="rgba(255, 255, 255, 0.55)"
+                    maxLength={200}
+                    editable={enabled}
+                    returnKeyType="done"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add memory"
+                    disabled={!enabled || newMemory.trim().length < 2}
+                    onPress={addNew}
+                    style={[styles.addButton, (!enabled || newMemory.trim().length < 2) && { opacity: 0.45 }]}
+                  >
+                    <MaterialCommunityIcons name="plus" size={26} color={CREAM_TEXT} />
+                  </Pressable>
+                </View>
+              </View>
+
+              {sorted.length > 0 && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Edit memory: ${memory.text}`}
-                  style={{ flex: 1 }}
-                  onPress={() => {
-                    setEditingId(memory.id);
-                    setDraft(memory.text);
-                  }}
+                  hitSlop={8}
+                  onPress={() => Alert.alert(
+                    'Delete all memories?',
+                    'Eazee will forget everything it remembered about you, on every device. This cannot be undone.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete all', style: 'destructive', onPress: () => run(() => deleteAllMemories(uid)) },
+                    ]
+                  )}
+                  style={styles.deleteAll}
                 >
-                  <Text style={styles.memoryText}>{memory.text}</Text>
-                  <Text style={styles.memoryMeta}>
-                    {`${memory.source === 'settings' ? 'Added by you' : 'From chat'} · ${new Date(memory.updatedAt).toLocaleDateString()}`}
-                  </Text>
+                  <Text style={styles.deleteAllText}>Delete all memories</Text>
                 </Pressable>
               )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Delete memory: ${memory.text}`}
-                hitSlop={10}
-                onPress={() => run(() => deleteMemory(uid, memory.id))}
-              >
-                <Text style={styles.deleteText}>Delete</Text>
-              </Pressable>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Add a memory</Text>
-          <TextInput
-            value={newMemory}
-            onChangeText={setNewMemory}
-            placeholder="e.g. Works night shifts on weekends"
-            placeholderTextColor="rgba(15, 90, 77, 0.45)"
-            maxLength={200}
-            editable={state.enabled}
-            style={styles.input}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={!state.enabled || newMemory.trim().length < 2}
-            onPress={() => {
-              const text = newMemory.trim();
-              setNewMemory('');
-              run(() => addMemory(uid, text, 'settings'));
-            }}
-            style={[styles.primary, (!state.enabled || newMemory.trim().length < 2) && { opacity: 0.5 }]}
-          >
-            <Text style={styles.primaryText}>Add</Text>
-          </Pressable>
-        </View>
-
-        {sorted.length > 0 && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => Alert.alert(
-              'Delete all memories?',
-              'Eazee will forget everything it remembered about you, on every device. This cannot be undone.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete all', style: 'destructive', onPress: () => run(() => deleteAllMemories(uid)) },
-              ]
-            )}
-            style={styles.secondary}
-          >
-            <Text style={[styles.secondaryText, { color: '#A33A2B' }]}>Delete all memories</Text>
-          </Pressable>
+            </ScrollView>
+          </KeyboardAvoidingView>
         )}
-      </ScrollView>
-    </SimpleScreen>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  content: { padding: 16, gap: 14, paddingBottom: 40 },
-  card: { backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 20, padding: 16, gap: 10 },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: ACCENT },
-  body: { fontSize: 15, lineHeight: 21, color: '#173F38' },
-  hint: { fontSize: 13, lineHeight: 18, color: ACCENT_SOFT },
-  error: { fontSize: 13, color: '#A33A2B', textAlign: 'center' },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  memoryRow: {
+  root: { flex: 1, backgroundColor: '#8C8268' },
+  waveLayer: { position: 'absolute', top: -24, left: -12, right: -12, bottom: -24, opacity: 0.1 },
+  waveImage: { width: undefined, height: undefined, flex: 1 },
+  shadowLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 260 },
+  safeArea: { flex: 1, paddingHorizontal: 18 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingTop: 18, gap: 22 },
+  heroCard: {
+    borderRadius: 24,
+    padding: 18,
+    gap: 10,
+    backgroundColor: 'rgba(46, 45, 34, 0.36)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  heroEmoji: { fontSize: 30 },
+  title: { color: '#FFFFFF', fontSize: 17, lineHeight: 22, fontWeight: '900' },
+  label: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  body: { color: 'rgba(255, 255, 255, 0.82)', fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  meta: { marginTop: 2, color: 'rgba(255, 255, 255, 0.62)', fontSize: 12, lineHeight: 17, fontWeight: '700' },
+  notice: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(15, 90, 77, 0.1)',
-  },
-  memoryText: { fontSize: 15, lineHeight: 20, color: '#173F38' },
-  memoryMeta: { fontSize: 12, color: ACCENT_SOFT, marginTop: 2 },
-  deleteText: { fontSize: 14, fontWeight: '700', color: '#A33A2B' },
-  input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(15, 90, 77, 0.25)',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
+    gap: 8,
+    borderRadius: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 15,
-    color: '#173F38',
+    backgroundColor: 'rgba(46, 45, 34, 0.45)',
   },
-  primary: { backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
-  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.55)' },
-  secondaryText: { color: ACCENT, fontSize: 15, fontWeight: '700' },
+  section: { gap: 10 },
+  dimmed: { opacity: 0.5 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  sectionEmoji: { fontSize: 20 },
+  sectionTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
+  countBadge: { minWidth: 24, height: 22, borderRadius: 11, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: CREAM },
+  countText: { color: CREAM_TEXT, fontSize: 12, fontWeight: '900' },
+  card: {
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(46, 45, 34, 0.32)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  divider: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.14)' },
+  memoryRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  bullet: { width: 8, height: 8, borderRadius: 4, backgroundColor: CREAM },
+  memoryText: { color: '#FFFFFF', fontSize: 15, lineHeight: 21, fontWeight: '800' },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  empty: { alignItems: 'center', gap: 6, paddingVertical: 22, paddingHorizontal: 8 },
+  emptyEmoji: { fontSize: 34 },
+  footnote: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12, fontWeight: '700', paddingHorizontal: 6 },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  input: {
+    minHeight: 48,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    backgroundColor: 'rgba(46, 45, 34, 0.38)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  addButton: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: CREAM },
+  deleteAll: { alignSelf: 'center', paddingVertical: 8 },
+  deleteAllText: { color: '#FFD9CF', fontSize: 14, fontWeight: '900' },
+  toggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    padding: 3,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(46, 45, 34, 0.30)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  toggleOn: { backgroundColor: CREAM },
+  toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(246, 242, 227, 0.72)' },
+  toggleKnobOn: { backgroundColor: CREAM_TEXT, transform: [{ translateX: 20 }] },
 });

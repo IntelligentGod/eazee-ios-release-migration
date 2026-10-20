@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ABOUT_ME_COLORS as C } from '@/lib/aboutMe/theme';
 import {
   ActivityIndicator,
   Alert,
@@ -26,8 +27,7 @@ import {
 } from '@/lib/aboutMe/profile';
 import { getCardBasis, getCardCaption, pickCardTheme, type CardHumour } from '@/lib/aboutMe/personalityCard';
 
-const ACCENT = '#0F5A4D';
-const ACCENT_SOFT = '#0B7A69';
+const ACCENT = C.accent;
 const IMAGE_SIZE = { width: 1080, height: 1350 };
 
 /**
@@ -189,7 +189,7 @@ export default function PersonalityCardScreen() {
 
   if (!uid || profile === undefined) {
     return (
-      <SimpleScreen title="Your Eazee personality">
+      <SimpleScreen tone="dark" title="Your Eazee personality">
         <View style={styles.center}>{uid ? <ActivityIndicator color={ACCENT} /> : <Text style={styles.body}>Sign in to see your card.</Text>}</View>
       </SimpleScreen>
     );
@@ -198,7 +198,7 @@ export default function PersonalityCardScreen() {
   if (!basis.ok || !content) {
     const reason = basis.ok ? 'none' : basis.reason;
     return (
-      <SimpleScreen title="Your Eazee personality">
+      <SimpleScreen tone="dark" title="Your Eazee personality">
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.body}>
@@ -219,7 +219,7 @@ export default function PersonalityCardScreen() {
   }
 
   return (
-    <SimpleScreen title="Your Eazee personality" subtitle="Just for fun">
+    <SimpleScreen tone="dark" title="Your Eazee personality" subtitle="Just for fun">
       <ScrollView contentContainerStyle={[styles.content, { alignItems: 'center' }]}>
         <PersonalityCardView ref={cardRef} content={content} width={cardWidth} />
 
@@ -273,7 +273,7 @@ function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: (
 function SecondaryButton({ label, onPress, destructive }: { label: string; onPress: () => void; destructive?: boolean }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.secondary}>
-      <Text style={[styles.secondaryText, destructive && { color: '#A33A2B' }]}>{label}</Text>
+      <Text style={[styles.secondaryText, destructive && { color: C.danger }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -281,16 +281,16 @@ function SecondaryButton({ label, onPress, destructive }: { label: string; onPre
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   content: { padding: 16, gap: 14, paddingBottom: 40 },
-  card: { backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 20, padding: 16, gap: 10 },
-  body: { fontSize: 15, lineHeight: 21, color: '#173F38' },
-  hint: { fontSize: 13, lineHeight: 18, color: ACCENT_SOFT, textAlign: 'center' },
-  segment: { flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.55)', borderRadius: 999, padding: 4 },
+  card: { backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.cardBorder, padding: 16, gap: 10 },
+  body: { fontSize: 15, lineHeight: 21, color: C.body },
+  hint: { fontSize: 13, lineHeight: 18, color: C.hint, textAlign: 'center' },
+  segment: { flexDirection: 'row', backgroundColor: C.secondary, borderWidth: 1, borderColor: C.cardBorder, borderRadius: 999, padding: 4 },
   segmentItem: { flex: 1, borderRadius: 999, paddingVertical: 10, alignItems: 'center' },
-  segmentItemSelected: { backgroundColor: ACCENT },
-  segmentText: { fontSize: 15, fontWeight: '700', color: ACCENT },
-  segmentTextSelected: { color: '#FFFFFF' },
-  primary: { backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
-  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.55)' },
-  secondaryText: { color: ACCENT, fontSize: 15, fontWeight: '700' },
+  segmentItemSelected: { backgroundColor: C.accent },
+  segmentText: { fontSize: 15, fontWeight: '700', color: C.body },
+  segmentTextSelected: { color: C.onAccent },
+  primary: { backgroundColor: C.accent, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
+  primaryText: { color: C.onAccent, fontSize: 16, fontWeight: '800' },
+  secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: C.secondary, borderWidth: 1, borderColor: C.cardBorder },
+  secondaryText: { color: C.accent, fontSize: 15, fontWeight: '700' },
 });

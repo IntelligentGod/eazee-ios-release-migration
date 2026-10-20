@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ABOUT_ME_COLORS as C } from '@/lib/aboutMe/theme';
 import {
   ActivityIndicator,
   Alert,
@@ -75,8 +76,7 @@ const INTRO_COPY =
   'Your answers help Eazee tailor explanations, plans, and suggestions. Skip anything you like. You can edit or delete your answers in Settings.';
 const REVIEW_COPY = 'This is a starting point, not a fixed label. Your instructions always matter more than a personality result.';
 
-const ACCENT = '#0F5A4D';
-const ACCENT_SOFT = '#0B7A69';
+const ACCENT = C.accent;
 
 type Mode = 'loading' | 'intro' | 'flow' | 'done' | 'manage';
 
@@ -367,7 +367,7 @@ export default function AboutMeScreen() {
 
   if (!uid) {
     return (
-      <SimpleScreen title="About me">
+      <SimpleScreen tone="dark" title="About me">
         <View style={styles.center}><Text style={styles.body}>Sign in to tell Eazee about yourself.</Text></View>
       </SimpleScreen>
     );
@@ -375,7 +375,7 @@ export default function AboutMeScreen() {
 
   if (mode === 'loading') {
     return (
-      <SimpleScreen title="About me">
+      <SimpleScreen tone="dark" title="About me">
         <View style={styles.center}><ActivityIndicator color={ACCENT} /></View>
       </SimpleScreen>
     );
@@ -383,7 +383,7 @@ export default function AboutMeScreen() {
 
   if (mode === 'manage' && profile) {
     return (
-      <SimpleScreen title="About me" subtitle="What Eazee knows about you">
+      <SimpleScreen tone="dark" title="About me" subtitle="What Eazee knows about you">
         <ScrollView contentContainerStyle={styles.content}>
           <ProfileSummary
             profile={profile}
@@ -423,7 +423,7 @@ export default function AboutMeScreen() {
 
   if (mode === 'done') {
     return (
-      <SimpleScreen title="About me" onBack={() => setMode('manage')}>
+      <SimpleScreen tone="dark" title="About me" onBack={() => setMode('manage')}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.title}>Saved ✨</Text>
@@ -449,7 +449,7 @@ export default function AboutMeScreen() {
 
   if (mode === 'intro' || !draft) {
     return (
-      <SimpleScreen title="Get to know me">
+      <SimpleScreen tone="dark" title="Get to know me">
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.title}>Tell Eazee about yourself</Text>
@@ -483,7 +483,7 @@ export default function AboutMeScreen() {
         : `Question ${QUESTION_STEPS.indexOf(step) + 1} of 10`;
 
   return (
-    <SimpleScreen
+    <SimpleScreen tone="dark"
       title={step === 'review' ? 'Review' : 'Get to know me'}
       subtitle={step === 'review' ? undefined : progressLabel}
       onBack={back}
@@ -615,7 +615,7 @@ function ChoiceStep({ question, draft, updateDraft, markAnswered }: StepProps & 
             onChangeText={(input) => updateDraft((current) =>
               markAnswered({ ...current, about_me: { ...current.about_me, [textField.field]: input } as AboutMe }, textField.field))}
             placeholder={textField.placeholder}
-            placeholderTextColor="rgba(15, 90, 77, 0.45)"
+            placeholderTextColor={C.placeholder}
             maxLength={textField.maxLength}
             style={styles.input}
           />
@@ -686,7 +686,7 @@ function PersonalityRouteStep({ draft, updateDraft, markAnswered }: StepProps) {
             value={imported.testName ?? ''}
             onChangeText={(testName) => setImported({ testName })}
             placeholder="e.g. IPIP-NEO, Truity Big Five"
-            placeholderTextColor="rgba(15, 90, 77, 0.45)"
+            placeholderTextColor={C.placeholder}
             maxLength={80}
             style={styles.input}
           />
@@ -695,7 +695,7 @@ function PersonalityRouteStep({ draft, updateDraft, markAnswered }: StepProps) {
             value={imported.pastedText ?? ''}
             onChangeText={(pastedText) => setImported({ pastedText })}
             placeholder={'Openness: 72 percentile\nConscientiousness: 40 percentile'}
-            placeholderTextColor="rgba(15, 90, 77, 0.45)"
+            placeholderTextColor={C.placeholder}
             multiline
             maxLength={2000}
             style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
@@ -722,7 +722,7 @@ function PersonalityRouteStep({ draft, updateDraft, markAnswered }: StepProps) {
             value={imported.testName ?? ''}
             onChangeText={(testName) => setImported({ testName })}
             placeholder="e.g. Enneagram, DISC, CliftonStrengths"
-            placeholderTextColor="rgba(15, 90, 77, 0.45)"
+            placeholderTextColor={C.placeholder}
             maxLength={80}
             style={styles.input}
           />
@@ -731,7 +731,7 @@ function PersonalityRouteStep({ draft, updateDraft, markAnswered }: StepProps) {
             value={imported.resultText ?? ''}
             onChangeText={(resultText) => setImported({ resultText })}
             placeholder="e.g. Type 7 with a 6 wing"
-            placeholderTextColor="rgba(15, 90, 77, 0.45)"
+            placeholderTextColor={C.placeholder}
             multiline
             maxLength={400}
             style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
@@ -756,7 +756,7 @@ function BigFiveTraitsEditor({ traits, onChange }: { traits: BigFiveTrait[]; onC
               value={trait.name}
               onChangeText={(name) => update(index, { name })}
               placeholder="Trait"
-              placeholderTextColor="rgba(15, 90, 77, 0.45)"
+              placeholderTextColor={C.placeholder}
               maxLength={40}
               style={[styles.input, { flex: 1 }]}
             />
@@ -765,7 +765,7 @@ function BigFiveTraitsEditor({ traits, onChange }: { traits: BigFiveTrait[]; onC
               onChangeText={(input) => update(index, { score: Number(input.replace(',', '.')) })}
               keyboardType="decimal-pad"
               placeholder="Score"
-              placeholderTextColor="rgba(15, 90, 77, 0.45)"
+              placeholderTextColor={C.placeholder}
               style={[styles.input, { width: 80 }]}
             />
           </View>
@@ -779,12 +779,12 @@ function BigFiveTraitsEditor({ traits, onChange }: { traits: BigFiveTrait[]; onC
                 onChangeText={(input) => update(index, { scaleMax: Number(input) || undefined })}
                 keyboardType="decimal-pad"
                 placeholder="Out of"
-                placeholderTextColor="rgba(15, 90, 77, 0.45)"
+                placeholderTextColor={C.placeholder}
                 style={[styles.input, { width: 80 }]}
               />
             )}
             <Pressable accessibilityRole="button" onPress={() => onChange(traits.filter((_, i) => i !== index))} hitSlop={6}>
-              <Text style={[styles.link, { color: '#A33A2B' }]}>Remove</Text>
+              <Text style={[styles.link, { color: C.danger }]}>Remove</Text>
             </Pressable>
           </View>
         </View>
@@ -804,7 +804,7 @@ function DateTakenInput({ value, onChange }: { value?: string; onChange: (value:
         value={value ?? ''}
         onChangeText={(input) => onChange(input.trim() || undefined)}
         placeholder="YYYY-MM"
-        placeholderTextColor="rgba(15, 90, 77, 0.45)"
+        placeholderTextColor={C.placeholder}
         maxLength={10}
         style={[styles.input, { width: 140 }]}
       />
@@ -993,8 +993,8 @@ function ControlsCard({ controls, onChange }: { controls: PersonalisationControl
           <Switch
             value={controls[row.key]}
             onValueChange={(value) => onChange({ ...controls, [row.key]: value })}
-            trackColor={{ true: ACCENT_SOFT, false: 'rgba(15, 90, 77, 0.2)' }}
-            thumbColor="#FFFFFF"
+            trackColor={{ true: C.accent, false: C.switchOff }}
+            thumbColor={controls[row.key] ? C.onAccent : '#FFFFFF'}
           />
         </View>
       ))}
@@ -1026,7 +1026,7 @@ function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: (
 function ActionButton({ label, onPress, destructive }: { label: string; onPress: () => void; destructive?: boolean }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.secondary}>
-      <Text style={[styles.secondaryText, destructive && { color: '#A33A2B' }]}>{label}</Text>
+      <Text style={[styles.secondaryText, destructive && { color: C.danger }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -1035,54 +1035,56 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   content: { padding: 16, gap: 14, paddingBottom: 40 },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: C.card,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
     padding: 16,
     gap: 10,
   },
-  title: { fontSize: 20, fontWeight: '800', color: ACCENT },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: ACCENT },
-  body: { fontSize: 15, lineHeight: 21, color: '#173F38' },
-  hint: { fontSize: 13, lineHeight: 18, color: ACCENT_SOFT },
-  label: { fontSize: 14, fontWeight: '700', color: ACCENT, marginTop: 4 },
-  error: { fontSize: 13, color: '#A33A2B', textAlign: 'center' },
-  link: { fontSize: 14, fontWeight: '700', color: ACCENT_SOFT },
+  title: { fontSize: 20, fontWeight: '800', color: C.title },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: C.title },
+  body: { fontSize: 15, lineHeight: 21, color: C.body },
+  hint: { fontSize: 13, lineHeight: 18, color: C.hint },
+  label: { fontSize: 14, fontWeight: '700', color: C.title, marginTop: 4 },
+  error: { fontSize: 13, color: C.danger, textAlign: 'center' },
+  link: { fontSize: 14, fontWeight: '700', color: C.accent },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: 'rgba(15, 90, 77, 0.25)',
-    backgroundColor: '#FFFFFF',
+    borderColor: C.chipBorder,
+    backgroundColor: C.chip,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
   chipCompact: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10 },
-  chipSelected: { backgroundColor: ACCENT, borderColor: ACCENT },
-  chipText: { fontSize: 15, color: ACCENT, fontWeight: '600' },
-  chipTextSelected: { color: '#FFFFFF' },
+  chipSelected: { backgroundColor: C.accent, borderColor: C.accent },
+  chipText: { fontSize: 15, color: C.body, fontWeight: '600' },
+  chipTextSelected: { color: C.onAccent },
   input: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(15, 90, 77, 0.25)',
-    backgroundColor: '#FFFFFF',
+    borderColor: C.chipBorder,
+    backgroundColor: C.input,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#173F38',
+    color: C.title,
   },
-  traitRow: { gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(15, 90, 77, 0.12)' },
+  traitRow: { gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: C.divider },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   skipButton: { paddingHorizontal: 18, paddingVertical: 14 },
-  skipText: { fontSize: 16, fontWeight: '700', color: ACCENT },
-  primary: { backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
-  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.55)' },
-  secondaryText: { color: ACCENT, fontSize: 15, fontWeight: '700' },
+  skipText: { fontSize: 16, fontWeight: '700', color: C.accent },
+  primary: { backgroundColor: C.accent, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
+  primaryText: { color: C.onAccent, fontSize: 16, fontWeight: '800' },
+  secondary: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', backgroundColor: C.secondary, borderWidth: 1, borderColor: C.cardBorder },
+  secondaryText: { color: C.accent, fontSize: 15, fontWeight: '700' },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  summaryLabel: { fontSize: 13, color: ACCENT_SOFT, fontWeight: '600' },
-  summaryValue: { fontSize: 15, color: '#173F38' },
+  summaryLabel: { fontSize: 13, color: C.hint, fontWeight: '600' },
+  summaryValue: { fontSize: 15, color: C.body },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  barTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(15, 90, 77, 0.12)', overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: 4, backgroundColor: ACCENT_SOFT },
+  barTrack: { height: 8, borderRadius: 4, backgroundColor: C.divider, overflow: 'hidden' },
+  barFill: { height: 8, borderRadius: 4, backgroundColor: C.accent },
 });

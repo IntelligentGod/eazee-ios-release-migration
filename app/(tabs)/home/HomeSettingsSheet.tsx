@@ -488,9 +488,8 @@ function SavedPreferencesSection({ userId }: { userId?: string | null }) {
   };
 
   return (
-    <View style={{ gap: 14, marginTop: 10 }}>
-      <Text style={styles.settingLabel}>Saved preferences</Text>
-      <Text style={styles.homePersonalizationHint}>
+    <PersonalizationSection emoji="⭐" title="Saved preferences">
+      <Text style={styles.aiSectionHint}>
         Things you asked Eazee to remember. Your request in a chat always comes first.
       </Text>
       <Pressable
@@ -505,7 +504,8 @@ function SavedPreferencesSection({ userId }: { userId?: string | null }) {
       {(Object.keys(SAVED_PREFERENCE_FIELDS) as SavedPreferenceField[]).map((field) => {
         const saved = store.preferences.find((item) => item.field === field);
         return (
-          <View key={field}>
+          <View key={field} style={!store.enabled && styles.aiDimmed}>
+            <View style={styles.aiDivider} />
             <PersonalizationMenuPicker
               label={SAVED_PREFERENCE_FIELDS[field].label}
               value={saved?.value || NOT_SET}
@@ -516,24 +516,61 @@ function SavedPreferencesSection({ userId }: { userId?: string | null }) {
               onChange={(value) => handleChange(field, value)}
             />
             {!!saved && (
-              <Text style={[styles.homePersonalizationHint, { marginTop: 2, fontSize: 12 }]}>
+              <Text style={styles.aiRowMeta}>
                 {`Saved ${SAVED_PREFERENCE_SOURCE_LABELS[saved.source]}, ${new Date(saved.updatedAt).toLocaleDateString()}`}
               </Text>
             )}
           </View>
         );
       })}
-      <Pressable
-        accessibilityRole="button"
-        disabled={!store.preferences.length}
-        onPress={handleDeleteAll}
-        style={[styles.saveButton, !store.preferences.length && styles.saveButtonDisabled]}
-      >
-        <Text style={[styles.saveButtonText, !store.preferences.length && styles.saveButtonTextDisabled]}>
-          Delete saved preferences
-        </Text>
-      </Pressable>
+      {store.preferences.length > 0 && (
+        <Pressable accessibilityRole="button" onPress={handleDeleteAll} style={styles.aiDeleteLink} hitSlop={8}>
+          <Text style={styles.aiDeleteText}>Delete saved preferences</Text>
+        </Pressable>
+      )}
+    </PersonalizationSection>
+  );
+}
+
+/** A titled group on the Intelligence Personalization screen. */
+function PersonalizationSection({ emoji, title, children }: { emoji: string; title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.aiSection}>
+      <View style={styles.aiSectionHeader}>
+        <Text style={styles.aiSectionEmoji}>{emoji}</Text>
+        <Text style={styles.aiSectionTitle}>{title}</Text>
+      </View>
+      <View style={styles.aiCard}>{children}</View>
     </View>
+  );
+}
+
+/** A row that opens another screen, like the rows on the main Settings page. */
+function PersonalizationLinkRow({
+  emoji,
+  label,
+  detail,
+  onPress,
+}: {
+  emoji: string;
+  label: string;
+  detail: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${detail}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.aiLinkRow, pressed && styles.baseStyleBubblePressed]}
+    >
+      <Text style={styles.aiLinkEmoji}>{emoji}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        <Text style={styles.aiLinkDetail}>{detail}</Text>
+      </View>
+      <MaterialCommunityIcons name="chevron-right" size={26} color="rgba(255, 255, 255, 0.85)" />
+    </Pressable>
   );
 }
 
@@ -594,70 +631,62 @@ function AiPersonalizationPanel({
         style={styles.personalizationScroll}
         contentContainerStyle={styles.personalizationContent}
       >
-        <PersonalizationMenuPicker
-          label="Base personalization"
-          targetId={getHomeSettingsControlGuidanceTargetId('aiBasePersonalization')}
-          value={draft.baseStyle}
-          options={AI_BASE_PERSONALIZATION_OPTIONS}
-          onChange={(baseStyle) => updateDraft({ baseStyle })}
-        />
-        <PersonalizationMenuPicker
-          label="Emoji"
-          targetId={getHomeSettingsControlGuidanceTargetId('aiEmoji')}
-          value={draft.emoji}
-          options={AI_PERSONALIZATION_LEVEL_OPTIONS}
-          onChange={(emoji) => updateDraft({ emoji })}
-        />
-        <PersonalizationMenuPicker
-          label="Response length"
-          targetId={getHomeSettingsControlGuidanceTargetId('aiResponseLength')}
-          value={draft.responseLength}
-          options={AI_RESPONSE_LENGTH_OPTIONS}
-          onChange={(responseLength) => updateDraft({ responseLength })}
-        />
+        <Text style={styles.aiIntro}>How Eazee talks to you, and what it knows about you.</Text>
 
-        {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-
-        <Pressable
-          disabled={!hasChanges || isSaving}
-          onPress={handleSave}
-          style={[styles.saveButton, (!hasChanges || isSaving) && styles.saveButtonDisabled]}
-        >
-          <Text style={[styles.saveButtonText, (!hasChanges || isSaving) && styles.saveButtonTextDisabled]}>
-            {isSaving ? 'Saving' : hasChanges ? 'Save' : 'Saved'}
-          </Text>
-        </Pressable>
-
-        {!!userId && (
-          <View style={{ gap: 8, marginTop: 10 }}>
-            <Text style={styles.settingLabel}>Memory</Text>
-            <Text style={styles.homePersonalizationHint}>
-              Lasting things Eazee remembers about you from your chats.
-            </Text>
+        <PersonalizationSection emoji="💬" title="How Eazee talks">
+          <PersonalizationMenuPicker
+            label="Personality"
+            targetId={getHomeSettingsControlGuidanceTargetId('aiBasePersonalization')}
+            value={draft.baseStyle}
+            options={AI_BASE_PERSONALIZATION_OPTIONS}
+            onChange={(baseStyle) => updateDraft({ baseStyle })}
+          />
+          <View style={styles.aiDivider} />
+          <PersonalizationMenuPicker
+            label="Emoji"
+            targetId={getHomeSettingsControlGuidanceTargetId('aiEmoji')}
+            value={draft.emoji}
+            options={AI_PERSONALIZATION_LEVEL_OPTIONS}
+            onChange={(emoji) => updateDraft({ emoji })}
+          />
+          <View style={styles.aiDivider} />
+          <PersonalizationMenuPicker
+            label="Response length"
+            targetId={getHomeSettingsControlGuidanceTargetId('aiResponseLength')}
+            value={draft.responseLength}
+            options={AI_RESPONSE_LENGTH_OPTIONS}
+            onChange={(responseLength) => updateDraft({ responseLength })}
+          />
+          {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+          {/* Only while there is something to save, so a settled screen stays calm. */}
+          {(hasChanges || isSaving) && (
             <Pressable
               accessibilityRole="button"
+              disabled={isSaving}
+              onPress={handleSave}
+              style={[styles.saveButton, styles.aiSaveButton]}
+            >
+              <Text style={styles.saveButtonText}>{isSaving ? 'Saving…' : 'Save changes'}</Text>
+            </Pressable>
+          )}
+        </PersonalizationSection>
+
+        {!!userId && (
+          <PersonalizationSection emoji="🧠" title="What Eazee knows about you">
+            <PersonalizationLinkRow
+              emoji="💭"
+              label="Memory"
+              detail="Things Eazee remembers from your chats"
               onPress={() => router.push('/memories')}
-              style={styles.saveButton}
-            >
-              <Text style={styles.saveButtonText}>Memory</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!!userId && (
-          <View style={{ gap: 8, marginTop: 10 }}>
-            <Text style={styles.settingLabel}>About me</Text>
-            <Text style={styles.homePersonalizationHint}>
-              Your answers about yourself, how you like help, and your personality result.
-            </Text>
-            <Pressable
-              accessibilityRole="button"
+            />
+            <View style={styles.aiDivider} />
+            <PersonalizationLinkRow
+              emoji="🙋"
+              label="About me"
+              detail="Your answers and personality result"
               onPress={() => router.push({ pathname: '/about-me', params: { entry: 'settings' } })}
-              style={styles.saveButton}
-            >
-              <Text style={styles.saveButtonText}>About me</Text>
-            </Pressable>
-          </View>
+            />
+          </PersonalizationSection>
         )}
 
         <SavedPreferencesSection userId={userId} />
@@ -1445,11 +1474,98 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   personalizationHeaderTitle: {
-    fontSize: 20,
+    fontSize: 19,
   },
   personalizationContent: {
     paddingBottom: 30,
-    gap: 18,
+    gap: 22,
+  },
+  aiIntro: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  aiSection: {
+    gap: 10,
+  },
+  aiSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  aiSectionEmoji: {
+    fontSize: 20,
+  },
+  aiSectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  aiCard: {
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(46, 45, 34, 0.32)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  aiDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  aiSaveButton: {
+    minHeight: 48,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  aiSectionHint: {
+    color: 'rgba(255, 255, 255, 0.76)',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  aiRowMeta: {
+    marginTop: -4,
+    marginBottom: 8,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  aiDimmed: {
+    opacity: 0.45,
+  },
+  aiDeleteLink: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+  },
+  aiDeleteText: {
+    color: '#FFD9CF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  aiLinkRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  aiLinkEmoji: {
+    fontSize: 26,
+    width: 34,
+    textAlign: 'center',
+  },
+  aiLinkDetail: {
+    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 13,
+    fontWeight: '700',
   },
   baseStyleSetting: {
     gap: 8,
