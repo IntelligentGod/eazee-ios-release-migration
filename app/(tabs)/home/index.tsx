@@ -2899,7 +2899,9 @@ export default function HomePage() {
             <FixMyLifeButton onPress={() => void handleFixMyLife()} disabled={isCheckingFixMyLifeAccess} />
             <ProRequiredDialog
               visible={isFixMyLifeProDialogVisible}
-              message="Fix my life plans your whole week, Mon to Sun. It's part of Eazee Pro."
+              title="Fix my life is part of Eazee Pro"
+              message="Fix my life plans your whole week, Mon to Sun. Upgrade to Pro to turn it on."
+              onUpgrade={() => router.setParams({ settings: 'true', settingsPanel: 'paywall', settingsNonce: String(Date.now()) })}
               onClose={() => setIsFixMyLifeProDialogVisible(false)}
             />
 

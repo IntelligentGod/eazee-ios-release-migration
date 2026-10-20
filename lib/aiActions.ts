@@ -53,8 +53,11 @@ export function subscribeAiActionsAllowance(listener: (allowance: AiActionsAllow
 function setAllowance(next: AiActionsAllowance | null) {
   current = next;
   const userId = auth.currentUser?.uid;
-  if (userId && next) {
-    AsyncStorage.setItem(`${STORAGE_KEY}${userId}`, JSON.stringify(next)).catch(() => {});
+  if (userId) {
+    (next
+      ? AsyncStorage.setItem(`${STORAGE_KEY}${userId}`, JSON.stringify(next))
+      : AsyncStorage.removeItem(`${STORAGE_KEY}${userId}`)
+    ).catch(() => {});
   }
   listeners.forEach((listener) => listener(getAiActionsAllowance()));
 }
@@ -73,6 +76,12 @@ export async function loadAiActionsAllowance(userId: string) {
 
 /** From the subscription status (plan limits and today's usage). */
 export function setAiActionsAllowanceFromStatus(limit: number | null | undefined, used: number | undefined) {
+  // A server without AI action counting reports no usage for it: show no count then, as
+  // nothing is being counted.
+  if (used === undefined) {
+    setAllowance(null);
+    return;
+  }
   setAllowance({ used: Math.max(0, Number(used) || 0), limit: limit === undefined ? null : limit, day: today() });
 }
 
@@ -89,6 +98,8 @@ async function postAiActions(path: 'reserve' | 'release', count: number) {
     },
     body: JSON.stringify({ count }),
   });
+  // 404: a server from before AI action counting. Nothing is counted, so no count is shown.
+  if (response.status === 404) setAllowance(null);
   if (!response.ok) return null;
   const body = await response.json().catch(() => null);
   if (typeof body?.granted !== 'number') return null;

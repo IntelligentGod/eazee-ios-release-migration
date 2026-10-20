@@ -4,14 +4,21 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 
-/** Tells a free user a feature needs Eazee Pro, in the gold Home style, without opening the paywall. */
+/**
+ * Tells a free user a feature needs Eazee Pro, in the gold Home style, with a way to upgrade
+ * (Upgrade to Pro opens the paywall) or carry on (Not now).
+ */
 export default function ProRequiredDialog({
   visible,
+  title = 'This is an Eazee Pro feature',
   message,
+  onUpgrade,
   onClose,
 }: {
   visible: boolean;
+  title?: string;
   message: string;
+  onUpgrade?: () => void;
   onClose: () => void;
 }) {
   return (
@@ -29,15 +36,39 @@ export default function ProRequiredDialog({
           <View style={styles.badge}>
             <MIcon name="crown-outline" size={28} color="#6B5B2E" />
           </View>
-          <Text accessibilityRole="header" style={styles.title}>You must be a Pro user</Text>
+          <Text accessibilityRole="header" style={styles.title}>{title}</Text>
           <Text style={styles.body}>{message}</Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onClose}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-          >
-            <Text style={styles.buttonText}>OK</Text>
-          </Pressable>
+          {onUpgrade ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  onClose();
+                  onUpgrade();
+                }}
+                style={({ pressed }) => [styles.button, styles.upgradeButton, pressed && styles.pressed]}
+              >
+                <MIcon name="crown-outline" size={18} color="#F4EBC4" />
+                <Text style={styles.buttonText}>Upgrade to Pro</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onClose}
+                hitSlop={8}
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.secondaryButtonText}>Not now</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+            >
+              <Text style={styles.buttonText}>OK</Text>
+            </Pressable>
+          )}
         </LinearGradient>
       </View>
     </Modal>
@@ -97,6 +128,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4D4A3B',
+  },
+  upgradeButton: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryButton: {
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  secondaryButtonText: {
+    color: '#4D4A3B',
+    fontSize: 15,
+    fontWeight: '700',
   },
   buttonText: {
     color: '#F4EBC4',
