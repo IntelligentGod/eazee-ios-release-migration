@@ -706,7 +706,7 @@ const FLUID_DISPLAY_SCALE = 1.12;
 const FLUID_VOLUME_SHARE = 0.8;
 const FLUID_BLOB_WEIGHT = 0.8;
 const FLUID_DEPTH_REACH = 0.35;
-const FLUID_SPEED = 0.55;
+const FLUID_SPEED = 1.1;
 /** Each blob: how far it roams on each axis (grid units), its weight, and its own speeds/phases. */
 const FLUID_BLOBS = [
   { reach: [0.21, 0.23, 0.11], weight: 0.5, speed: [0.31, 0.23, 0.27], phase: [0, 1.7, 0.6] },
