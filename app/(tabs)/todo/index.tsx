@@ -2589,6 +2589,9 @@ const enhanceWithTodosAndPreferences = withObservables([], () => ({
   recurrenceSeries: database.collections.get<TodoRecurrenceSeriesModel>('todo_recurrence_series').query().observe(),
 }));
 
+/** Completed items shown at first, and added per "Show more" tap. */
+const COMPLETED_PAGE_SIZE = 20;
+
 const TodoScreen = enhanceWithTodosAndPreferences((props: {
   todos?: TodoModel[],
   preferences?: UserPreferenceModel[],
@@ -10015,6 +10018,10 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
   }, [activeRevealTodoId, animationsRef, buyingTodoId, classifyingTodoIds, completingTodoId, formatDueDate, goalActionMetadataByTodoId, goalChildPlanProgressByTodoId, goalManagedTodoIds, goalOverallProgressByTodoId, goalSubtaskTodoIds, handleBuyPress, handleTodoDragLongPress, handleTodoPress, handleSliderChange, isTodoDragActive, recipeProgressByTodoId, skillProgressByTodoId, taskProgressByTodoId, todoSearchQuery, toggleTodo, workspaceTodoTypes, wrapTodoWithRevealShell]);
 
 
+  // How many completed items each workspace shows. Drawing hundreds at once (the section opens
+  // when an item is completed) froze the screen on accounts with a long history.
+  const [completedVisibleCounts, setCompletedVisibleCounts] = useState<Record<string, number>>({});
+
   const renderTodoSection = useCallback((title: string, todos: (TodoItem & { workspace: string })[], sectionKey: TodoSectionKey, workspace: string, themeColor?: string) => {
     const workspaceAppearance = getTodoWorkspaceAppearance(workspace);
     const workspaceTodos = sortTodosForSection(
@@ -10107,11 +10114,34 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                     autoscrollSpeed={120}
                     scrollEnabled={false}
                   />
-                ) : (
-                  workspaceTodos.map(todo =>
-                    renderTodoItem(todo, sectionKey === 'completed', sectionKey, themeColor)
-                  )
-                )
+                ) : (() => {
+                  const isCappedSection = sectionKey === 'completed' && !hasTodoSearchQuery;
+                  const visibleCount = completedVisibleCounts[workspace] ?? COMPLETED_PAGE_SIZE;
+                  const visibleTodos = isCappedSection ? workspaceTodos.slice(0, visibleCount) : workspaceTodos;
+                  const hiddenCount = workspaceTodos.length - visibleTodos.length;
+                  return (
+                    <>
+                      {visibleTodos.map(todo =>
+                        renderTodoItem(todo, sectionKey === 'completed', sectionKey, themeColor)
+                      )}
+                      {hiddenCount > 0 && (
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          onPress={() => setCompletedVisibleCounts((current) => ({
+                            ...current,
+                            [workspace]: visibleCount + COMPLETED_PAGE_SIZE,
+                          }))}
+                          activeOpacity={0.7}
+                          style={styles.emptyStateAddButton}
+                        >
+                          <Text style={styles.emptyStateAddButtonText}>
+                            {`Show ${Math.min(COMPLETED_PAGE_SIZE, hiddenCount)} more (${hiddenCount} hidden)`}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  );
+                })()
               ) : (
                 canCreateFromEmptyState ? (
                   <TouchableOpacity
@@ -10135,7 +10165,7 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         </LinearGradient>
       </View>
     );
-  }, [activeRevealTodoId, addTodo, clearPendingTodoReveal, currentWorkspace, expandedSections, goalSubtaskTodoIds, handleTodoSectionDragBegin, handleTodoSectionDragEnd, handleTodoSectionDragRelease, hasTodoSearchQuery, isLeftHanded, renderTodoItem, sortTodosForSection, todoSearchQuery, toggleSection, workspaceColors]);
+  }, [activeRevealTodoId, addTodo, clearPendingTodoReveal, completedVisibleCounts, currentWorkspace, expandedSections, goalSubtaskTodoIds, handleTodoSectionDragBegin, handleTodoSectionDragEnd, handleTodoSectionDragRelease, hasTodoSearchQuery, isLeftHanded, renderTodoItem, sortTodosForSection, todoSearchQuery, toggleSection, workspaceColors]);
 
   function animateWorkspaceChange(newIndex: number) {
     currentWorkspaceRef.current = newIndex;
