@@ -229,6 +229,13 @@ const BLOB_FIELD_UPDATE_INTERVAL_SEC = 1 / BLOB_FIELD_TARGET_FPS;
 const BLOB_PERF_LOGS = false;
 const BLOB_CANVAS_DPR = [1, 1] as const;
 const BLOB_MAX_ANIMATION_DELTA_SEC = 1 / 20;
+/**
+ * Where GL is drawn on the CPU (the iOS simulator), a frame takes far longer than frames are
+ * queued, so a backlog grows and the screen only ever shows stale frames without the droplet.
+ * Each frame first waits for the previous one; after the probe frames this stops if GL keeps up.
+ */
+const GL_BACKPRESSURE_PROBE_FRAMES = 30;
+const GL_BACKPRESSURE_SLOW_FRAME_MS = 8;
 const CORE_STRENGTH = 1.15;
 const CHILD_COUNT = 8;
 /** Slightly farther from centre → less field overlap with core (clearer lobes). */
@@ -799,6 +806,8 @@ export type BlobPersistedState = {
   morph: DropMorphState;
   fluidSizeAvg: number;
   fluidSizeSamples: number;
+  /** The drop's surface level; without it a rebuilt scene starts at the default and visibly snaps into shape. */
+  isolation: number;
 };
 
 export function BlobMesh({
@@ -1306,13 +1315,29 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
 
   const mc = useMemo(() => {
     const m = new MarchingCubes(RES, material, false, false, MC_MAX_POLYS);
-    m.isolation = ISO;
+    m.isolation = persistRef?.current?.isolation ?? ISO;
     m.enableUvs = false;
     m.enableColors = false;
     m.scale.setScalar(1);
     m.renderOrder = 0;
     return m;
   }, [material]);
+
+  const glBackpressureRef = useRef({ waitsMs: [] as number[], enabled: true });
+  useFrame(({ gl: renderer }) => {
+    const backpressure = glBackpressureRef.current;
+    if (!backpressure.enabled) return;
+    const startedAt = Date.now();
+    (renderer.getContext() as WebGL2RenderingContext & { flushEXP?: () => void }).flushEXP?.();
+    const { waitsMs } = backpressure;
+    if (waitsMs.length >= GL_BACKPRESSURE_PROBE_FRAMES) return;
+    waitsMs.push(Date.now() - startedAt);
+    if (waitsMs.length === GL_BACKPRESSURE_PROBE_FRAMES) {
+      // The median, so one slow frame (e.g. the shader compiling) does not keep this on.
+      const medianWaitMs = [...waitsMs].sort((a, b) => a - b)[Math.floor(waitsMs.length / 2)];
+      backpressure.enabled = medianWaitMs >= GL_BACKPRESSURE_SLOW_FRAME_MS;
+    }
+  });
 
   useFrame((_, delta) => {
     const dt = THREE.MathUtils.clamp(delta, 0, BLOB_MAX_ANIMATION_DELTA_SEC);
@@ -1358,6 +1383,7 @@ ${rippleBody.replace('__N__', 'clearcoatNormal').replace('__OUT__', 'clearcoatNo
         morph: morphRef.current,
         fluidSizeAvg: fluidSizeAvgRef.current,
         fluidSizeSamples: fluidSizeSamplesRef.current,
+        isolation: mc.isolation,
       };
     }
 
