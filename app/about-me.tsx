@@ -82,6 +82,16 @@ type Mode = 'loading' | 'intro' | 'flow' | 'done' | 'manage';
 const QUESTION_STEPS = ['q1', ...PROFILE_QUESTIONS.map((question) => question.id)];
 const TIPI_STEPS = ['tipi_intro', ...TIPI_ITEMS.map((_, index) => `tipi_${index + 1}`)];
 
+/** Whether the profile question on `step` (q1-q10) has an answer in the draft. */
+function isQuestionAnswered(draft: AboutMeDraft, step: string) {
+  if (step === 'q1') return !!draft.personality_route;
+  const question = PROFILE_QUESTIONS.find((item) => item.id === step);
+  if (!question) return true;
+  const section = (draft[question.section] ?? {}) as Record<string, unknown>;
+  const hasValue = (value: unknown) => (Array.isArray(value) ? value.length > 0 : typeof value === 'string' ? !!value.trim() : value != null);
+  return hasValue(section[question.field]) || (!!question.text && hasValue(section[question.text.field]));
+}
+
 /** The personality statements (1-based) with no answer yet. */
 const getMissedTipiStatements = (responses: (number | null)[]) =>
   responses.map((value, index) => (value === null ? index + 1 : 0)).filter(Boolean);
@@ -117,8 +127,8 @@ export default function AboutMeScreen() {
   const [returnToReview, setReturnToReview] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const [startRequest, setStartRequest] = useState<'test' | 'finish' | null>(null);
-  /** Shown under a personality statement when Next is tapped without an answer. */
-  const [tipiNotice, setTipiNotice] = useState<string | null>(null);
+  /** Shown under a question or statement when Next is tapped without an answer. */
+  const [stepNotice, setStepNotice] = useState<string | null>(null);
   /** Answering missed statements from the review: Next goes to the next missed one, then back. */
   const [isAnsweringMissed, setIsAnsweringMissed] = useState(false);
   const startedRef = useRef(false);
@@ -161,7 +171,7 @@ export default function AboutMeScreen() {
   }, [uid]);
 
   const goTo = useCallback((step: string) => {
-    setTipiNotice(null);
+    setStepNotice(null);
     updateDraft((current) => ({ ...current, step }));
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [updateDraft]);
@@ -216,11 +226,12 @@ export default function AboutMeScreen() {
     if (!draft) return;
     // A statement needs an answer to go on; Skip leaves it out on purpose.
     const tipiIndex = draft.step.startsWith('tipi_') && draft.step !== 'tipi_intro' ? Number(draft.step.slice(5)) - 1 : -1;
-    if (tipiIndex >= 0 && !options.skipped && draft.tipi[tipiIndex] == null) {
-      setTipiNotice('Pick an answer to continue, or tap Skip to leave this one out.');
+    const isUnanswered = tipiIndex >= 0 ? draft.tipi[tipiIndex] == null : !isQuestionAnswered(draft, draft.step);
+    if (!options.skipped && draft.step !== 'tipi_intro' && draft.step !== 'review' && isUnanswered) {
+      setStepNotice('Pick an answer to continue, or tap Skip to leave this one out.');
       return;
     }
-    setTipiNotice(null);
+    setStepNotice(null);
     if (isAnsweringMissed && tipiIndex >= 0) {
       const nextMissed = getMissedTipiStatements(draft.tipi).find((statement) => statement > tipiIndex + 1);
       if (nextMissed) return goTo(`tipi_${nextMissed}`);
@@ -230,6 +241,10 @@ export default function AboutMeScreen() {
     const nextStep = steps[stepIndex + 1];
     if (nextStep) goTo(nextStep);
   }, [draft, goTo, isAnsweringMissed, stepIndex, steps]);
+  // The warning goes away as soon as the question gets an answer.
+  useEffect(() => {
+    if (stepNotice && draft && !draft.step.startsWith('tipi') && isQuestionAnswered(draft, draft.step)) setStepNotice(null);
+  }, [draft, stepNotice]);
 
   const back = useCallback(() => {
     if (mode !== 'flow' || !draft) return false;
@@ -569,13 +584,13 @@ export default function AboutMeScreen() {
               index={tipiIndex}
               value={draft.tipi[tipiIndex]}
               onChange={(value) => {
-                setTipiNotice(null);
+                setStepNotice(null);
                 updateDraft((current) => ({ ...current, tipi: current.tipi.map((item, i) => (i === tipiIndex ? value : item)) }));
               }}
             />
           )}
-          {tipiIndex >= 0 && !!tipiNotice && (
-            <Text accessibilityLiveRegion="polite" style={styles.notice}>{tipiNotice}</Text>
+          {!!stepNotice && (
+            <Text accessibilityLiveRegion="polite" style={styles.notice}>{stepNotice}</Text>
           )}
           {step === 'review' && (
             <ReviewStep
