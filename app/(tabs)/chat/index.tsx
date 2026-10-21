@@ -2968,7 +2968,8 @@ export default function ChatScreen() {
             {
               type: 'screen',
               route: '/(tabs)/calendar',
-              params: { calendarAction: 'tutorial-create' },
+              // "Great! Now you know how to create goals… Tap Calendar in the bottom bar."
+              params: { calendarAction: 'tutorial-create', calendarTutorialHandoff: 'goal-complete' },
             },
             'Calendar',
             {
@@ -3008,6 +3009,10 @@ export default function ChatScreen() {
             keepLocatedTargetCard: true,
             useTutorialCardPlacement: true,
             onSkipSegment: () => {
+              void skipTodoAndGoalTutorialsToCalendar();
+            },
+            // "skip" while it says "Tap Todo in the bottom bar": past To Do and Goals, on to Calendar.
+            onSkipTabStep: () => {
               void skipTodoAndGoalTutorialsToCalendar();
             },
             // "skip": past the To Do part; the To Do screen then starts the Goals part.
