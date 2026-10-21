@@ -66,7 +66,9 @@ import {
   LiquidGlassMenu,
 } from '@/modules/expo-liquid-glass-menu';
 import { startTutorial } from '@/lib/tutorial';
-import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_URL } from '@/lib/legalLinks';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '@/lib/legalLinks';
+import * as WebBrowser from 'expo-web-browser';
+import SupportContactDialog from '@/components/SupportContactDialog';
 import {
   DEFAULT_EVENT_REMINDER_SETTINGS,
   EVENT_REMINDER_MINUTE_OPTIONS,
@@ -835,10 +837,12 @@ function LegalSupportPanel({
   bottomInset,
   onBack,
   onOpenLink,
+  onOpenSupport,
 }: {
   bottomInset: number;
   onBack: () => void;
   onOpenLink: (url: string) => void;
+  onOpenSupport: () => void;
 }) {
   return (
     <View style={[styles.safeArea, { paddingBottom: bottomInset + 18 }]}>
@@ -873,25 +877,25 @@ function LegalSupportPanel({
 
       <View style={styles.list}>
         <SettingsRow
-          icon={<MaterialCommunityIcons name="shield-lock-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>🔒</Text>}
           label="Privacy Policy"
           targetId={getHomeSettingsControlGuidanceTargetId('privacyPolicy')}
           onPress={() => onOpenLink(PRIVACY_POLICY_URL)}
           right={<MaterialCommunityIcons name="open-in-new" size={24} color="rgba(255, 255, 255, 0.72)" />}
         />
         <SettingsRow
-          icon={<MaterialCommunityIcons name="file-document-outline" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>📜</Text>}
           label="Terms"
           targetId={getHomeSettingsControlGuidanceTargetId('terms')}
           onPress={() => onOpenLink(TERMS_URL)}
           right={<MaterialCommunityIcons name="open-in-new" size={24} color="rgba(255, 255, 255, 0.72)" />}
         />
         <SettingsRow
-          icon={<MaterialCommunityIcons name="lifebuoy" size={SETTINGS_ACCENT_ICON_SIZE} color={SETTINGS_ACCENT_ICON_COLOR} />}
+          icon={<Text allowFontScaling={false} style={styles.rowEmoji}>💬</Text>}
           label="Support"
           targetId={getHomeSettingsControlGuidanceTargetId('support')}
-          onPress={() => onOpenLink(SUPPORT_URL)}
-          right={<MaterialCommunityIcons name="open-in-new" size={24} color="rgba(255, 255, 255, 0.72)" />}
+          onPress={onOpenSupport}
+          right={<MaterialCommunityIcons name="chevron-right" size={28} color="rgba(255, 255, 255, 0.72)" />}
         />
       </View>
     </View>
@@ -1000,11 +1004,15 @@ export default function HomeSettingsSheet({
     });
   }, [handleClose, userId]);
 
+  // Privacy Policy and Terms open inside Eazee, in a browser sheet with a Done button.
   const handleOpenExternalLink = useCallback((url: string) => {
-    void Linking.openURL(url).catch((error) => {
-      console.warn('Failed to open settings link', error);
-    });
+    void WebBrowser.openBrowserAsync(url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET })
+      .catch(() => Linking.openURL(url))
+      .catch((error) => {
+        console.warn('Failed to open settings link', error);
+      });
   }, []);
+  const [isSupportVisible, setIsSupportVisible] = React.useState(false);
 
   const handleCloseHomePersonalization = useCallback(() => {
     setActivePanel('settings');
@@ -1219,6 +1227,7 @@ export default function HomeSettingsSheet({
               bottomInset={bottomInset}
               onBack={handleCloseLegalSupport}
               onOpenLink={handleOpenExternalLink}
+              onOpenSupport={() => setIsSupportVisible(true)}
             />
           )
       : content;
@@ -1280,6 +1289,7 @@ export default function HomeSettingsSheet({
           </GuidedTarget>
         </Animated.View>
       )}
+      <SupportContactDialog visible={isSupportVisible} onClose={() => setIsSupportVisible(false)} />
       {visible && activePanel === 'settings' && (
         <LowerSwipeGesture
           currentTab="home"
