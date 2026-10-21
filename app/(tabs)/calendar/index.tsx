@@ -69,7 +69,7 @@ import {
   subscribeTutorialProgress,
 } from '@/lib/tutorial';
 import ScrollViewWithBar from '@/components/ScrollViewWithBar';
-import { openNewChatAfterTutorial } from '@/lib/tutorialEnd';
+import { confirmSkipWholeTutorial, openNewChatAfterTutorial } from '@/lib/tutorialEnd';
 
 const HOUR_HEIGHT = 60;
 /** How long after the finger lifts to wait for a drag to start before releasing a long-press lock. */
@@ -4899,10 +4899,7 @@ const CalendarScreen: React.FC = () => {
         <Pressable
           accessibilityRole="button"
           hitSlop={8}
-          onPress={() => {
-            leaveCalendarTutorialHint();
-            void completeCalendarTutorialAndStartHome();
-          }}
+          onPress={() => confirmSkipWholeTutorial(leaveCalendarTutorialHint)}
           style={styles.tutorialHintAction}
         >
           <Text style={styles.tutorialHintActionText}>skip all</Text>

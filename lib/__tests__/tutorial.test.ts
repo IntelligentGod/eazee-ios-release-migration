@@ -18,6 +18,7 @@ import {
   isTutorialStepComplete,
   setTutorialGoalDemoTodoId,
   setTutorialTodoDemoTodoId,
+  skipWholeTutorial,
   startTutorial,
   uncompleteTutorialStep,
 } from '../tutorial';
@@ -164,5 +165,20 @@ describe('isTutorialDemoTitle', () => {
     expect(isTutorialDemoTitle('  learn BASIC guitar ')).toBe(true);
     expect(isTutorialDemoTitle('Learn piano')).toBe(false);
     expect(isTutorialDemoTitle(undefined)).toBe(false);
+  });
+
+  it('skip all ends the whole tutorial: every part done and the session over', async () => {
+    const stored: Record<string, string> = {};
+    mockedAsyncStorage.setItem.mockImplementation(async (key: string, value: string) => { stored[key] = value; });
+    mockedAsyncStorage.getItem.mockImplementation(async (key: string) => stored[key] ?? null);
+
+    await startTutorial('user-skip');
+    await completeTutorialStep('user-skip', TUTORIAL_CHAT_DAY_PLAN_STEP);
+    await skipWholeTutorial('user-skip');
+
+    expect(isTutorialSessionActive('user-skip')).toBe(false);
+    expect(isActiveTutorialStepPending('user-skip', TUTORIAL_CALENDAR_EVENT_STEP)).toBe(false);
+    await expect(isTutorialComplete('user-skip')).resolves.toBe(true);
+    await expect(isTutorialStepComplete('user-skip', TUTORIAL_HOME_OVERVIEW_STEP)).resolves.toBe(true);
   });
 });

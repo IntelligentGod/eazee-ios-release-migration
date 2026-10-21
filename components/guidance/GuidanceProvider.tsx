@@ -35,6 +35,7 @@ import Svg, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSharedTodoWorkspaceState } from '@/components/navigation/lowerSwipeNavigation';
 import { playGuidanceVoice, type GuidanceVoicePlayback } from '@/lib/guidanceVoice';
+import { confirmSkipWholeTutorial } from '@/lib/tutorialEnd';
 import {
   getGuidanceActiveTab,
   subscribeGuidanceActiveTab,
@@ -1101,11 +1102,10 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
     handleCancel?.();
   }, [cancelGuidance, session]);
 
+  // "skip all" on a tutorial card ends the whole tutorial, after a confirmation.
   const skipGuidanceSegmentFromOverlay = useCallback(() => {
-    const handleSkipSegment = session?.onSkipSegment;
-    cancelGuidance();
-    handleSkipSegment?.();
-  }, [cancelGuidance, session]);
+    confirmSkipWholeTutorial(cancelGuidance);
+  }, [cancelGuidance]);
 
   const registerTarget = useCallback((target: RegisteredTarget) => {
     registryRef.current.set(target.id, target);

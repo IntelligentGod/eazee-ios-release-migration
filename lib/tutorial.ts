@@ -197,6 +197,25 @@ export async function completeTutorialStep(userId: string, step: TutorialStep) {
   emitTutorialProgressChanged();
 }
 
+/**
+ * "skip all": the whole tutorial is over. Every part counts as done and the session ends, so
+ * no screen starts its part. Replay Tutorial in Settings starts it again.
+ */
+export async function skipWholeTutorial(userId: string) {
+  const progress = await getTutorialProgress(userId);
+  await AsyncStorage.setItem(
+    getTutorialProgressKey(userId),
+    serializeTutorialProgress({
+      completedSteps: Array.from(new Set([...progress.completedSteps, ...REQUIRED_TUTORIAL_STEPS])),
+      todoDemoTodoId: progress.todoDemoTodoId,
+      goalDemoTodoId: progress.goalDemoTodoId,
+    })
+  );
+  activeTutorialSessionUserIds.delete(userId);
+  activeTutorialCompletedSteps.delete(userId);
+  emitTutorialProgressChanged();
+}
+
 /** Tutorial "back" into a finished part: that part is in progress again. */
 export async function uncompleteTutorialStep(userId: string, step: TutorialStep) {
   const progress = await getTutorialProgress(userId);
