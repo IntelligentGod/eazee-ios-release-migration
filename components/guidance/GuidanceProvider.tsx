@@ -132,7 +132,6 @@ type GuidanceSession = {
   onNext?: () => void;
   onSkipSegment?: () => void;
   nextLabel?: string;
-  onSkipTabStep?: () => void;
   completeAfterMs?: number;
   autoNextAfterMs?: number;
   hideCardAfterMs?: number;
@@ -147,11 +146,6 @@ type GuidanceStartOptions = {
   onSkipSegment?: () => void;
   /** The tutorial card's forward button text (default "next"), e.g. "skip" on a step that waits for the user. */
   nextLabel?: string;
-  /**
-   * On a "Tap X in the bottom bar" step, where next is greyed out until the tab is tapped:
-   * shows "skip" there instead, which runs this (e.g. on to the following part).
-   */
-  onSkipTabStep?: () => void;
   /**
    * Tutorial "back": puts the screen back the way this step needs it (tab, open panels,
    * choices), then shows this step again. Without it, back only re-shows the card.
@@ -1085,7 +1079,6 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
       onNext: options?.onNext,
       onSkipSegment: options?.onSkipSegment,
       nextLabel: options?.nextLabel,
-      onSkipTabStep: options?.onSkipTabStep,
       completeAfterMs: options?.completeAfterMs,
       autoNextAfterMs: options?.autoNextAfterMs,
       hideCardAfterMs: options?.hideCardAfterMs,
@@ -1110,8 +1103,10 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
   }, [cancelGuidance, session]);
 
   // "skip all" on a tutorial card ends the whole tutorial, after a confirmation.
+  // "skip" on a "Tap X in the bottom bar" card (where next waits for that tap): skips this part
+  // of the tutorial, which leads to the next part's card.
   const skipTabStepFromOverlay = useCallback(() => {
-    const handleSkip = session?.onSkipTabStep;
+    const handleSkip = session?.onSkipSegment;
     cancelGuidance();
     handleSkip?.();
   }, [cancelGuidance, session]);
@@ -1254,7 +1249,7 @@ export function GuidanceProvider({ children }: { children: React.ReactNode }) {
         onNext={session?.onNext}
         onSkipSegment={session?.onSkipSegment ? skipGuidanceSegmentFromOverlay : undefined}
         nextLabel={session?.nextLabel}
-        onSkipTabStep={session?.onSkipTabStep ? skipTabStepFromOverlay : undefined}
+        onSkipTabStep={session?.onSkipSegment ? skipTabStepFromOverlay : undefined}
         showNextButton
         useTutorialCardPlacement={!!session?.useTutorialCardPlacement}
       />

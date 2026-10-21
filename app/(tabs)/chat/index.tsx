@@ -3011,10 +3011,6 @@ export default function ChatScreen() {
             onSkipSegment: () => {
               void skipTodoAndGoalTutorialsToCalendar();
             },
-            // "skip" while it says "Tap Todo in the bottom bar": past To Do and Goals, on to Calendar.
-            onSkipTabStep: () => {
-              void skipTodoAndGoalTutorialsToCalendar();
-            },
             // "skip": past the To Do part; the To Do screen then starts the Goals part.
             onNext: () => {
               showGuidanceTab('todo');
