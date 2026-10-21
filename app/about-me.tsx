@@ -82,6 +82,15 @@ type Mode = 'loading' | 'intro' | 'flow' | 'done' | 'manage';
 const QUESTION_STEPS = ['q1', ...PROFILE_QUESTIONS.map((question) => question.id)];
 const TIPI_STEPS = ['tipi_intro', ...TIPI_ITEMS.map((_, index) => `tipi_${index + 1}`)];
 
+/** The personality statements (1-based) with no answer yet. */
+const getMissedTipiStatements = (responses: (number | null)[]) =>
+  responses.map((value, index) => (value === null ? index + 1 : 0)).filter(Boolean);
+
+const describeMissedStatements = (missed: number[]) =>
+  missed.length === 1
+    ? `You missed statement ${missed[0]}`
+    : `You missed statements ${missed.slice(0, -1).join(', ')} and ${missed[missed.length - 1]}`;
+
 function getSteps(route?: PersonalityRoute) {
   return [...QUESTION_STEPS, ...(route === 'test' ? TIPI_STEPS : []), 'review'];
 }
@@ -108,6 +117,10 @@ export default function AboutMeScreen() {
   const [returnToReview, setReturnToReview] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const [startRequest, setStartRequest] = useState<'test' | 'finish' | null>(null);
+  /** Shown under a personality statement when Next is tapped without an answer. */
+  const [tipiNotice, setTipiNotice] = useState<string | null>(null);
+  /** Answering missed statements from the review: Next goes to the next missed one, then back. */
+  const [isAnsweringMissed, setIsAnsweringMissed] = useState(false);
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -148,6 +161,7 @@ export default function AboutMeScreen() {
   }, [uid]);
 
   const goTo = useCallback((step: string) => {
+    setTipiNotice(null);
     updateDraft((current) => ({ ...current, step }));
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [updateDraft]);
@@ -198,12 +212,24 @@ export default function AboutMeScreen() {
     void startDraft(startRequest === 'test' ? { step: 'tipi_intro', retake: true } : { step: 'tipi_1' });
   }, [startDraft, startRequest]);
 
-  const next = useCallback(() => {
+  const next = useCallback((options: { skipped?: boolean } = {}) => {
     if (!draft) return;
-    if (returnToReview && draft.step !== 'review' && !draft.step.startsWith('tipi')) return goTo('review');
+    // A statement needs an answer to go on; Skip leaves it out on purpose.
+    const tipiIndex = draft.step.startsWith('tipi_') && draft.step !== 'tipi_intro' ? Number(draft.step.slice(5)) - 1 : -1;
+    if (tipiIndex >= 0 && !options.skipped && draft.tipi[tipiIndex] == null) {
+      setTipiNotice('Pick an answer to continue, or tap Skip to leave this one out.');
+      return;
+    }
+    setTipiNotice(null);
+    if (isAnsweringMissed && tipiIndex >= 0) {
+      const nextMissed = getMissedTipiStatements(draft.tipi).find((statement) => statement > tipiIndex + 1);
+      if (nextMissed) return goTo(`tipi_${nextMissed}`);
+      setIsAnsweringMissed(false);
+      return goTo('review');
+    }
     const nextStep = steps[stepIndex + 1];
     if (nextStep) goTo(nextStep);
-  }, [draft, goTo, returnToReview, stepIndex, steps]);
+  }, [draft, goTo, isAnsweringMissed, stepIndex, steps]);
 
   const back = useCallback(() => {
     if (mode !== 'flow' || !draft) return false;
@@ -244,7 +270,7 @@ export default function AboutMeScreen() {
       trackAboutMeEvent('question_skipped', { question: 'q1' });
       updateDraft((current) => ({ ...current, personality_route: profile?.personality_route ?? undefined }));
     }
-    next();
+    next({ skipped: true });
   }, [draft, next, profile, updateDraft]);
 
   const saveAndExit = useCallback(() => {
@@ -270,8 +296,27 @@ export default function AboutMeScreen() {
     ]);
   }, [entry, profile, uid]);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (options: { confirmedIncomplete?: boolean } = {}) => {
     if (!uid || !draft || isSaving) return;
+    const missed = draft.personality_route === 'test' ? getMissedTipiStatements(draft.tipi) : [];
+    if (missed.length && missed.length < draft.tipi.length && !options.confirmedIncomplete) {
+      Alert.alert(
+        `${describeMissedStatements(missed)}`,
+        'Answer every statement to see your Eazee personality.',
+        [
+          { text: 'Save anyway', style: 'cancel', onPress: () => void save({ confirmedIncomplete: true }) },
+          {
+            text: missed.length === 1 ? 'Answer it' : 'Answer them',
+            onPress: () => {
+              setReturnToReview(false);
+              setIsAnsweringMissed(true);
+              goTo(`tipi_${missed[0]}`);
+            },
+          },
+        ]
+      );
+      return;
+    }
     setIsSaving(true);
     try {
       const nextProfile = buildProfileFromDraft(profile, draft, controls);
@@ -296,13 +341,18 @@ export default function AboutMeScreen() {
       setDraft(null);
       setSavedDraft(null);
       setSavedMessage(describeAboutMeChanges(saved));
+      // A finished test goes straight to its result.
+      if (draft.personality_route === 'test' && getCardBasis(saved.personality_assessments.active).ok) {
+        router.dismissTo('/personality-card');
+        return;
+      }
       setMode('done');
     } catch (error) {
       Alert.alert('Not saved', `${(error as Error)?.message || 'Your profile could not be saved.'} Your answers are kept on this phone; try again in a moment.`);
     } finally {
       setIsSaving(false);
     }
-  }, [controls, draft, entry, isSaving, profile, uid]);
+  }, [controls, draft, entry, goTo, isSaving, profile, uid]);
 
   /** Settings changes that apply straight away (switches, deleting the result). */
   const saveProfileChange = useCallback(async (change: (current: AboutMeProfile) => AboutMeProfile) => {
@@ -429,14 +479,19 @@ export default function AboutMeScreen() {
             <Text style={styles.title}>Saved ✨</Text>
             <Text style={styles.body}>{savedMessage}</Text>
           </View>
-          {profile?.personality_assessments.active?.kind === 'tipi' && !isTipiComplete(profile.personality_assessments.active.responses) && (
-            <View style={styles.card}>
-              <Text style={styles.body}>
-                {`Your personality test is incomplete (${countTipiAnswers(profile.personality_assessments.active.responses)} of 10 answered), so Eazee won’t use it yet.`}
-              </Text>
-              <ActionButton label="Finish the test" onPress={() => void startDraft({ step: 'tipi_1' })} />
-            </View>
-          )}
+          {(() => {
+            const active = profile?.personality_assessments.active;
+            if (active?.kind !== 'tipi' || isTipiComplete(active.responses)) return null;
+            const missed = getMissedTipiStatements(active.responses as (number | null)[]);
+            return (
+              <View style={styles.card}>
+                <Text style={styles.body}>
+                  {`${describeMissedStatements(missed)} (${countTipiAnswers(active.responses)} of 10 answered), so Eazee won’t use your test yet. Answer ${missed.length === 1 ? 'it' : 'them'} to see your Eazee personality.`}
+                </Text>
+                <ActionButton label="Finish the test" onPress={() => { setIsAnsweringMissed(true); void startDraft({ step: `tipi_${missed[0] ?? 1}` }); }} />
+              </View>
+            );
+          })()}
           {getCardBasis(profile?.personality_assessments.active).ok && (
             <PrimaryButton label="See your Eazee personality ✨" onPress={() => router.push('/personality-card')} />
           )}
@@ -514,9 +569,13 @@ export default function AboutMeScreen() {
               index={tipiIndex}
               value={draft.tipi[tipiIndex]}
               onChange={(value) => {
+                setTipiNotice(null);
                 updateDraft((current) => ({ ...current, tipi: current.tipi.map((item, i) => (i === tipiIndex ? value : item)) }));
               }}
             />
+          )}
+          {tipiIndex >= 0 && !!tipiNotice && (
+            <Text accessibilityLiveRegion="polite" style={styles.notice}>{tipiNotice}</Text>
           )}
           {step === 'review' && (
             <ReviewStep
@@ -530,7 +589,8 @@ export default function AboutMeScreen() {
               }}
               onFinishTest={() => {
                 setReturnToReview(false);
-                goTo('tipi_1');
+                setIsAnsweringMissed(true);
+                goTo(`tipi_${getMissedTipiStatements(draft.tipi)[0] ?? 1}`);
               }}
             />
           )}
@@ -542,15 +602,27 @@ export default function AboutMeScreen() {
               <ActionButton label="Discard" destructive onPress={discard} />
             </View>
           ) : (
-            <View style={styles.footerRow}>
-              {step !== 'tipi_intro' && (
-                <Pressable accessibilityRole="button" onPress={skip} style={styles.skipButton}>
-                  <Text style={styles.skipText}>Skip</Text>
-                </Pressable>
-              )}
-              <View style={{ flex: 1 }}>
-                <PrimaryButton label={returnToReview && !step.startsWith('tipi') ? 'Done' : step === 'tipi_intro' ? 'Start' : 'Next'} onPress={next} />
+            <View style={{ gap: 10 }}>
+              <View style={styles.footerRow}>
+                {step !== 'tipi_intro' && (
+                  <Pressable accessibilityRole="button" onPress={skip} style={styles.skipButton}>
+                    <Text style={styles.skipText}>Skip</Text>
+                  </Pressable>
+                )}
+                <View style={{ flex: 1 }}>
+                  <PrimaryButton label={step === 'tipi_intro' ? 'Start' : 'Next'} onPress={() => next()} />
+                </View>
               </View>
+              {/* Editing an answer from Review: Next carries on through the questions, Done goes back. */}
+              {returnToReview && !step.startsWith('tipi') && (
+                <ActionButton
+                  label="Done, back to review"
+                  onPress={() => {
+                    setReturnToReview(false);
+                    goTo('review');
+                  }}
+                />
+              )}
             </View>
           )}
         </ScrollView>
@@ -944,7 +1016,7 @@ function PersonalitySnapshot({
             {!complete && (
               <>
                 <Text style={styles.body}>
-                  {`Incomplete: ${countTipiAnswers(assessment.responses)} of 10 statements answered. Eazee won’t use it until it’s finished.`}
+                  {`${describeMissedStatements(getMissedTipiStatements(assessment.responses as (number | null)[]))}. Answer every statement to see your Eazee personality.`}
                 </Text>
                 <ActionButton label="Finish the test" onPress={onFinish} />
               </>
@@ -1127,6 +1199,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, lineHeight: 18, color: C.hint, fontWeight: '700' },
   label: { fontSize: 14, fontWeight: '900', color: C.title, marginTop: 4 },
   error: { fontSize: 13, color: C.danger, textAlign: 'center' },
+  notice: { fontSize: 14, lineHeight: 20, color: C.danger, fontWeight: '800', textAlign: 'center' },
   link: { fontSize: 14, fontWeight: '900', color: '#FFFFFF', textDecorationLine: 'underline' },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

@@ -2423,6 +2423,8 @@ export default function ChatScreen() {
    * 'starting' while the new chat is prepared, 'sent' until the first reply appears.
    */
   const [fixMyLifeWaitPhase, setFixMyLifeWaitPhase] = useState<'starting' | 'sent' | null>(null);
+  // Set when the user cancels Fix my life, so a start still in progress does not send it.
+  const fixMyLifeCancelledRef = useRef(false);
   const [chatSessions, setChatSessions] = useState<ChatSessionListItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSessionSummary, setActiveSessionSummary] = useState('');
@@ -5166,6 +5168,27 @@ export default function ChatScreen() {
     stopAssistantTyping(sessionId);
   }, [clearPendingStreamChunks, clearTrackedRequest, restoreChatDayPlanTutorialAfterFailedRequest, restoreWishlistTutorialAfterFailedRequest, stopAssistantTyping]);
 
+  // Cancel on the "Planning your week" screen: stops the request (or a start still in
+  // progress) and goes back to the empty chat with the starter buttons. The Fix my life
+  // chat it had opened is removed, as it only holds the unanswered request. Nothing else
+  // is saved, since a week plan is only a draft until the user saves it.
+  const cancelFixMyLife = useCallback(() => {
+    fixMyLifeCancelledRef.current = true;
+    weekPlanContextRef.current = null;
+    const sessionId = activeSessionIdRef.current;
+    stopActiveChatResponse();
+    setFixMyLifeWaitPhase(null);
+    setIsBootstrappingCompactHandoff(false);
+    replaceVisibleChat(null, [], '');
+    resetToolMemory();
+    if (sessionId) {
+      void deleteChatSessionById(sessionId)
+        .catch((error) => console.warn('Could not remove the cancelled Fix my life chat:', error))
+        .finally(() => { void refreshChatSessions(); });
+    }
+    showToast('Stopped planning your week');
+  }, [refreshChatSessions, replaceVisibleChat, showToast, stopActiveChatResponse]);
+
   useEffect(() => {
     if (!compactHandoffValue || !compactHandoffKey) return;
     if (handledCompactHandoffRef.current === compactHandoffKey) return;
@@ -5253,15 +5276,21 @@ export default function ChatScreen() {
       }
 
       try {
+        fixMyLifeCancelledRef.current = false;
         setFixMyLifeWaitPhase('starting');
         setIsBootstrappingCompactHandoff(true);
         await handleNewChat();
         const content = await loadWeekPlanContext(user?.uid);
+        if (fixMyLifeCancelledRef.current) return;
         weekPlanContextRef.current = { sessionId: null, content };
         setFixMyLifeWaitPhase('sent');
         if (fixMyLifeFromNewChatRef.current) showToast('Opened a new Fix my life chat');
         await sendTextMessage(FIX_MY_LIFE_PROMPT, {
-          onRequestStarted: () => setIsBootstrappingCompactHandoff(false),
+          onRequestStarted: () => {
+            setIsBootstrappingCompactHandoff(false);
+            // Cancelled while the request was being sent.
+            if (fixMyLifeCancelledRef.current) stopActiveChatResponse();
+          },
         });
       } catch (error) {
         console.warn('Could not start Fix my life:', error);
@@ -5274,7 +5303,7 @@ export default function ChatScreen() {
     };
 
     void run();
-  }, [fixMyLifeRequestKey, handleNewChat, sendTextMessage, showToast]);
+  }, [fixMyLifeRequestKey, handleNewChat, sendTextMessage, showToast, stopActiveChatResponse]);
 
   const handleSend = useCallback(() => {
     const text = (inputValueRef.current || '').trim();
@@ -6484,6 +6513,7 @@ export default function ChatScreen() {
           visible={isAwaitingFixMyLifeReply}
           title="Planning your week..."
           subtitle="Eazee is looking at your todos, calendar and goals. This can take a little while."
+          onCancel={cancelFixMyLife}
         />
         <ChatHistoryModal
           visible={isHistoryModalVisible}

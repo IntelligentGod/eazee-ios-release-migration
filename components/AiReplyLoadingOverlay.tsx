@@ -1,19 +1,24 @@
 import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, Animated, Easing, Modal, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
 
 /**
  * A full-screen wait for the AI's first reply. It sits in a Modal so it also
- * covers the tab bar, and it swallows every touch and the Android back button,
- * so nothing can be changed while the request is being prepared.
+ * covers the tab bar, and it swallows every touch, so nothing can be changed while
+ * the request is being prepared. With `onCancel`, a Cancel button (and the Android
+ * back button) stops the wait.
  */
 export default function AiReplyLoadingOverlay({
   visible,
   title,
   subtitle,
+  onCancel,
+  cancelLabel = 'Cancel',
 }: {
   visible: boolean;
   title: string;
   subtitle?: string;
+  onCancel?: () => void;
+  cancelLabel?: string;
 }) {
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -31,7 +36,7 @@ export default function AiReplyLoadingOverlay({
   }, [pulse, visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => onCancel?.()}>
       <View
         accessibilityViewIsModal
         accessibilityLiveRegion="polite"
@@ -68,6 +73,27 @@ export default function AiReplyLoadingOverlay({
             <Text style={{ marginTop: 6, color: 'rgba(200, 255, 251, 0.85)', fontSize: 13, lineHeight: 18, textAlign: 'center' }}>
               {subtitle}
             </Text>
+          )}
+          {!!onCancel && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onCancel}
+              hitSlop={8}
+              style={({ pressed }) => ({
+                marginTop: 20,
+                minHeight: 42,
+                paddingHorizontal: 24,
+                borderRadius: 21,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: 'rgba(200, 255, 251, 0.35)',
+                backgroundColor: 'rgba(200, 255, 251, 0.1)',
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>{cancelLabel}</Text>
+            </Pressable>
           )}
         </View>
       </View>

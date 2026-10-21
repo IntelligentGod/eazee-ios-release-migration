@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import SettingsScreenFrame from '@/components/SettingsScreenFrame';
 import PersonalityCardView from '@/components/aboutMe/PersonalityCardView';
 import { useAuthSession } from './context/AuthSessionContext';
@@ -62,7 +62,8 @@ export default function PersonalityCardScreen() {
   const [captionIndex, setCaptionIndex] = useState(0);
   const [busy, setBusy] = useState<'save' | 'share' | null>(null);
 
-  useEffect(() => {
+  // Read again whenever the screen is shown, so a retaken test shows its new result.
+  useFocusEffect(useCallback(() => {
     if (!uid) return;
     let cancelled = false;
     void (async () => {
@@ -74,7 +75,7 @@ export default function PersonalityCardScreen() {
     return () => {
       cancelled = true;
     };
-  }, [uid]);
+  }, [uid]));
 
   const basis = useMemo(() => getCardBasis(profile?.personality_assessments.active), [profile]);
   const theme = basis.ok ? pickCardTheme(basis.levels) : null;
