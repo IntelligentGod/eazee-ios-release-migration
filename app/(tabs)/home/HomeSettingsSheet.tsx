@@ -18,6 +18,7 @@ import {
 import * as Linking from 'expo-linking';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import DraggableFlatList, { type RenderItemParams } from 'react-native-draggable-flatlist';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import ScreenHeader from '@/components/ScreenHeader';
@@ -728,6 +729,13 @@ function HomePersonalizationPanel({
 
   const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<HomeCardId>) => {
     const itemIndex = settings.order.indexOf(item);
+    const isFirst = itemIndex === 0;
+    const isLast = itemIndex === settings.order.length - 1;
+    // Picked up from the handle (straight away) or by pressing and holding anywhere on the row.
+    const startDrag = () => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      drag();
+    };
 
     return (
       <GuidedTarget
@@ -738,7 +746,14 @@ function HomePersonalizationPanel({
         localHighlightRadius={22}
         localHighlightShape="rect"
       >
-        <View style={[styles.homeCardOrderRow, isActive && styles.homeCardOrderRowActive]}>
+        <TouchableOpacity
+          accessible={false}
+          activeOpacity={0.9}
+          delayLongPress={220}
+          disabled={isActive}
+          onLongPress={startDrag}
+          style={[styles.homeCardOrderRow, isActive && styles.homeCardOrderRowActive]}
+        >
           <TouchableOpacity
             accessibilityActions={[
               ...(itemIndex > 0 ? [{ label: 'Move up', name: 'decrement' as const }] : []),
@@ -756,12 +771,44 @@ function HomePersonalizationPanel({
                 moveCard(item, 1);
               }
             }}
-            onPressIn={drag}
+            onPressIn={startDrag}
             style={styles.homeCardDragHandle}
           >
             <MaterialCommunityIcons name="drag" size={26} color="rgba(255, 255, 255, 0.82)" />
           </TouchableOpacity>
-          <Text style={styles.homeCardOrderLabel}>{HOME_CARD_LABELS[item]}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.homeCardOrderLabel}>{HOME_CARD_LABELS[item]}</Text>
+            {item === 'suggestions' && (
+              <Text style={styles.homeCardOrderNote}>Shows on Home when you have free time</Text>
+            )}
+          </View>
+          {/* Tap to move, for when dragging is awkward. */}
+          <View style={styles.homeCardMoveButtons}>
+            <TouchableOpacity
+              accessibilityLabel={`Move ${HOME_CARD_LABELS[item]} up`}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isFirst }}
+              activeOpacity={0.72}
+              disabled={isFirst || isActive}
+              hitSlop={6}
+              onPress={() => moveCard(item, -1)}
+              style={[styles.homeCardMoveButton, isFirst && styles.homeCardMoveButtonDisabled]}
+            >
+              <MaterialCommunityIcons name="chevron-up" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel={`Move ${HOME_CARD_LABELS[item]} down`}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isLast }}
+              activeOpacity={0.72}
+              disabled={isLast || isActive}
+              hitSlop={6}
+              onPress={() => moveCard(item, 1)}
+              style={[styles.homeCardMoveButton, isLast && styles.homeCardMoveButtonDisabled]}
+            >
+              <MaterialCommunityIcons name="chevron-down" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
           {item === 'suggestions' && (
             <TouchableOpacity
               accessibilityLabel="Show Suggestions on Home"
@@ -774,7 +821,7 @@ function HomePersonalizationPanel({
               <LeftHandedToggle enabled={settings.suggestionsEnabled} />
             </TouchableOpacity>
           )}
-        </View>
+        </TouchableOpacity>
       </GuidedTarget>
     );
   }, [moveCard, setSuggestionsEnabled, settings.order, settings.suggestionsEnabled]);
@@ -811,7 +858,7 @@ function HomePersonalizationPanel({
       />
 
       <Text style={styles.homePersonalizationHint}>
-        Drag the handles to reorder Home cards. Suggestions appear when you have free time in your day.
+        Press and hold a card and drag it, or use the arrows, to change the order of your Home cards.
       </Text>
       <GuidedTarget
         targetId={getHomeSettingsControlGuidanceTargetId('homeReorder')}
@@ -1722,11 +1769,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   homeCardOrderLabel: {
-    flex: 1,
     color: '#FFFFFF',
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '900',
+  },
+  homeCardOrderNote: {
+    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  homeCardMoveButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  homeCardMoveButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+  },
+  homeCardMoveButtonDisabled: {
+    opacity: 0.3,
   },
   errorText: {
     color: '#FFE2E2',
