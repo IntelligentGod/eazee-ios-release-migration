@@ -53,7 +53,8 @@ export default function PersonalityCardScreen() {
   const { user } = useAuthSession();
   const uid = user?.uid ?? null;
   const { width: windowWidth } = useWindowDimensions();
-  const cardWidth = Math.min(windowWidth - 32, 420);
+  // The screen frame leaves 18 on each side (SettingsScreenFrame); wider gets clipped at the edges.
+  const cardWidth = Math.min(windowWidth - 36, 420);
   const cardRef = useRef<View>(null);
 
   const [profile, setProfile] = useState<AboutMeProfile | null | undefined>(undefined);
