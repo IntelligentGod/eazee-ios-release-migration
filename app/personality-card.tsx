@@ -18,7 +18,6 @@ import SettingsScreenFrame from '@/components/SettingsScreenFrame';
 import PersonalityCardView from '@/components/aboutMe/PersonalityCardView';
 import { useAuthSession } from './context/AuthSessionContext';
 import {
-  deleteShareCard,
   readCachedAboutMeProfile,
   refreshAboutMeProfile,
   saveShareCard,
@@ -168,22 +167,6 @@ export default function PersonalityCardScreen() {
     }
   }, [busy, capture, rememberCard]);
 
-  const handleDeleteSaved = () => {
-    if (!uid) return;
-    Alert.alert('Delete your saved card?', 'Your personality result stays as it is.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          void deleteShareCard(uid)
-            .then(() => setProfile((current) => (current ? { ...current, share_card: null } : current)))
-            .catch(() => Alert.alert('Not deleted', 'Please try again.'));
-        },
-      },
-    ]);
-  };
-
   const openAboutMe = (start?: 'test' | 'finish') =>
     router.push({ pathname: '/about-me', params: { entry: 'settings', ...(start ? { start } : {}) } });
 
@@ -255,7 +238,6 @@ export default function PersonalityCardScreen() {
           <Text style={styles.hint}>
             A playful take, not your test result. Changing the joke doesn’t change your results or how Eazee talks to you. Nothing is shared unless you choose to.
           </Text>
-          {!!savedCard && <SecondaryButton label="Delete my saved card" destructive onPress={handleDeleteSaved} />}
         </View>
       </ScrollView>
     </SettingsScreenFrame>
@@ -270,10 +252,10 @@ function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: (
   );
 }
 
-function SecondaryButton({ label, onPress, destructive }: { label: string; onPress: () => void; destructive?: boolean }) {
+function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.secondary}>
-      <Text style={[styles.secondaryText, destructive && { color: C.danger }]}>{label}</Text>
+      <Text style={styles.secondaryText}>{label}</Text>
     </Pressable>
   );
 }

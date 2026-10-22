@@ -5,7 +5,9 @@
  * id or version asked for. That happens most with one week of a repeating event: Eazee
  * keeps an id per week, built as `<event id>_<start in UTC>` when Google couldn't be asked,
  * and it stops matching once the repeat changes. On a 412 this finds what Google holds
- * now and deletes that; something already gone or cancelled counts as deleted.
+ * now and deletes that; something already gone or cancelled counts as deleted. If Google still
+ * refuses the delete (it can keep answering 412 for some events), the event is marked cancelled
+ * instead, which is how Google itself removes an event or one week of a repeat.
  */
 const EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
@@ -65,6 +67,14 @@ export async function deleteGoogleCalendarEventById(
       const { response: current, body } = await getJson(`${EVENTS_URL}/${encodeURIComponent(targetId)}`);
       if (current && (isGone(current.status) || body?.status === 'cancelled')) return;
       response = await deleteById(targetId, { 'If-Match': body?.etag ? String(body.etag) : '*' });
+    }
+    if (response.status === 412) {
+      const cancelled = await fetchImpl(`${EVENTS_URL}/${encodeURIComponent(targetId)}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      }).catch(() => null);
+      if (cancelled && (cancelled.ok || isGone(cancelled.status))) return;
     }
   }
 

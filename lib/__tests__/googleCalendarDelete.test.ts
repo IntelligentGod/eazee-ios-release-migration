@@ -50,11 +50,19 @@ describe('deleting a Google Calendar event', () => {
     expect(g.calls[2]).toMatchObject({ method: 'DELETE', headers: expect.objectContaining({ 'If-Match': '"v2"' }) });
   });
 
+  it('when Google keeps refusing the delete with 412, marks the event cancelled instead', async () => {
+    const g = google({ status: 412 }, { status: 200, body: { etag: '"v2"' } }, { status: 412 }, { status: 200 });
+    await expect(deleteGoogleCalendarEventById('plain-event', 'token', g.fetchImpl)).resolves.toBeUndefined();
+    expect(g.calls[3]).toMatchObject({ method: 'PATCH' });
+    expect(g.calls[3].url).toContain('/events/plain-event');
+  });
+
   it("reports Google's reason when it still refuses", async () => {
     const g = google(
       { status: 412 },
       { status: 200, body: { etag: '"v2"' } },
-      { status: 412, body: { error: { errors: [{ reason: 'conditionNotMet' }] } } }
+      { status: 412, body: { error: { errors: [{ reason: 'conditionNotMet' }] } } },
+      { status: 412 }
     );
     await expect(deleteGoogleCalendarEventById('plain-event', 'token', g.fetchImpl))
       .rejects.toMatchObject({ message: 'GOOGLE_DELETE_FAILED', status: 412, reason: 'conditionNotMet' });
