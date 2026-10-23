@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Switch, Text, TouchableOpacity, View } from 'react-native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { ActivityIndicator, Switch, Text, TouchableOpacity, View } from 'react-native';
+import TimeWheelDialog from '@/components/TimeWheelDialog';
 import MIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { FlatList } from 'react-native';
 import { format } from 'date-fns';
@@ -169,19 +169,6 @@ export function DayPlanCard({
         ? setTimelineItemEndTime(items, selectedPickerItem.id, date, selectedDate)
         : setTimelineItemTime(items, selectedPickerItem.id, date, selectedDate)
     );
-  };
-
-  const handleTimeChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (!selectedDate) {
-      if (Platform.OS === 'android') closePicker();
-      return;
-    }
-    if (Platform.OS === 'ios') {
-      setPickerValue(selectedDate);
-      return;
-    }
-    if (event.type === 'set') commitPickerValue(selectedDate);
-    closePicker();
   };
 
   const handleSave = async () => {
@@ -483,92 +470,15 @@ export function DayPlanCard({
           ) : null}
         </View>
 
-        {selectedPickerItem && Platform.OS !== 'ios' && (
-          <View style={{ borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(255, 255, 255, 0.08)' }}>
-            <DateTimePicker
-              value={pickerValue || new Date()}
-              mode="time"
-              display="default"
-              onChange={handleTimeChange}
-            />
-          </View>
-        )}
-        <Modal
-          transparent
-          visible={!!selectedPickerItem && Platform.OS === 'ios'}
-          animationType="fade"
-          onRequestClose={closePicker}
-        >
-          <View
-            style={{
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingHorizontal: 28,
-              backgroundColor: 'rgba(0, 0, 0, 0.38)',
-            }}
-          >
-            <View
-              style={{
-                width: '100%',
-                maxWidth: 340,
-                borderRadius: 28,
-                overflow: 'hidden',
-                backgroundColor: 'rgba(16, 24, 24, 0.97)',
-                borderWidth: 1,
-                borderColor: 'rgba(163, 207, 207, 0.14)',
-              }}
-            >
-              <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 2, alignItems: 'center' }}>
-                <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '700' }} numberOfLines={1}>
-                  {selectedPickerItem?.title || 'Set time'}
-                </Text>
-                <Text style={{ color: '#9FB8B8', fontSize: 12, fontWeight: '600', marginTop: 3 }}>
-                  {pickerTarget?.field === 'end' ? 'End time' : 'Start time'}
-                </Text>
-              </View>
-              {selectedPickerItem ? (
-                <DateTimePicker
-                  value={pickerValue || new Date()}
-                  mode="time"
-                  display="spinner"
-                  onChange={handleTimeChange}
-                  textColor="#FFFFFF"
-                  style={{ height: 176 }}
-                />
-              ) : null}
-              <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 12, gap: 10 }}>
-                <TouchableOpacity
-                  onPress={closePicker}
-                  style={{
-                    flex: 1,
-                    alignItems: 'center',
-                    paddingVertical: 12,
-                    borderRadius: 16,
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  }}
-                >
-                  <Text style={{ color: '#D1D5DB', fontSize: 15, fontWeight: '700' }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (pickerValue) commitPickerValue(pickerValue);
-                    closePicker();
-                  }}
-                  style={{
-                    flex: 1,
-                    alignItems: 'center',
-                    paddingVertical: 12,
-                    borderRadius: 16,
-                    backgroundColor: '#0F766E',
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>Done</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        <TimeWheelDialog
+          visible={!!selectedPickerItem}
+          value={pickerValue || new Date()}
+          onChange={setPickerValue}
+          onClose={() => {
+            if (pickerValue) commitPickerValue(pickerValue);
+            closePicker();
+          }}
+        />
       </View>
     </View>
   );

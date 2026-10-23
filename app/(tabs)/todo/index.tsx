@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import TimeWheelDialog from '@/components/TimeWheelDialog';
 import {
   differenceInCalendarDays,
   endOfDay,
@@ -2534,47 +2535,12 @@ const TodoComposer = React.memo(({
         />
       )}
 
-      {showTimePicker && Platform.OS === 'android' && (
-        <DateTimePicker
-          value={pendingTime}
-          mode="time"
-          display="spinner"
-          onChange={handleTimeChange}
-        />
-      )}
-
-      {Platform.OS !== 'android' && (
-        <Modal
-          transparent
-          visible={showTimePicker}
-          animationType="fade"
-          onRequestClose={() => setShowTimePicker(false)}
-        >
-          <TouchableWithoutFeedback onPress={() => setShowTimePicker(false)}>
-            <View style={styles.todoComposerTimeModalOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.todoComposerTimeModalCard}>
-                  <DateTimePicker
-                    value={pendingTime}
-                    mode="time"
-                    display="spinner"
-                    onChange={handleTimeChange}
-                    accentColor={composerAccentColor}
-                    textColor="#111827"
-                    style={styles.todoComposerTimePicker}
-                  />
-                  <TouchableOpacity
-                    onPress={handleConfirmTime}
-                    style={styles.todoComposerTimePrimaryButton}
-                  >
-                    <Text style={styles.todoComposerTimePrimaryButtonText}>Set</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
-      )}
+      <TimeWheelDialog
+        visible={showTimePicker}
+        value={pendingTime}
+        onChange={setPendingTime}
+        onClose={handleConfirmTime}
+      />
     </>
   );
 });
@@ -14568,16 +14534,6 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
                         />
                       )}
 
-                      {isDetailsTimePickerVisible && Platform.OS === 'android' && (
-                        <View style={styles.todoDetailsAndroidPickerInline}>
-                          <DateTimePicker
-                            value={pendingDetailsTime}
-                            mode="time"
-                            display="spinner"
-                            onChange={handleDetailsTimeChange}
-                          />
-                        </View>
-                      )}
                       </View>
                     </ScrollViewWithBar>
                   </Animated.View>
@@ -14808,31 +14764,14 @@ const TodoScreen = enhanceWithTodosAndPreferences((props: {
         onChange={handleDetailsDateChange}
         onClose={() => setIsDetailsDatePickerVisible(false)}
       />
-      {isDetailsTimePickerVisible && Platform.OS !== 'android' && (
-        <Modal
-          transparent
-          visible={isDetailsTimePickerVisible}
-          animationType="fade"
-          onRequestClose={handleDismissDetailsTimePicker}
-        >
-          <View style={styles.todoComposerTimeModalOverlay}>
-            <TouchableWithoutFeedback onPress={handleDismissDetailsTimePicker}>
-              <View style={StyleSheet.absoluteFillObject} />
-            </TouchableWithoutFeedback>
-            <View style={styles.todoComposerTimeModalCard}>
-              <DateTimePicker
-                value={pendingDetailsTime}
-                mode="time"
-                display="spinner"
-                onChange={handleDetailsTimeChange}
-                accentColor={workspaceColors[currentWorkspace]}
-                textColor="#111827"
-                style={styles.todoComposerTimePicker}
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
+      <TimeWheelDialog
+        visible={isDetailsTimePickerVisible}
+        value={pendingDetailsTime}
+        onChange={(date) => {
+          pendingDetailsTimeRef.current = date;
+        }}
+        onClose={handleDismissDetailsTimePicker}
+      />
       <Modal
         transparent
         visible={isReminderModalVisible}
@@ -16496,24 +16435,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 40,
     paddingTop: 12,
   },
-  todoComposerTimeModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.32)',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  todoComposerTimeModalCard: {
-    borderRadius: 24,
-    backgroundColor: '#f8fafc',
-    paddingTop: 12,
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-    alignItems: 'center',
-  },
-  todoComposerTimePicker: {
-    height: 180,
-    alignSelf: 'stretch',
-  },
   goalTimeframeModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(17, 24, 39, 0.32)',
@@ -16675,12 +16596,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
-  todoDetailsAndroidPickerInline: {
-    marginTop: 16,
-    borderRadius: 20,
-    backgroundColor: '#f8fafc',
-    overflow: 'hidden',
-  },
   goalQuotaDateModalOverlay: {
     flex: 1,
     justifyContent: 'center',
@@ -16760,19 +16675,6 @@ const styles = StyleSheet.create({
     color: '#001814',
     fontSize: 14,
     fontWeight: '800',
-  },
-  todoComposerTimePrimaryButton: {
-    alignSelf: 'stretch',
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 8,
-    backgroundColor: TODO_COMPOSER_ACCENT_COLOR,
-  },
-  todoComposerTimePrimaryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
   },
   reminderModalOverlay: {
     flex: 1,

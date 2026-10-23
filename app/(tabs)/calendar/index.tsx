@@ -9,10 +9,11 @@ import { stopEventSeriesFrom } from '@/lib/eventSeries';
 import { Q } from '@nozbe/watermelondb';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { format, startOfWeek, addDays, differenceInCalendarDays } from 'date-fns';
+import { format, startOfWeek, addDays, differenceInCalendarDays, isSameDay } from 'date-fns';
 import { runOnJS } from 'react-native-reanimated';
 import { useRouter, useGlobalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import TimeWheelDialog from '@/components/TimeWheelDialog';
 import { FullWindowOverlay } from 'react-native-screens';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
@@ -268,6 +269,21 @@ const GuestChip: React.FC<{ email: string; onRemove: () => void }> = ({ email, o
     </TouchableOpacity>
   </View>
 );
+
+/**
+ * The time wheels only pick a time of day. The new time goes on the day that keeps it nearest
+ * the old one, so scrolling past midnight moves the day: 23 → 00 is the next day, 00 → 23 the
+ * day before.
+ */
+const withWheelTime = (current: Date, picked: Date) => {
+  const next = new Date(current);
+  next.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+  const halfDay = 12 * 60 * 60 * 1000;
+  const delta = next.getTime() - current.getTime();
+  if (delta < -halfDay) next.setDate(next.getDate() + 1);
+  else if (delta > halfDay) next.setDate(next.getDate() - 1);
+  return next;
+};
 
 const CalendarScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -1743,26 +1759,14 @@ const CalendarScreen: React.FC = () => {
 
     if (mode === 'start') {
       const duration = editEnd.getTime() - editStart.getTime();
-      const nextStart = new Date(editStart);
-      nextStart.setHours(
-        nextValue.getHours(),
-        nextValue.getMinutes(),
-        0,
-        0
-      );
+      const nextStart = withWheelTime(editStart, nextValue);
       const nextEnd = new Date(nextStart.getTime() + (duration > 0 ? duration : 15 * 60 * 1000));
       setEditStart(nextStart);
       setEditEnd(nextEnd);
       return;
     }
 
-    const nextEnd = new Date(editEnd);
-    nextEnd.setHours(
-      nextValue.getHours(),
-      nextValue.getMinutes(),
-      0,
-      0
-    );
+    const nextEnd = withWheelTime(editEnd, nextValue);
     if (nextEnd <= editStart) {
       nextEnd.setDate(nextEnd.getDate() + 1);
     }
@@ -1791,13 +1795,7 @@ const CalendarScreen: React.FC = () => {
 
     if (mode === 'start') {
       const duration = newEventEnd.getTime() - newEventStart.getTime();
-      const nextStart = new Date(newEventStart);
-      nextStart.setHours(
-        nextValue.getHours(),
-        nextValue.getMinutes(),
-        0,
-        0
-      );
+      const nextStart = withWheelTime(newEventStart, nextValue);
       const nextEnd = new Date(nextStart.getTime() + (duration > 0 ? duration : 15 * 60 * 1000));
       setCreateSlotPreviewValues(nextStart, nextEnd);
       setNewEventStart(nextStart);
@@ -1805,13 +1803,7 @@ const CalendarScreen: React.FC = () => {
       return;
     }
 
-    const nextEnd = new Date(newEventEnd);
-    nextEnd.setHours(
-      nextValue.getHours(),
-      nextValue.getMinutes(),
-      0,
-      0
-    );
+    const nextEnd = withWheelTime(newEventEnd, nextValue);
     if (nextEnd <= newEventStart) {
       nextEnd.setDate(nextEnd.getDate() + 1);
     }
@@ -4561,7 +4553,7 @@ const CalendarScreen: React.FC = () => {
                 style={[styles.editValueButton, styles.editTimeButton]}
                 disabled={activeCreatePicker !== null || isEditPickerClosing}
               >
-                <Text style={styles.editValueText}>End: {format(newEventEnd, 'h:mm a')}</Text>
+                <Text style={styles.editValueText}>End: {format(newEventEnd, isSameDay(newEventStart, newEventEnd) ? 'h:mm a' : 'EEE h:mm a')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4607,7 +4599,7 @@ const CalendarScreen: React.FC = () => {
                 style={[styles.editValueButton, styles.editTimeButton]}
                 disabled={activeEditPicker !== null || isEditPickerClosing}
               >
-                <Text style={styles.editValueText}>End: {format(editEnd, 'h:mm a')}</Text>
+                <Text style={styles.editValueText}>End: {format(editEnd, isSameDay(editStart, editEnd) ? 'h:mm a' : 'EEE h:mm a')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4707,13 +4699,30 @@ const CalendarScreen: React.FC = () => {
         return null;
       }
 
+      if (activePicker === 'date') {
+        return (
+          <DateTimePicker
+            value={pendingPickerValue}
+            mode="date"
+            display="default"
+            onChange={handleAndroidEditPickerChange}
+          />
+        );
+      }
+
+      // Times: the same wheel as on iPhone (Android's own dialog can't look like it).
       return (
-        <DateTimePicker
+        <TimeWheelDialog
+          visible
           value={pendingPickerValue}
-          mode={activePicker === 'date' ? 'date' : 'time'}
-          display={activePicker === 'date' ? 'default' : 'spinner'}
-          minuteInterval={activePicker === 'date' ? undefined : 15}
-          onChange={handleAndroidEditPickerChange}
+          onChange={(nextValue) => {
+            if (activeCreatePicker) {
+              updateCreatePickerValue(activePicker, nextValue);
+            } else {
+              updateEditPickerValue(activePicker, nextValue);
+            }
+          }}
+          onClose={closeEditPicker}
         />
       );
     }

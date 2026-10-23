@@ -640,6 +640,49 @@ function CalendarTimeGrid(props: CalendarWeekPanelProps) {
     );
   })();
 
+  // A new event that ends after midnight: its part on each following day, from 00:00 (all day
+  // for the days in between, up to the end time on the last one).
+  const selectedSlotNextDayOverlay = (() => {
+    if (!interactionsEnabled || !createSlotRange) return null;
+
+    const startDate = new Date(createSlotRange.startDate);
+    const endDate = new Date(createSlotRange.endDate);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) return null;
+
+    const parts: React.ReactNode[] = [];
+    let day = addDays(new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()), 1);
+    while (day < endDate) {
+      const dayAfter = addDays(day, 1);
+      const dayIndex = differenceInCalendarDays(day, weekStart);
+      if (dayIndex >= daysOfWeek.length) break;
+      if (dayIndex >= 0) {
+        const visibleEnd = endDate > dayAfter ? dayAfter : endDate;
+        const durationMinutes = (visibleEnd.getTime() - day.getTime()) / 60000;
+        parts.push(
+          <View
+            key={day.getTime()}
+            pointerEvents="none"
+            style={[
+              styles.selectedTimeSlotOverlay,
+              {
+                top: 0,
+                left: timeLabelWidth + dayIndex * dayColumnWidth,
+                width: dayColumnWidth,
+                height: Math.max(1, (durationMinutes / 60) * hourHeight * scale),
+                borderColor: eventColor,
+                borderTopWidth: 0,
+                // A day in the middle carries on below.
+                borderBottomWidth: endDate > dayAfter ? 0 : 3,
+              },
+            ]}
+          />
+        );
+      }
+      day = dayAfter;
+    }
+    return parts.length ? parts : null;
+  })();
+
   const revealingSlotOverlay = (() => {
     if (!interactionsEnabled || !revealingSlotRange) return null;
 
@@ -738,6 +781,7 @@ function CalendarTimeGrid(props: CalendarWeekPanelProps) {
         />
       )}
       {selectedSlotOverlay}
+      {selectedSlotNextDayOverlay}
       {revealingSlotOverlay}
       {renderedEvents.map((eventForSlot) => {
         const hasActivePreview = interactionsEnabled && dragPreviewRect?.eventId === String(eventForSlot.event.id);
