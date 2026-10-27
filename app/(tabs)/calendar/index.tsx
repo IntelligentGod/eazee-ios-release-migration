@@ -4702,23 +4702,8 @@ const CalendarScreen: React.FC = () => {
       return null;
     }
 
-    if (Platform.OS === 'android') {
-      if (!activePicker || !pendingPickerValue) {
-        return null;
-      }
-
-      if (activePicker === 'date') {
-        return (
-          <DateTimePicker
-            value={pendingPickerValue}
-            mode="date"
-            display="default"
-            onChange={handleAndroidEditPickerChange}
-          />
-        );
-      }
-
-      // Times: the same wheel as on iPhone (Android's own dialog can't look like it).
+    // Times: Eazee's own 24-hour wheel on both iPhone and Android, so they look the same.
+    if (activePicker && activePicker !== 'date' && pendingPickerValue) {
       return (
         <TimeWheelDialog
           visible
@@ -4735,6 +4720,25 @@ const CalendarScreen: React.FC = () => {
       );
     }
 
+    if (Platform.OS === 'android') {
+      if (!activePicker || !pendingPickerValue) {
+        return null;
+      }
+
+      if (activePicker === 'date') {
+        return (
+          <DateTimePicker
+            value={pendingPickerValue}
+            mode="date"
+            display="default"
+            onChange={handleAndroidEditPickerChange}
+          />
+        );
+      }
+
+      return null;
+    }
+
     return (
       <FullWindowOverlay unstable_accessibilityContainerViewIsModal>
         <View style={styles.editPickerOverlay}>
@@ -4745,9 +4749,8 @@ const CalendarScreen: React.FC = () => {
             <View style={styles.editPickerCard}>
               <DateTimePicker
                 value={pendingPickerValue}
-                mode={activePicker === 'date' ? 'date' : 'time'}
+                mode="date"
                 display="spinner"
-                minuteInterval={activePicker === 'date' ? undefined : 15}
                 onChange={(_, nextValue) => {
                   if (!nextValue) return;
                   if (activeCreatePicker) {

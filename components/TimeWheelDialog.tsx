@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   PixelRatio,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,12 +10,11 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 /**
  * The app's time picker, the same everywhere: a dark rounded box with an hour wheel and a
- * minute wheel in 15-minute steps (the Calendar event card's look). iPhone uses the system
- * wheel; Android, whose system dialog can't look like this, gets the same wheel drawn here.
+ * minute wheel in 15-minute steps, in 24-hour time (00–23). Drawn here on both iPhone and
+ * Android, so it looks the same everywhere whatever the phone's region or 12/24-hour setting.
  * Each change goes to `onChange`; tapping outside closes it through `onClose`, keeping the time.
  */
 export default function TimeWheelDialog({
@@ -37,23 +35,7 @@ export default function TimeWheelDialog({
           <View style={StyleSheet.absoluteFillObject} />
         </TouchableWithoutFeedback>
         <View style={styles.card}>
-          {Platform.OS === 'ios' ? (
-            <DateTimePicker
-              value={value}
-              mode="time"
-              display="spinner"
-              minuteInterval={15}
-              onChange={(_, date) => {
-                if (date) onChange(date);
-              }}
-              accentColor="#9EE8DB"
-              textColor={TEXT_COLOR}
-              themeVariant="dark"
-              style={styles.spinner}
-            />
-          ) : (
-            visible && <TimeWheels value={value} onChange={onChange} />
-          )}
+          {visible && <TimeWheels value={value} onChange={onChange} />}
         </View>
       </View>
     </Modal>
@@ -192,10 +174,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 12,
     alignItems: 'center',
-  },
-  spinner: {
-    height: 180,
-    alignSelf: 'stretch',
   },
   wheels: {
     alignSelf: 'stretch',
