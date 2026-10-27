@@ -1378,7 +1378,9 @@ const CalendarScreen: React.FC = () => {
 
   const [isAnyBottomSheetOpen, setIsAnyBottomSheetOpen] = useState(false);
   const overlayVisible = isAnyBottomSheetOpen || isEventDetailsOpen || isSearchOpen;
-  const isFullScreenCalendarOverlayVisible = isEventDetailsOpen || isBottomSheetExpanded;
+  // The grid hides behind an open details sheet. Only while it shows an event: if the sheet's
+  // "closed" report is missed (e.g. closed from code under an alert), the grid still comes back.
+  const isFullScreenCalendarOverlayVisible = (isEventDetailsOpen && !!selectedEvent) || isBottomSheetExpanded;
   const shouldRenderAiComposer = !overlayVisible && !selectedSlot && !selectedSlotKey;
   const isCalendarSwipeDisabled = overlayVisible || isAiComposerActive || !shouldRenderAiComposer;
   const isWeekPagerSwipeDisabled =
@@ -3554,6 +3556,13 @@ const CalendarScreen: React.FC = () => {
 
   // delete event
   const deleteEvent = useCallback(async (event: EventModel) => {
+    // Closes the details sheet and its state together, so the calendar never stays hidden.
+    const closeEventDetails = () => {
+      eventDetailsBottomSheetRef.current?.close();
+      setSelectedEvent(null);
+      setEventDetails(null);
+      setIsEventDetailsOpen(false);
+    };
     const deleteFromLocal = async () => {
       const recordId = String((event as any)?.id || (event as any)?._raw?.id || '');
       if (!recordId) {
@@ -3579,7 +3588,7 @@ const CalendarScreen: React.FC = () => {
     const deleteThisEvent = async () => {
       try {
         // Close the event details sheet immediately for instant UI feedback
-        eventDetailsBottomSheetRef.current?.close();
+        closeEventDetails();
 
         let linkedGoogleEventId = event.isGoogleEvent ? String(event.id || '') : String(event.googleEventId || '');
         if (!event.isGoogleEvent) {
@@ -3616,8 +3625,7 @@ const CalendarScreen: React.FC = () => {
         }
 
         // If we get here, the deletion was successful
-        // console.log('Event deleted successfully');
-        eventDetailsBottomSheetRef.current?.close();
+        closeEventDetails();
         await fetchEventsForWeek(weekStart);
       } catch (error) {
         console.error('Error during deletion:', error);
@@ -3669,7 +3677,7 @@ const CalendarScreen: React.FC = () => {
             style: "destructive",
             onPress: async () => {
               try {
-                eventDetailsBottomSheetRef.current?.close();
+                closeEventDetails();
                 deletedLocalEventIdsRef.current.add(localRecordId);
                 await stopEventSeriesFrom(seriesId, new Date(event.startDate));
                 await fetchEventsForWeek(weekStart);

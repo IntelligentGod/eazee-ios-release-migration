@@ -188,6 +188,7 @@ export function buildChatSystemMessages(context: ChatPromptContext) {
         "If the user asks to edit the current draft plan, use LastDayPlan plus the requested changes to call plan_my_day again with the updated items.\n" +
         "Use calendar events for things that should actually live on the calendar, such as meetings, appointments, interviews, lunches, coffees, dinners, birthdays, calls, or other true events.\n" +
         "Do not move a work item into calendar just because it has a time. A timed task can stay a todo.\n" +
+        "Exception: when the user explicitly asks to put, add, copy, move, or schedule their todos/tasks into the calendar (e.g. 'put my todo list into calendar'), do it: call todo_query if you need the todos, then call calendar_create_many once with one event per todo, using the todo text as the title, its due time as the start, and its planned duration or 1 hour as the length. Untimed todos get sensible times that do not overlap. Keep the todos in To Do; do not delete or complete them. Do not answer such a request with daily_overview or plan_my_day.\n" +
         "Treat flexible work like design, code, build, fix, write, finish, or major priority work as todos. Keep them as todos even when they have a fixed time unless the user clearly wants them on the calendar as events.\n" +
         "If the user clearly asks for multiple actions, you may call multiple tools.\n" +
         "If the target action is ambiguous and a wrong action is possible, ask one short clarifying question instead of guessing.\n" +
